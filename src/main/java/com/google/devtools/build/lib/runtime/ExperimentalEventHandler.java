@@ -128,7 +128,7 @@ public class ExperimentalEventHandler extends BlazeCommandEventHandler {
                 terminal.flush();
                 stream.write(event.getKind() == EventKind.STDOUT ? stdoutBuffer : stderrBuffer);
                 stream.write(Arrays.copyOf(message, eolIndex + 1));
-                byte[] restMessage = Arrays.copyOfRange(message, eolIndex + 1, message.length + 1);
+                byte[] restMessage = Arrays.copyOfRange(message, eolIndex + 1, message.length);
                 if (event.getKind() == EventKind.STDOUT) {
                   stdoutBuffer = restMessage;
                 } else {
@@ -149,6 +149,7 @@ public class ExperimentalEventHandler extends BlazeCommandEventHandler {
             }
             break;
           case ERROR:
+          case FAIL:
           case WARNING:
           case INFO:
           case SUBCOMMAND:
@@ -181,6 +182,13 @@ public class ExperimentalEventHandler extends BlazeCommandEventHandler {
             if (stateTracker.progressBarTimeDependent()) {
               refresh();
             }
+            break;
+          case START:
+          case FINISH:
+          case PASS:
+          case TIMEOUT:
+          case DEPCHECKER:
+            break;
         }
       }
     } catch (IOException e) {
@@ -191,6 +199,7 @@ public class ExperimentalEventHandler extends BlazeCommandEventHandler {
   private void setEventKindColor(EventKind kind) throws IOException {
     switch (kind) {
       case ERROR:
+      case FAIL:
         terminal.textRed();
         terminal.textBold();
         break;
@@ -202,6 +211,9 @@ public class ExperimentalEventHandler extends BlazeCommandEventHandler {
         break;
       case SUBCOMMAND:
         terminal.textBlue();
+        break;
+      default:
+        terminal.resetTerminal();
     }
   }
 
@@ -286,6 +298,7 @@ public class ExperimentalEventHandler extends BlazeCommandEventHandler {
         terminal.writeString("FAIL: ");
         terminal.resetTerminal();
         terminal.writeString(summary.getTarget().getLabel().toString());
+        terminal.writeString(" (Summary)");
         crlf();
         for (Path logPath : summary.getFailedLogs()) {
           terminal.writeString("      " + logPath.getPathString());

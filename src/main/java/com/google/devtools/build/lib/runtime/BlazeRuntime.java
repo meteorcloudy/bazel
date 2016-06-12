@@ -27,7 +27,6 @@ import com.google.common.eventbus.SubscriberExceptionContext;
 import com.google.common.eventbus.SubscriberExceptionHandler;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.Uninterruptibles;
-import com.google.devtools.build.lib.Constants;
 import com.google.devtools.build.lib.analysis.BlazeDirectories;
 import com.google.devtools.build.lib.analysis.BlazeVersionInfo;
 import com.google.devtools.build.lib.analysis.ConfiguredRuleClassProvider;
@@ -39,6 +38,7 @@ import com.google.devtools.build.lib.events.Event;
 import com.google.devtools.build.lib.events.OutputFilter;
 import com.google.devtools.build.lib.flags.CommandNameCache;
 import com.google.devtools.build.lib.packages.AttributeContainer;
+import com.google.devtools.build.lib.packages.Package;
 import com.google.devtools.build.lib.packages.PackageFactory;
 import com.google.devtools.build.lib.packages.Preprocessor;
 import com.google.devtools.build.lib.packages.RuleClass;
@@ -160,6 +160,7 @@ public final class BlazeRuntime {
   private final String defaultsPackageContent;
   private final QueryEnvironmentFactory queryEnvironmentFactory;
   private final SubscriberExceptionHandler eventBusExceptionHandler;
+  private final String productName;
 
   // Workspace state (currently exactly one workspace per server)
   private BlazeWorkspace workspace;
@@ -171,7 +172,8 @@ public final class BlazeRuntime {
       OptionsProvider startupOptionsProvider, Iterable<BlazeModule> blazeModules,
       SubscriberExceptionHandler eventBusExceptionHandler,
       ProjectFile.Provider projectFileProvider,
-      InvocationPolicy invocationPolicy, Iterable<BlazeCommand> commands) {
+      InvocationPolicy invocationPolicy, Iterable<BlazeCommand> commands,
+      String productName) {
     // Server state
     this.blazeModules = blazeModules;
     overrideCommands(commands);
@@ -191,6 +193,7 @@ public final class BlazeRuntime {
         ruleClassProvider.getDefaultsPackageContent(getInvocationPolicy());
     CommandNameCache.CommandNameCacheInstance.INSTANCE.setCommandNameCache(
         new CommandNameCacheImpl(getCommandMap()));
+    this.productName = productName;
   }
 
   private static InvocationPolicy createInvocationPolicyFromModules(
@@ -302,7 +305,8 @@ public final class BlazeRuntime {
         preprocessorFactorySupplier,
         skyFunctions.build(),
         precomputedValues.build(),
-        customDirtinessCheckers.build());
+        customDirtinessCheckers.build(),
+        getProductName());
     this.workspace = new BlazeWorkspace(
         this, directories, skyframeExecutor, eventBusExceptionHandler, workspaceStatusActionFactory,
         binTools);
@@ -379,7 +383,7 @@ public final class BlazeRuntime {
       }
       if (profiledTasks != ProfiledTaskKinds.NONE) {
         Profiler.instance().start(profiledTasks, out,
-            Constants.PRODUCT_NAME + " profile for " + env.getOutputBase() + " at " + new Date()
+            getProductName() + " profile for " + env.getOutputBase() + " at " + new Date()
             + ", build ID: " + buildID,
             recordFullProfilerData, clock, execStartTimeNanos);
         return true;
@@ -504,7 +508,7 @@ public final class BlazeRuntime {
    * Posts the {@link CommandCompleteEvent}, so that listeners can tidy up. Called by {@link
    * #afterCommand}, and by BugReport when crashing from an exception in an async thread.
    */
-  public void notifyCommandComplete(int exitCode) {
+  void notifyCommandComplete(int exitCode) {
     if (!storedExitCode.compareAndSet(ExitCode.RESERVED.getNumericExitCode(), exitCode)) {
       // This command has already been called, presumably because there is a race between the main
       // thread and a worker thread that crashed. Don't try to arbitrate the dispute. If the main
@@ -984,9 +988,13 @@ public final class BlazeRuntime {
     }
 
     BlazeServerStartupOptions startupOptions = options.getOptions(BlazeServerStartupOptions.class);
-    if (startupOptions.batch && startupOptions.oomMoreEagerly) {
-      new OomSignalHandler();
+    String productName = startupOptions.productName.toLowerCase();
+
+    if (startupOptions.oomMoreEagerlyThreshold != 100) {
       new RetainedHeapLimiter(startupOptions.oomMoreEagerlyThreshold).install();
+    }
+    if (startupOptions.oomMoreEagerly) {
+      new OomSignalHandler();
     }
     PathFragment workspaceDirectory = startupOptions.workspaceDirectory;
     PathFragment installBase = startupOptions.installBase;
@@ -1006,7 +1014,7 @@ public final class BlazeRuntime {
     }
 
     PathFragment outputPathFragment = BlazeDirectories.outputPathFromOutputBase(
-        outputBase, workspaceDirectory, startupOptions.deepExecRoot);
+        outputBase, workspaceDirectory, startupOptions.deepExecRoot, productName);
     FileSystem fs = null;
     for (BlazeModule module : blazeModules) {
       FileSystem moduleFs = module.getFileSystem(options, outputPathFragment);
@@ -1038,7 +1046,8 @@ public final class BlazeRuntime {
 
     BlazeDirectories directories =
         new BlazeDirectories(installBasePath, outputBasePath, workspaceDirectoryPath,
-                             startupOptions.deepExecRoot, startupOptions.installMD5);
+                             startupOptions.deepExecRoot, startupOptions.installMD5,
+                             productName);
 
     Clock clock = BlazeClock.instance();
 
@@ -1051,7 +1060,9 @@ public final class BlazeRuntime {
           ExitCode.LOCAL_ENVIRONMENTAL_ERROR);
     }
 
-    BlazeRuntime.Builder runtimeBuilder = new BlazeRuntime.Builder().setDirectories(directories)
+    BlazeRuntime.Builder runtimeBuilder = new BlazeRuntime.Builder()
+        .setProductName(productName)
+        .setDirectories(directories)
         .setStartupOptionsProvider(options)
         .setBinTools(binTools)
         .setClock(clock)
@@ -1152,6 +1163,10 @@ public final class BlazeRuntime {
         new VersionCommand());
   }
 
+  public String getProductName() {
+    return productName;
+  }
+
   /**
    * A builder for {@link BlazeRuntime} objects. The only required fields are the {@link
    * BlazeDirectories}, and the {@link RuleClassProvider} (except for testing). All other fields
@@ -1172,11 +1187,12 @@ public final class BlazeRuntime {
     private UUID instanceId;
     private final List<BlazeCommand> commands = new ArrayList<>();
     private InvocationPolicy invocationPolicy = InvocationPolicy.getDefaultInstance();
+    private String productName;
 
     public BlazeRuntime build() throws AbruptExitException {
+      Preconditions.checkNotNull(productName);
       Preconditions.checkNotNull(directories);
       Preconditions.checkNotNull(startupOptionsProvider);
-
       Clock clock = (this.clock == null) ? BlazeClock.instance() : this.clock;
       UUID instanceId =  (this.instanceId == null) ? UUID.randomUUID() : this.instanceId;
 
@@ -1244,13 +1260,28 @@ public final class BlazeRuntime {
         extensions.add(module.getPackageEnvironmentExtension());
       }
 
+      Package.Builder.Helper packageBuilderHelper = null;
+      for (BlazeModule module : blazeModules) {
+        Package.Builder.Helper candidateHelper =
+            module.getPackageBuilderHelper(ruleClassProvider, directories.getFileSystem());
+        if (candidateHelper != null) {
+          Preconditions.checkState(packageBuilderHelper == null,
+              "more than one module defines a package builder helper");
+          packageBuilderHelper = candidateHelper;
+        }
+      }
+      if (packageBuilderHelper == null) {
+        packageBuilderHelper = Package.Builder.DefaultHelper.INSTANCE;
+      }
+
       PackageFactory packageFactory =
           new PackageFactory(
               ruleClassProvider,
               platformRegexps,
               attributeContainerFactory,
               extensions,
-              BlazeVersionInfo.instance().getVersion());
+              BlazeVersionInfo.instance().getVersion(),
+              packageBuilderHelper);
 
       if (configurationFactory == null) {
         configurationFactory = new ConfigurationFactory(
@@ -1273,9 +1304,14 @@ public final class BlazeRuntime {
       BlazeRuntime runtime = new BlazeRuntime(queryEnvironmentFactory, packageFactory,
           ruleClassProvider, configurationFactory, clock, startupOptionsProvider,
           ImmutableList.copyOf(blazeModules), eventBusExceptionHandler, projectFileProvider,
-          invocationPolicy, commands);
+          invocationPolicy, commands, productName);
       runtime.initWorkspace(directories, binTools);
       return runtime;
+    }
+
+    public Builder setProductName(String productName) {
+      this.productName = productName;
+      return this;
     }
 
     public Builder setBinTools(BinTools binTools) {
@@ -1298,8 +1334,8 @@ public final class BlazeRuntime {
      * parameters.
      */
     public Builder setDirectories(Path installBase, Path outputBase,
-        Path workspace) {
-      this.directories = new BlazeDirectories(installBase, outputBase, workspace);
+        Path workspace, String productName) {
+      this.directories = new BlazeDirectories(installBase, outputBase, workspace, productName);
       return this;
     }
 

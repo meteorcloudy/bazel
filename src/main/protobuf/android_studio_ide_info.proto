@@ -48,7 +48,6 @@ message JavaRuleIdeInfo {
 
 message CRuleIdeInfo {
   repeated ArtifactLocation source = 1;
-  repeated ArtifactLocation exported_header = 2;
 
   repeated string transitive_include_directory = 3;
   repeated string transitive_quote_include_directory = 4;
@@ -70,6 +69,7 @@ message AndroidRuleIdeInfo {
   LibraryArtifact idl_jar = 9;
   bool generate_resource_class = 10;
   string legacy_resources = 11;
+  LibraryArtifact resource_jar = 12;
 }
 
 message CToolchainIdeInfo {
@@ -84,8 +84,28 @@ message CToolchainIdeInfo {
   repeated string unfiltered_compiler_option = 9;
 }
 
+message ProtoLibraryLegacyJavaIdeInfo {
+  enum ApiFlavor {
+    NONE = 0;
+    IMMUTABLE = 1;
+    MUTABLE = 2;
+    BOTH = 3;
+  }
+
+  int32 api_version = 1;
+  ApiFlavor api_flavor = 2;
+  repeated LibraryArtifact jars1 = 3;
+  repeated LibraryArtifact jars_mutable = 4;
+  repeated LibraryArtifact jars_immutable = 5;
+}
+
 message TestInfo {
   string size = 1;
+}
+
+message JavaToolchainIdeInfo {
+  string source_version = 1;
+  string target_version = 2;
 }
 
 message RuleIdeInfo {
@@ -131,4 +151,7 @@ message RuleIdeInfo {
   string kind_string = 14;
 
   TestInfo test_info = 15;
+
+  ProtoLibraryLegacyJavaIdeInfo proto_library_legacy_java_ide_info = 16;
+  JavaToolchainIdeInfo java_toolchain_ide_info = 17;
 }

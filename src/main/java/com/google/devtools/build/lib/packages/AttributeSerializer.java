@@ -33,6 +33,7 @@ import static com.google.devtools.build.lib.syntax.Type.STRING_DICT_UNARY;
 import static com.google.devtools.build.lib.syntax.Type.STRING_LIST;
 import static com.google.devtools.build.lib.syntax.Type.STRING_LIST_DICT;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.google.devtools.build.lib.cmdline.Label;
@@ -89,9 +90,25 @@ public class AttributeSerializer {
       boolean explicitlySpecified,
       boolean includeGlobs,
       boolean encodeBooleanAndTriStateAsIntegerAndString) {
-    Type<?> type = attr.getType();
+    return getAttributeProto(
+        attr.getName(),
+        attr.getType(),
+        value,
+        explicitlySpecified,
+        includeGlobs,
+        encodeBooleanAndTriStateAsIntegerAndString);
+  }
+
+  @VisibleForTesting
+  static Build.Attribute getAttributeProto(
+      String name,
+      Type<?> type,
+      @Nullable Object value,
+      boolean explicitlySpecified,
+      boolean includeGlobs,
+      boolean encodeBooleanAndTriStateAsIntegerAndString) {
     Build.Attribute.Builder attrPb = Build.Attribute.newBuilder();
-    attrPb.setName(attr.getName());
+    attrPb.setName(name);
     attrPb.setExplicitlySpecified(explicitlySpecified);
     maybeSetNoDep(type, attrPb);
 
@@ -127,20 +144,28 @@ public class AttributeSerializer {
         Build.Attribute.SelectorList.newBuilder();
     selectorListBuilder.setType(ProtoUtils.getDiscriminatorFromType(type));
     for (Selector<?> selector : selectorList.getSelectors()) {
-      Build.Attribute.Selector.Builder selectorBuilder = Build.Attribute.Selector.newBuilder();
+      Build.Attribute.Selector.Builder selectorBuilder = Build.Attribute.Selector.newBuilder()
+          .setNoMatchError(selector.getNoMatchError())
+          .setHasDefaultValue(selector.hasDefault());
+
       // Note that the order of entries returned by selector.getEntries is stable. The map's
       // entries' order is preserved from the sorting performed by the SelectorValue constructor.
       for (Entry<Label, ?> entry : selector.getEntries().entrySet()) {
-        Builder selectorEntryBuilder = SelectorEntry.newBuilder();
-        selectorEntryBuilder.setLabel(entry.getKey().toString());
-        writeAttributeValueToBuilder(
-            new SelectorEntryBuilderAdapter(selectorEntryBuilder),
-            type,
-            entry.getValue(),
-            includeGlobs);
+        Label condition = entry.getKey();
+        Builder selectorEntryBuilder = SelectorEntry.newBuilder()
+            .setLabel(condition.toString())
+            .setIsDefaultValue(!selector.isValueSet(condition));
+
+        Object conditionValue = entry.getValue();
+        if (conditionValue != null) {
+          writeAttributeValueToBuilder(
+              new SelectorEntryBuilderAdapter(selectorEntryBuilder),
+              type,
+              conditionValue,
+              includeGlobs);
+        }
         selectorBuilder.addEntries(selectorEntryBuilder);
       }
-
       selectorListBuilder.addElements(selectorBuilder);
     }
     attrPb.setSelectorList(selectorListBuilder);

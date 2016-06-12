@@ -52,11 +52,14 @@ public class ObjcCommandLineOptions extends FragmentOptions {
           + "on the machine the simulator will be run on.")
   public String iosSimulatorDevice;
 
-  // TODO(b/28110492): Deprecate this.
+  // Deprecated. See b/27942021 for more details.
   @Option(
     name = "objc_generate_debug_symbols",
     defaultValue = "false",
     category = "flags",
+    deprecationWarning = "-g is enabled for all dbg builds."
+        + "Use --apple_generate_dsym flag for dSYM."
+        + "Use apple_generate_breakpad rule for breakpad.",
     help = "Specifies whether to generate debug symbol(.dSYM) file."
   )
   public boolean generateDebugSymbols;
@@ -190,6 +193,7 @@ public class ObjcCommandLineOptions extends FragmentOptions {
   )
   public Label extraEntitlements;
 
+  // TODO(b/28451644): Make this option the default behavior.
   @Option(
     name = "experimental_auto_top_level_union_objc_protos",
     defaultValue = "false",
@@ -209,7 +213,7 @@ public class ObjcCommandLineOptions extends FragmentOptions {
             + "when signing."
   )
   public boolean deviceDebugEntitlements;
-  
+
   @VisibleForTesting static final String DEFAULT_MINIMUM_IOS = "7.0";
 
   @SuppressWarnings("unchecked")

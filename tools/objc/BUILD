@@ -64,6 +64,14 @@ sh_binary(
 )
 
 sh_binary(
+    name = "libtool",
+    srcs = [":libtool.sh"],
+    data = [
+        ":xcrunwrapper",
+    ],
+)
+
+sh_binary(
     name = "actoolwrapper",
     srcs = [":actoolwrapper.sh"],
     data = [
@@ -129,4 +137,19 @@ objc_library(
     srcs = [
         "objc_dummy.mm",
     ],
+)
+
+filegroup(
+    name = "protobuf_compiler",
+    srcs = ["protobuf_compiler.py"],
+)
+
+filegroup(
+    name = "protobuf_compiler_support",
+    srcs = ["protobuf_support"],
+)
+
+filegroup(
+    name = "protobuf_well_known_types",
+    srcs = ["dummy.proto"],
 )

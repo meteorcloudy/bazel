@@ -163,7 +163,6 @@ public class CppCompileAction extends AbstractAction
   private final BuildConfiguration configuration;
   protected final Artifact outputFile;
   private final Label sourceLabel;
-  private final Artifact dwoFile;
   private final Artifact optionalSourceFile;
   private final NestedSet<Artifact> mandatoryInputs;
   private final boolean shouldScanIncludes;
@@ -171,7 +170,6 @@ public class CppCompileAction extends AbstractAction
   private final Iterable<IncludeScannable> lipoScannables;
   private final ImmutableList<Artifact> builtinIncludeFiles;
   @VisibleForTesting public final CppCompileCommandLine cppCompileCommandLine;
-  private final boolean usePic;
   private final ImmutableSet<String> executionRequirements;
 
   @VisibleForTesting
@@ -251,11 +249,9 @@ public class CppCompileAction extends AbstractAction
       Class<? extends CppCompileActionContext> actionContext,
       ImmutableList<String> copts,
       Predicate<String> coptsFilter,
-      @Nullable String fdoBuildStamp,
       SpecialInputsHandler specialInputsHandler,
       Iterable<IncludeScannable> lipoScannables,
       UUID actionClassId,
-      boolean usePic,
       ImmutableSet<String> executionRequirements,
       String actionName,
       RuleContext ruleContext) {
@@ -271,7 +267,6 @@ public class CppCompileAction extends AbstractAction
     this.configuration = configuration;
     this.sourceLabel = sourceLabel;
     this.outputFile = Preconditions.checkNotNull(outputFile);
-    this.dwoFile = dwoFile;
     this.optionalSourceFile = optionalSourceFile;
     this.context = context;
     this.specialInputsHandler = specialInputsHandler;
@@ -286,18 +281,15 @@ public class CppCompileAction extends AbstractAction
         new CppCompileCommandLine(
             sourceFile,
             dotdFile,
-            dwoFile,
             copts,
             coptsFilter,
             features,
             featureConfiguration,
             variables,
-            fdoBuildStamp,
             actionName);
     this.actionContext = actionContext;
     this.lipoScannables = lipoScannables;
     this.actionClassId = actionClassId;
-    this.usePic = usePic;
     this.executionRequirements = executionRequirements;
 
     // We do not need to include the middleman artifact since it is a generated
@@ -476,15 +468,6 @@ public class CppCompileAction extends AbstractAction
    */
   public Artifact getOutputFile() {
     return outputFile;
-  }
-
-  /**
-   * Returns the path of the debug info output file (when debug info is
-   * spliced out of the .o file via fission).
-   */
-  @Nullable
-  Artifact getDwoFile() {
-    return dwoFile;
   }
 
   protected PathFragment getInternalOutputFile() {
@@ -1259,7 +1242,6 @@ public class CppCompileAction extends AbstractAction
   public final class CppCompileCommandLine {
     private final Artifact sourceFile;
     private final DotdFile dotdFile;
-    @Nullable private final Artifact dwoFile;
     private final List<String> copts;
     private final Predicate<String> coptsFilter;
     private final Collection<String> features;
@@ -1267,30 +1249,23 @@ public class CppCompileAction extends AbstractAction
     @VisibleForTesting public final CcToolchainFeatures.Variables variables;
     private final String actionName;
 
-    // The value of the BUILD_FDO_TYPE macro to be defined on command line
-    @Nullable private final String fdoBuildStamp;
-
     public CppCompileCommandLine(
         Artifact sourceFile,
         DotdFile dotdFile,
-        @Nullable Artifact dwoFile,
         ImmutableList<String> copts,
         Predicate<String> coptsFilter,
         Collection<String> features,
         FeatureConfiguration featureConfiguration,
         CcToolchainFeatures.Variables variables,
-        @Nullable String fdoBuildStamp,
         String actionName) {
       this.sourceFile = Preconditions.checkNotNull(sourceFile);
       this.dotdFile = CppFileTypes.mustProduceDotdFile(sourceFile.getPath().toString())
                       ? Preconditions.checkNotNull(dotdFile) : null;
-      this.dwoFile = dwoFile;
       this.copts = Preconditions.checkNotNull(copts);
       this.coptsFilter = coptsFilter;
       this.features = Preconditions.checkNotNull(features);
       this.featureConfiguration = featureConfiguration;
       this.variables = variables;
-      this.fdoBuildStamp = fdoBuildStamp;
       this.actionName = actionName;
     }
 
@@ -1310,13 +1285,15 @@ public class CppCompileAction extends AbstractAction
       // second: The compiler options.
       commandLine.addAll(getCompilerOptions());
 
-      // third: The file to compile!
-      commandLine.add("-c");
-      commandLine.add(sourceFile.getExecPathString());
+      if (!featureConfiguration.isEnabled("compile_action_flags_in_flag_set")) {
+        // third: The file to compile!
+        commandLine.add("-c");
+        commandLine.add(sourceFile.getExecPathString());
 
-      // finally: The output file. (Prefixed with -o).
-      commandLine.add("-o");
-      commandLine.add(outputFile.getPathString());
+        // finally: The output file. (Prefixed with -o).
+        commandLine.add("-o");
+        commandLine.add(outputFile.getPathString());
+      }
 
       return commandLine;
     }
@@ -1337,32 +1314,12 @@ public class CppCompileAction extends AbstractAction
         addFilteredOptions(options, toolchain.getCxxOptions(features));
       }
 
-      for (String warn : cppConfiguration.getCWarns()) {
-        options.add("-W" + warn);
-      }
-      for (String define : context.getDefines()) {
-        options.add("-D" + define);
-      }
-
-      // Stamp FDO builds with FDO subtype string
-      if (fdoBuildStamp != null) {
-        options.add("-D" + CppConfiguration.FDO_STAMP_MACRO + "=\"" + fdoBuildStamp + "\"");
-      }
-
       // TODO(bazel-team): This needs to be before adding getUnfilteredCompilerOptions() and after
       // adding the warning flags until all toolchains are migrated; currently toolchains use the
       // unfiltered compiler options to inject include paths, which is superseded by the feature
       // configuration; on the other hand toolchains switch off warnings for the layering check
       // that will be re-added by the feature flags.
       addFilteredOptions(options, featureConfiguration.getCommandLine(actionName, variables));
-
-      // TODO(bazel-team): Move this into a feature; more specifically, create a feature for both
-      // the amount of debug information requested, and whether the debug info is written in a
-      // split out file. Until then, keep this before the user-provided copts so it can be
-      // overwritten.
-      if (dwoFile != null) {
-        options.add("-gsplit-dwarf");
-      }
 
       // Users don't expect the explicit copts to be filtered by coptsFilter, add them verbatim.
       // Make sure these are added after the options from the feature configuration, so that
@@ -1374,14 +1331,6 @@ public class CppCompileAction extends AbstractAction
       // own include paths first.
       options.addAll(toolchain.getUnfilteredCompilerOptions(features));
 
-      // GCC gives randomized names to symbols which are defined in
-      // an anonymous namespace but have external linkage.  To make
-      // computation of these deterministic, we want to override the
-      // default seed for the random number generator.  It's safe to use
-      // any value which differs for all translation units; we use the
-      // path to the object file.
-      options.add("-frandom-seed=" + outputFile.getExecPathString());
-
       // Add the options of --per_file_copt, if the label or the base name of the source file
       // matches the specified regular expression filter.
       for (PerLabelOptions perLabelOptions : cppConfiguration.getPerFileCopts()) {
@@ -1391,32 +1340,14 @@ public class CppCompileAction extends AbstractAction
         }
       }
 
-      // Enable <object>.d file generation.
-      if (dotdFile != null) {
-        // Gcc options:
-        //  -MD turns on .d file output as a side-effect (doesn't imply -E)
-        //  -MM[D] enables user includes only, not system includes
-        //  -MF <name> specifies the dotd file name
-        // Issues:
-        //  -M[M] alone subverts actual .o output (implies -E)
-        //  -M[M]D alone breaks some of the .d naming assumptions
-        // This combination gets user and system includes with specified name:
-        //  -MD -MF <name>
-        options.add("-MD");
-        options.add("-MF");
-        options.add(dotdFile.getSafeExecPath().getPathString());
-      }
-
-      if (FileType.contains(outputFile, CppFileTypes.ASSEMBLER, CppFileTypes.PIC_ASSEMBLER)) {
-        options.add("-S");
-      } else if (FileType.contains(outputFile, CppFileTypes.PREPROCESSED_C,
-          CppFileTypes.PREPROCESSED_CPP, CppFileTypes.PIC_PREPROCESSED_C,
-          CppFileTypes.PIC_PREPROCESSED_CPP)) {
-        options.add("-E");
-      }
-
-      if (usePic) {
-        options.add("-fPIC");
+      if (!featureConfiguration.isEnabled("compile_action_flags_in_flag_set")) {
+        if (FileType.contains(outputFile, CppFileTypes.ASSEMBLER, CppFileTypes.PIC_ASSEMBLER)) {
+          options.add("-S");
+        } else if (FileType.contains(outputFile, CppFileTypes.PREPROCESSED_C,
+            CppFileTypes.PREPROCESSED_CPP, CppFileTypes.PIC_PREPROCESSED_C,
+            CppFileTypes.PIC_PREPROCESSED_CPP)) {
+          options.add("-E");
+        }
       }
 
       return options;

@@ -15,6 +15,8 @@
 package com.google.devtools.build.lib.rules.objc;
 
 import static com.google.devtools.build.lib.collect.nestedset.Order.STABLE_ORDER;
+import static com.google.devtools.build.lib.rules.objc.ObjcProvider.JRE_LIBRARY;
+import static com.google.devtools.build.lib.rules.objc.ObjcProvider.LIBRARY;
 import static com.google.devtools.build.lib.rules.objc.XcodeProductType.LIBRARY_STATIC;
 
 import com.google.common.collect.ImmutableList;
@@ -26,6 +28,7 @@ import com.google.devtools.build.lib.analysis.RuleContext;
 import com.google.devtools.build.lib.analysis.RunfilesProvider;
 import com.google.devtools.build.lib.collect.nestedset.NestedSetBuilder;
 import com.google.devtools.build.lib.packages.BuildType;
+import com.google.devtools.build.lib.packages.RuleClass.ConfiguredTargetFactory.RuleErrorException;
 import com.google.devtools.build.lib.rules.RuleConfiguredTargetFactory;
 import com.google.devtools.build.lib.syntax.Type;
 import com.google.devtools.build.lib.vfs.PathFragment;
@@ -49,7 +52,8 @@ public class J2ObjcLibrary implements RuleConfiguredTargetFactory {
       "proto_library");
 
   @Override
-  public ConfiguredTarget create(RuleContext ruleContext) throws InterruptedException {
+  public ConfiguredTarget create(RuleContext ruleContext)
+      throws InterruptedException, RuleErrorException {
     checkAttributes(ruleContext);
 
     if (ruleContext.hasErrors()) {
@@ -61,14 +65,21 @@ public class J2ObjcLibrary implements RuleConfiguredTargetFactory {
         .addEntryClasses(ruleContext.attributes().get("entry_classes", Type.STRING_LIST))
         .build();
 
+    Iterable<ObjcProvider> jreDeps =
+        ruleContext.getPrerequisites("jre_deps", Mode.TARGET, ObjcProvider.class);
     ObjcProvider.Builder objcProviderBuilder =
         new ObjcProvider.Builder()
+            .addTransitiveAndPropagate(jreDeps)
             .addTransitiveAndPropagate(
                 ruleContext.getPrerequisites("deps", Mode.TARGET, ObjcProvider.class));
+    for (ObjcProvider prereq : jreDeps) {
+      objcProviderBuilder.addTransitiveAndPropagate(JRE_LIBRARY, prereq.get(LIBRARY));
+    }
 
     XcodeProvider.Builder xcodeProviderBuilder = new XcodeProvider.Builder();
     XcodeSupport xcodeSupport =
         new XcodeSupport(ruleContext)
+            .addJreDependencies(xcodeProviderBuilder)
             .addDependencies(xcodeProviderBuilder, new Attribute("deps", Mode.TARGET));
 
     ObjcProvider objcProvider = objcProviderBuilder.build();

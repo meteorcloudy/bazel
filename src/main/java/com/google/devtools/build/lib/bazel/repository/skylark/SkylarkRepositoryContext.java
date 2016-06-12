@@ -293,23 +293,57 @@ public class SkylarkRepositoryContext {
     return osObject;
   }
 
+  private void createDirectory(Path directory) throws RepositoryFunctionException {
+    try {
+      if (!directory.exists()) {
+        makeDirectories(directory);
+        directory.createDirectory();
+      }
+    } catch (IOException e) {
+      throw new RepositoryFunctionException(e, Transience.TRANSIENT);
+    }
+  }
+
   @SkylarkCallable(
     name = "execute",
     doc =
         "Executes the command given by the list of arguments. The execution time of the command"
             + " is limited by <code>timeout</code> (in seconds, default 600 seconds). This method"
             + " returns an <code>exec_result</code> structure containing the output of the"
-            + " command."
+            + " command. The <code>environment</code> map can be used to override some environment"
+            + " variables to be passed to the process."
   )
-  public SkylarkExecutionResult execute(List<Object> arguments, long timeout) throws EvalException {
-    return SkylarkExecutionResult.builder()
-        .addArguments(arguments).setTimeout(timeout / 1000).execute();
+  public SkylarkExecutionResult execute(List<Object> arguments, Integer timeout,
+      Map<String, String> environment) throws EvalException, RepositoryFunctionException {
+    createDirectory(outputDirectory);
+    return SkylarkExecutionResult.builder(osObject.getEnvironmentVariables())
+        .addArguments(arguments)
+        .setDirectory(outputDirectory.getPathFile())
+        .addEnvironmentVariables(environment)
+        .setTimeout(timeout.longValue() * 1000)
+        .execute();
   }
 
   @SkylarkCallable(name = "execute", documented = false)
-  public SkylarkExecutionResult execute(List<Object> arguments) throws EvalException {
-    return SkylarkExecutionResult.builder()
-        .addArguments(arguments).setTimeout(600000).execute();
+  public SkylarkExecutionResult execute(List<Object> arguments)
+      throws EvalException, RepositoryFunctionException {
+    createDirectory(outputDirectory);
+    return SkylarkExecutionResult.builder(osObject.getEnvironmentVariables())
+        .setDirectory(outputDirectory.getPathFile())
+        .addArguments(arguments)
+        .setTimeout(600000)
+        .execute();
+  }
+
+  @SkylarkCallable(name = "execute", documented = false)
+  public SkylarkExecutionResult execute(List<Object> arguments, Integer timeout)
+      throws EvalException, RepositoryFunctionException {
+    createDirectory(outputDirectory);
+    return SkylarkExecutionResult.builder(osObject.getEnvironmentVariables())
+        .setDirectory(outputDirectory.getPathFile())
+        .addArguments(arguments)
+        .setTimeout(timeout.longValue() * 1000)
+        .execute();
   }
 
   @SkylarkCallable(
@@ -424,6 +458,7 @@ public class SkylarkRepositoryContext {
     // Download to outputDirectory and delete it after extraction
     SkylarkPath outputPath = getPath("download_and_extract()", output);
     checkInOutputDirectory(outputPath);
+    createDirectory(outputPath.getPath());
     Path downloadedPath = HttpDownloader
         .download(url, sha256, type, outputPath.getPath(), env.getListener(),
             osObject.getEnvironmentVariables());

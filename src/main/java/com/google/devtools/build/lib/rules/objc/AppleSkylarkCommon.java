@@ -17,10 +17,10 @@ package com.google.devtools.build.lib.rules.objc;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.devtools.build.lib.rules.apple.AppleToolchain;
 import com.google.devtools.build.lib.rules.objc.ObjcProvider.Key;
+import com.google.devtools.build.lib.skylarkinterface.Param;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkCallable;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkModule;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkSignature;
-import com.google.devtools.build.lib.skylarkinterface.SkylarkSignature.Param;
 import com.google.devtools.build.lib.syntax.BuiltinFunction;
 import com.google.devtools.build.lib.syntax.SkylarkDict;
 import com.google.devtools.build.lib.syntax.SkylarkSignatureProcessor;
@@ -71,21 +71,32 @@ public class AppleSkylarkCommon {
     mandatoryPositionals = {
       @Param(name = "self", type = AppleSkylarkCommon.class, doc = "The apple_common instance.")
     },
-    extraKeywords = {
+    optionalNamedOnly = {
+      @Param(
+        name = "uses_swift",
+        type = Boolean.class,
+        defaultValue = "False",
+        doc = "Whether this provider should enable Swift support."
+      )
+    },
+    extraKeywords =
       @Param(
         name = "kwargs",
         type = SkylarkDict.class,
         defaultValue = "{}",
         doc = "Dictionary of arguments"
       )
-    }
   )
   public static final BuiltinFunction NEW_OBJC_PROVIDER =
       new BuiltinFunction("new_objc_provider") {
         @SuppressWarnings("unused")
         // This method is registered statically for skylark, and never called directly.
-        public ObjcProvider invoke(AppleSkylarkCommon self, SkylarkDict<String, Object> kwargs) {
+        public ObjcProvider invoke(
+            AppleSkylarkCommon self, Boolean usesSwift, SkylarkDict<String, Object> kwargs) {
           ObjcProvider.Builder resultBuilder = new ObjcProvider.Builder();
+          if (usesSwift) {
+            resultBuilder.add(ObjcProvider.FLAG, ObjcProvider.Flag.USES_SWIFT);
+          }
           for (Entry<String, Object> entry : kwargs.entrySet()) {
             Key<?> key = ObjcProvider.getSkylarkKeyForString(entry.getKey());
             if (key != null) {

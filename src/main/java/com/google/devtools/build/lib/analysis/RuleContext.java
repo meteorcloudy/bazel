@@ -65,6 +65,7 @@ import com.google.devtools.build.lib.packages.PackageSpecification;
 import com.google.devtools.build.lib.packages.RawAttributeMapper;
 import com.google.devtools.build.lib.packages.Rule;
 import com.google.devtools.build.lib.packages.RuleClass;
+import com.google.devtools.build.lib.packages.RuleClass.ConfiguredTargetFactory.RuleErrorException;
 import com.google.devtools.build.lib.packages.RuleErrorConsumer;
 import com.google.devtools.build.lib.packages.Target;
 import com.google.devtools.build.lib.packages.TargetUtils;
@@ -89,14 +90,14 @@ import java.util.Set;
 import javax.annotation.Nullable;
 
 /**
- * A helper class for rule implementations building and initialization. Objects of this
- * class are intended to be passed to the builder for the configured target, which then creates the
- * configured target.
+ * The totality of data available during the analysis of a rule.
  *
  * <p>These objects should not outlast the analysis phase. Do not pass them to {@link Action}
  * objects or other persistent objects. There are internal tests to ensure that RuleContext objects
  * are not persisted that check the name of this class, so update those tests if you change this
  * class's name.
+ *
+ * @see com.google.devtools.build.lib.rules.RuleConfiguredTargetFactory
  */
 public final class RuleContext extends TargetContext
     implements ActionConstructionContext, ActionRegistry, RuleErrorConsumer {
@@ -289,6 +290,16 @@ public final class RuleContext extends TargetContext
   public boolean hasErrors() {
     return getAnalysisEnvironment().hasErrors();
   }
+  
+  /**
+   * No-op if {@link #hasErrors} is false, throws {@link RuleErrorException} if it is true.
+   * This provides a convenience to early-exit of configured target creation if there are errors.
+   */
+  public void assertNoErrors() throws RuleErrorException {
+    if (hasErrors()) {
+      throw new RuleErrorException();
+    }
+  }
 
   /**
    * Returns an immutable map from attribute name to list of configured targets for that attribute.
@@ -406,6 +417,17 @@ public final class RuleContext extends TargetContext
   public void ruleError(String message) {
     reporter.ruleError(message);
   }
+  
+  /**
+   * Convenience function to report non-attribute-specific errors in the current rule and then
+   * throw a {@link RuleErrorException}, immediately exiting the build invocation. Alternatively,
+   * invoke {@link #ruleError} instead to collect additional error information before ending the
+   * invocation.
+   */
+  public void throwWithRuleError(String message) throws RuleErrorException {
+    reporter.ruleError(message);
+    throw new RuleErrorException();
+  }
 
   /**
    * Convenience function for subclasses to report non-attribute-specific
@@ -426,6 +448,20 @@ public final class RuleContext extends TargetContext
   @Override
   public void attributeError(String attrName, String message) {
     reporter.attributeError(attrName, message);
+  }
+
+  /**
+   * Convenience function to report attribute-specific errors in the current rule, and then throw a
+   * {@link RuleErrorException}, immediately exiting the build invocation. Alternatively, invoke
+   * {@link #attributeError} instead to collect additional error information before ending the
+   * invocation.
+   *
+   * <p>If the name of the attribute starts with <code>$</code>
+   * it is replaced with a string <code>(an implicit dependency)</code>.
+   */
+  public void throwWithAttributeError(String attrName, String message) throws RuleErrorException {
+    reporter.attributeError(attrName, message);
+    throw new RuleErrorException();
   }
 
   /**

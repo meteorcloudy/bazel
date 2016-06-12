@@ -30,7 +30,8 @@ public abstract class CcTest implements RuleConfiguredTargetFactory {
   }
 
   @Override
-  public ConfiguredTarget create(RuleContext context) throws InterruptedException {
-    return CcBinary.init(semantics, context, /*fake =*/ false, /*useTestOnlyFlags =*/ true);
+  public ConfiguredTarget create(RuleContext context)
+      throws InterruptedException, RuleErrorException {
+    return CcBinary.init(semantics, context, /*fake =*/ false, /*isTest =*/ true);
   }
 }

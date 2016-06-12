@@ -30,6 +30,7 @@ import com.google.devtools.build.lib.collect.nestedset.NestedSetBuilder;
 import com.google.devtools.build.lib.packages.ImplicitOutputsFunction.SafeImplicitOutputsFunction;
 import com.google.devtools.build.lib.rules.apple.AppleConfiguration;
 import com.google.devtools.build.lib.rules.apple.AppleConfiguration.ConfigurationDistinguisher;
+import com.google.devtools.build.lib.rules.apple.Platform.PlatformType;
 import com.google.devtools.build.lib.rules.objc.XcodeProvider.Builder;
 import com.google.devtools.build.lib.rules.objc.XcodeProvider.Project;
 import com.google.devtools.build.xcode.xcodegen.proto.XcodeGenProtos;
@@ -202,6 +203,17 @@ public final class XcodeSupport {
   }
 
   /**
+   * Adds J2ObjC JRE dependencies to the given provider builder from the given attribute.
+   *
+   * @return this xcode support
+   */
+  XcodeSupport addJreDependencies(Builder xcodeProviderBuilder) {
+    xcodeProviderBuilder.addJreDependencies(
+        ruleContext.getPrerequisites("jre_deps", Mode.TARGET, XcodeProvider.class));
+    return this;
+  }
+
+  /**
    * Generates an extra {@link XcodeProductType#LIBRARY_STATIC} Xcode target with the same
    * compilation artifacts as the main Xcode target associated with this Xcode support. The extra
    * Xcode library target, instead of the main Xcode target, will act as a dependency for all
@@ -260,12 +272,7 @@ public final class XcodeSupport {
       this.project = project;
       this.pbxproj = pbxproj;
       this.workspaceRoot = objcConfiguration.getXcodeWorkspaceRoot();
-      List<String> multiCpus = appleConfiguration.getIosMultiCpus();
-      if (multiCpus.isEmpty()) {
-        this.appleCpus = ImmutableList.of(appleConfiguration.getIosCpu());
-      } else {
-        this.appleCpus = multiCpus;
-      }
+      this.appleCpus = appleConfiguration.getMultiArchitectures(PlatformType.IOS);
       this.minimumOs = objcConfiguration.getMinimumOs().toString();
       this.generateDebugSymbols =
           objcConfiguration.generateDebugSymbols() || objcConfiguration.generateDsym();

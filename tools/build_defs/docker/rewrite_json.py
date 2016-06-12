@@ -18,8 +18,8 @@ import json
 import os
 import os.path
 import sys
-import tarfile
 
+from tools.build_defs.docker import utils
 from third_party.py import gflags
 
 gflags.DEFINE_string(
@@ -41,6 +41,9 @@ gflags.DEFINE_list(
 gflags.DEFINE_list(
     'command', None,
     'Override the "Cmd" of the previous layer')
+
+gflags.DEFINE_string(
+    'user', None, 'The username to run commands under')
 
 gflags.DEFINE_list('labels', None, 'Augment the "Label" of the previous layer')
 
@@ -64,7 +67,8 @@ FLAGS = gflags.FLAGS
 
 _MetadataOptionsT = namedtuple('MetadataOptionsT',
                                ['name', 'parent', 'size', 'entrypoint', 'cmd',
-                                'env', 'labels', 'ports', 'volumes', 'workdir'])
+                                'env', 'labels', 'ports', 'volumes', 'workdir',
+                                'user'])
 
 
 class MetadataOptions(_MetadataOptionsT):
@@ -76,6 +80,7 @@ class MetadataOptions(_MetadataOptionsT):
               size=None,
               entrypoint=None,
               cmd=None,
+              user=None,
               labels=None,
               env=None,
               ports=None,
@@ -88,6 +93,7 @@ class MetadataOptions(_MetadataOptionsT):
                                                size=size,
                                                entrypoint=entrypoint,
                                                cmd=cmd,
+                                               user=user,
                                                labels=labels,
                                                env=env,
                                                ports=ports,
@@ -167,6 +173,8 @@ def RewriteMetadata(data, options):
     output['config']['Entrypoint'] = options.entrypoint
   if options.cmd:
     output['config']['Cmd'] = options.cmd
+  if options.user:
+    output['config']['User'] = options.user
 
   output['docker_version'] = _DOCKER_VERSION
   output['architecture'] = _PROCESSOR_ARCHITECTURE
@@ -229,27 +237,6 @@ def RewriteMetadata(data, options):
   return output
 
 
-def GetTarFile(f, name):
-  """Return the content of a file inside a tar file.
-
-  This method looks for ./f, /f and f file entry in a tar file and if found,
-  return its content. This allows to read file with various path prefix.
-
-  Args:
-    f: The tar file to read.
-    name: The name of the file inside the tar file.
-
-  Returns:
-    The content of the file, or None if not found.
-  """
-  with tarfile.open(f, 'r') as tar:
-    members = [tarinfo.name for tarinfo in tar.getmembers()]
-    for i in ['', './', '/']:
-      if i + name in members:
-        return tar.extractfile(i + name).read()
-    return None
-
-
 def GetParentIdentifier(f):
   """Try to look at the parent identifier from a docker image.
 
@@ -264,10 +251,10 @@ def GetParentIdentifier(f):
     The identifier of the docker image, or None if no identifier was found.
   """
   # TODO(dmarting): Maybe we could drop the 'top' file all together?
-  top = GetTarFile(f, 'top')
+  top = utils.GetTarFile(f, 'top')
   if top:
     return top.strip()
-  repositories = GetTarFile(f, 'repositories')
+  repositories = utils.GetTarFile(f, 'repositories')
   if repositories:
     data = json.loads(repositories)
     for k1 in data:
@@ -283,7 +270,7 @@ def main(unused_argv):
   if FLAGS.base:
     parent = GetParentIdentifier(FLAGS.base)
     if parent:
-      base_json = GetTarFile(FLAGS.base, '%s/json' % parent)
+      base_json = utils.GetTarFile(FLAGS.base, '%s/json' % parent)
   data = json.loads(base_json)
 
   name = FLAGS.name
@@ -303,6 +290,7 @@ def main(unused_argv):
                                            size=os.path.getsize(FLAGS.layer),
                                            entrypoint=FLAGS.entrypoint,
                                            cmd=FLAGS.command,
+                                           user=FLAGS.user,
                                            labels=labels,
                                            env=KeyValueToDict(FLAGS.env),
                                            ports=FLAGS.ports,

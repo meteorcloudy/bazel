@@ -15,9 +15,11 @@ package com.google.devtools.build.android;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Stopwatch;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
+import com.google.devtools.build.android.ParsedAndroidData.Builder;
 import com.google.devtools.build.android.ParsedAndroidData.ParsedAndroidDataBuildingPathWalker;
 
 import com.android.ide.common.res2.MergingException;
@@ -29,11 +31,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributeView;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
@@ -43,6 +47,49 @@ import java.util.logging.Logger;
 public class AndroidDataMerger {
 
   private static final Logger logger = Logger.getLogger(AndroidDataMerger.class.getCanonicalName());
+
+  private final class ParseDependencyDataTask implements Callable<Boolean> {
+
+    private final AndroidDataSerializer serializer;
+
+    private final DependencyAndroidData dependency;
+
+    private final Builder targetBuilder;
+
+    private ParseDependencyDataTask(
+        AndroidDataSerializer serializer, DependencyAndroidData dependency, Builder targetBuilder) {
+      this.serializer = serializer;
+      this.dependency = dependency;
+      this.targetBuilder = targetBuilder;
+    }
+
+    @Override
+    public Boolean call() throws Exception {
+      final Builder parsedDataBuilder = ParsedAndroidData.Builder.newBuilder();
+      try {
+        dependency.deserialize(serializer, parsedDataBuilder.consumers());
+      } catch (DeserializationException e) {
+        if (!e.isLegacy()) {
+          throw new MergingException(e);
+        }
+        //TODO(corysmith): List the offending target here.
+        logger.warning(
+            String.format(
+                "\u001B[31mDEPRECATION:\u001B[0m Legacy resources used for %s",
+                dependency.getManifest()));
+        // Legacy android resources -- treat them as direct dependencies.
+        dependency.walk(ParsedAndroidDataBuildingPathWalker.create(parsedDataBuilder));
+      }
+      // The builder isn't threadsafe, so synchronize the copyTo call.
+      synchronized (targetBuilder) {
+        // All the resources are sorted before writing, so they can be aggregated in
+        // whatever order here.
+        parsedDataBuilder.copyTo(targetBuilder);
+      }
+      // Had to return something?
+      return Boolean.TRUE;
+    }
+  }
 
   /** Interface for comparing paths. */
   interface SourceChecker {
@@ -109,49 +156,69 @@ public class AndroidDataMerger {
   }
 
   private final SourceChecker deDuplicator;
+  private final ListeningExecutorService executorService;
 
-  /** Creates a merger with no path deduplication. */
-  public static AndroidDataMerger create() {
-    return new AndroidDataMerger(NoopSourceChecker.create());
+  /** Creates a merger with no path deduplication and a default {@link ExecutorService}. */
+  public static AndroidDataMerger createWithDefaults() {
+    return createWithDefaultThreadPool(NoopSourceChecker.create());
   }
 
-  /** Creates a merger with a custom deduplicator. */
-  public static AndroidDataMerger create(SourceChecker deDuplicator) {
-    return new AndroidDataMerger(deDuplicator);
+  /** Creates a merger with a custom deduplicator and a default {@link ExecutorService}. */
+  public static AndroidDataMerger createWithDefaultThreadPool(SourceChecker deDuplicator) {
+    return new AndroidDataMerger(deDuplicator,
+        MoreExecutors.newDirectExecutorService());
+  }
+
+  /** Creates a merger with a custom deduplicator and an {@link ExecutorService}. */
+  public static AndroidDataMerger create(
+      SourceChecker deDuplicator, ListeningExecutorService executorService) {
+    return new AndroidDataMerger(deDuplicator, executorService);
   }
 
   /** Creates a merger with a file contents hashing deduplicator. */
-  public static AndroidDataMerger createWithPathDeduplictor() {
-    return create(ContentComparingChecker.create());
+  public static AndroidDataMerger createWithPathDeduplictor(
+      ListeningExecutorService executorService) {
+    return create(ContentComparingChecker.create(), executorService);
   }
 
-  private AndroidDataMerger(SourceChecker deDuplicator) {
+  private AndroidDataMerger(SourceChecker deDuplicator, ListeningExecutorService executorService) {
     this.deDuplicator = deDuplicator;
+    this.executorService = executorService;
   }
 
   /**
    * Merges a list of {@link DependencyAndroidData} with a {@link UnvalidatedAndroidData}.
    *
    * @see AndroidDataMerger#merge(ParsedAndroidData, ParsedAndroidData, UnvalidatedAndroidData,
-   * boolean) for details.
+   *    boolean) for details.
    */
   UnwrittenMergedAndroidData merge(
       List<DependencyAndroidData> transitive,
       List<DependencyAndroidData> direct,
       UnvalidatedAndroidData primary,
       boolean allowPrimaryOverrideAll)
-      throws IOException, MergingException {
+      throws MergingException {
     Stopwatch timer = Stopwatch.createStarted();
     try {
       final ParsedAndroidData.Builder directBuilder = ParsedAndroidData.Builder.newBuilder();
       final ParsedAndroidData.Builder transitiveBuilder = ParsedAndroidData.Builder.newBuilder();
       final AndroidDataSerializer serializer = AndroidDataSerializer.create();
+      final List<ListenableFuture<Boolean>> tasks = new ArrayList<>();
       for (final DependencyAndroidData dependency : direct) {
-        parseDependencyData(directBuilder, serializer, dependency);
+        tasks.add(
+            executorService.submit(
+                new ParseDependencyDataTask(serializer, dependency, directBuilder)));
       }
       for (final DependencyAndroidData dependency : transitive) {
-        parseDependencyData(transitiveBuilder, serializer, dependency);
+        tasks.add(
+            executorService.submit(
+                new ParseDependencyDataTask(serializer, dependency, transitiveBuilder)));
       }
+      // Wait for all the parsing to complete.
+      FailedFutureAggregator<MergingException> aggregator =
+          FailedFutureAggregator.createForMergingExceptionWithMessage(
+              "Failure(s) during dependency parsing");
+      aggregator.aggregateAndMaybeThrow(tasks);
       logger.fine(
           String.format("Merged dependencies read in %sms", timer.elapsed(TimeUnit.MILLISECONDS)));
       timer.reset().start();
@@ -159,27 +226,6 @@ public class AndroidDataMerger {
           transitiveBuilder.build(), directBuilder.build(), primary, allowPrimaryOverrideAll);
     } finally {
       logger.fine(String.format("Resources merged in %sms", timer.elapsed(TimeUnit.MILLISECONDS)));
-    }
-  }
-
-  private void parseDependencyData(
-      final ParsedAndroidData.Builder parsedDataBuilder,
-      final AndroidDataSerializer serializer,
-      final DependencyAndroidData dependency)
-      throws IOException, MergingException {
-    try {
-      dependency.deserialize(serializer, parsedDataBuilder.consumers());
-    } catch (DeserializationException e) {
-      if (!e.isLegacy()) {
-        throw new MergingException(e);
-      }
-      //TODO(corysmith): List the offending a target here.
-      logger.warning(
-          String.format(
-              "\u001B[31mDEPRECATION:\u001B[0m Legacy resources used for %s",
-              dependency.getManifest()));
-      // Legacy android resources -- treat them as direct dependencies.
-      dependency.walk(ParsedAndroidDataBuildingPathWalker.create(parsedDataBuilder));
     }
   }
 
@@ -196,7 +242,7 @@ public class AndroidDataMerger {
    * The UnwrittenMergedAndroidData contains only one of each DataKey in both the direct and
    * transitive closure.
    *
-   * The merge semantics are as follows: <pre>
+   * The merge semantics for overwriting resources (non id and styleable) are as follows: <pre>
    *   Key:
    *     A(): package A
    *     A(foo): package A with resource symbol foo
@@ -227,7 +273,13 @@ public class AndroidDataMerger {
    *     A(foo),B(foo) -> C() -> D(foo) == Valid
    *     A() -> B(foo),C(foo) -> D(foo) == Valid
    * </pre>
-   *
+   * <p>
+   * Combining resources are much simpler -- since a combining (id and styleable) resource does not
+   * get replaced when redefined, they are simply combined: <pre>
+   *     A(foo) -> B(foo) -> C(foo) == Valid
+   *     
+   * </pre>
+   * 
    * @param transitive The transitive dependencies to merge.
    * @param direct The direct dependencies to merge.
    * @param primaryData The primary data to merge against.
@@ -247,75 +299,108 @@ public class AndroidDataMerger {
 
     try {
       // Extract the primary resources.
-      ParsedAndroidData primary = ParsedAndroidData.from(primaryData);
+      ParsedAndroidData parsedPrimary = ParsedAndroidData.from(primaryData);
 
-      Map<DataKey, DataResource> overwritableDeps = new HashMap<>();
-      Map<DataKey, DataAsset> assets = new HashMap<>();
+      // Create the builders for the final parsed data.
+      final ParsedAndroidData.Builder primaryBuilder = ParsedAndroidData.Builder.newBuilder();
+      final ParsedAndroidData.Builder transitiveBuilder = ParsedAndroidData.Builder.newBuilder();
+      final KeyValueConsumers transitiveConsumers = transitiveBuilder.consumers();
+      final KeyValueConsumers primaryConsumers = primaryBuilder.consumers();
 
-      Set<MergeConflict> conflicts = new HashSet<>();
-      conflicts.addAll(primary.conflicts());
+      
+      final Set<MergeConflict> conflicts = new HashSet<>();
+      conflicts.addAll(parsedPrimary.conflicts());
       for (MergeConflict conflict : Iterables.concat(direct.conflicts(), transitive.conflicts())) {
         if (allowPrimaryOverrideAll
-            && (primary.containsOverwritable(conflict.dataKey())
-                || primary.containsAsset(conflict.dataKey()))) {
+            && (parsedPrimary.containsOverwritable(conflict.dataKey())
+                || parsedPrimary.containsAsset(conflict.dataKey()))) {
           continue;
         }
         conflicts.add(conflict);
       }
 
-      // resources
+      // overwriting resources
+      for (Entry<DataKey, DataResource> entry : parsedPrimary.iterateOverwritableEntries()) {
+        primaryConsumers.overwritingConsumer.consume(entry.getKey(), entry.getValue());
+      }
+
       for (Map.Entry<DataKey, DataResource> entry : direct.iterateOverwritableEntries()) {
         // Direct dependencies are simply overwritten, no conflict.
-        if (!primary.containsOverwritable(entry.getKey())) {
-          overwritableDeps.put(entry.getKey(), entry.getValue());
+        if (!parsedPrimary.containsOverwritable(entry.getKey())) {
+          transitiveConsumers.overwritingConsumer.consume(entry.getKey(), entry.getValue());
         }
       }
       for (Map.Entry<DataKey, DataResource> entry : transitive.iterateOverwritableEntries()) {
         // If the primary is considered to be intentional (usually at the binary level),
         // skip.
-        if (primary.containsOverwritable(entry.getKey()) && allowPrimaryOverrideAll) {
+        if (allowPrimaryOverrideAll && parsedPrimary.containsOverwritable(entry.getKey())) {
           continue;
         }
         // If a transitive value is in the direct map report a conflict, as it is commonly
         // unintentional.
         if (direct.containsOverwritable(entry.getKey())) {
           conflicts.add(direct.foundResourceConflict(entry.getKey(), entry.getValue()));
-        } else if (primary.containsOverwritable(entry.getKey())) {
+        } else if (parsedPrimary.containsOverwritable(entry.getKey())) {
           // If overwriting a transitive value with a primary map, assume it's an unintentional
           // override, unless allowPrimaryOverrideAll is set. At which point, this code path
           // should not be reached.
-          conflicts.add(primary.foundResourceConflict(entry.getKey(), entry.getValue()));
+          conflicts.add(parsedPrimary.foundResourceConflict(entry.getKey(), entry.getValue()));
         } else {
           // If it's in none of the of sources, add it.
-          overwritableDeps.put(entry.getKey(), entry.getValue());
+          transitiveConsumers.overwritingConsumer.consume(entry.getKey(), entry.getValue());
+        }
+      }
+
+      // combining resources
+      for (Entry<DataKey, DataResource> entry : parsedPrimary.iterateCombiningEntries()) {
+        primaryConsumers.combiningConsumer.consume(entry.getKey(), entry.getValue());
+      }
+      for (Map.Entry<DataKey, DataResource> entry : direct.iterateCombiningEntries()) {
+        if (parsedPrimary.containsCombineable(entry.getKey())) {
+          // If it is in the primary, add it to the primary to be combined.
+          primaryConsumers.combiningConsumer.consume(entry.getKey(), entry.getValue());
+        } else {
+          // If the combining asset is not in the primary, put it into the transitive.
+          transitiveConsumers.combiningConsumer.consume(entry.getKey(), entry.getValue());
+        }
+      }
+      for (Map.Entry<DataKey, DataResource> entry : transitive.iterateCombiningEntries()) {
+        if (parsedPrimary.containsCombineable(entry.getKey())) {
+          primaryConsumers.combiningConsumer.consume(entry.getKey(), entry.getValue());
+        } else {
+          transitiveConsumers.combiningConsumer.consume(entry.getKey(), entry.getValue());
         }
       }
 
       // assets
+      for (Entry<DataKey, DataAsset> entry : parsedPrimary.iterateAssetEntries()) {
+        primaryConsumers.assetConsumer.consume(entry.getKey(), entry.getValue());
+      }
+
       for (Map.Entry<DataKey, DataAsset> entry : direct.iterateAssetEntries()) {
         // Direct dependencies are simply overwritten, no conflict.
-        if (!primary.containsAsset(entry.getKey())) {
-          assets.put(entry.getKey(), entry.getValue());
+        if (!parsedPrimary.containsAsset(entry.getKey())) {
+          transitiveConsumers.assetConsumer.consume(entry.getKey(), entry.getValue());
         }
       }
       for (Map.Entry<DataKey, DataAsset> entry : transitive.iterateAssetEntries()) {
         // If the primary is considered to be intentional (usually at the binary level),
         // skip.
-        if (primary.containsAsset(entry.getKey()) && allowPrimaryOverrideAll) {
+        if (allowPrimaryOverrideAll && parsedPrimary.containsAsset(entry.getKey())) {
           continue;
         }
         // If a transitive value is in the direct map report a conflict, as it is commonly
         // unintentional.
         if (direct.containsAsset(entry.getKey())) {
           conflicts.add(direct.foundAssetConflict(entry.getKey(), entry.getValue()));
-        } else if (primary.containsAsset(entry.getKey())) {
+        } else if (parsedPrimary.containsAsset(entry.getKey())) {
           // If overwriting a transitive value with a primary map, assume it's an unintentional
           // override, unless allowPrimaryOverrideAll is set. At which point, this code path
           // should not be reached.
-          conflicts.add(primary.foundAssetConflict(entry.getKey(), entry.getValue()));
+          conflicts.add(parsedPrimary.foundAssetConflict(entry.getKey(), entry.getValue()));
         } else {
           // If it's in none of the of sources, add it.
-          assets.put(entry.getKey(), entry.getValue());
+          transitiveConsumers.assetConsumer.consume(entry.getKey(), entry.getValue());
         }
       }
 
@@ -336,12 +421,8 @@ public class AndroidDataMerger {
 
       return UnwrittenMergedAndroidData.of(
           primaryData.getManifest(),
-          primary,
-          ParsedAndroidData.of(
-              ImmutableSet.<MergeConflict>of(),
-              ImmutableMap.copyOf(overwritableDeps),
-              direct.mergeCombining(transitive),
-              ImmutableMap.copyOf(assets)));
+          primaryBuilder.build(),
+          transitiveBuilder.build());
     } catch (IOException e) {
       throw new MergingException(e);
     }

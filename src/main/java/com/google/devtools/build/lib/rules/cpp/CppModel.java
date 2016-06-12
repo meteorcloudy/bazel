@@ -29,9 +29,11 @@ import com.google.devtools.build.lib.packages.BuildType;
 import com.google.devtools.build.lib.rules.cpp.CcCompilationOutputs.Builder;
 import com.google.devtools.build.lib.rules.cpp.CcToolchainFeatures.FeatureConfiguration;
 import com.google.devtools.build.lib.rules.cpp.CcToolchainFeatures.Variables.VariablesExtension;
+import com.google.devtools.build.lib.rules.cpp.CppCompileAction.DotdFile;
 import com.google.devtools.build.lib.rules.cpp.Link.LinkStaticness;
 import com.google.devtools.build.lib.rules.cpp.Link.LinkTargetType;
 import com.google.devtools.build.lib.rules.cpp.LinkerInputs.LibraryToLink;
+import com.google.devtools.build.lib.util.FileType;
 import com.google.devtools.build.lib.util.Pair;
 import com.google.devtools.build.lib.util.Preconditions;
 import com.google.devtools.build.lib.util.RegexFilter;
@@ -86,6 +88,10 @@ public final class CppModel {
     this.semantics = semantics;
     configuration = ruleContext.getConfiguration();
     cppConfiguration = ruleContext.getFragment(CppConfiguration.class);
+  }
+
+  private Artifact getDwoFile(Artifact outputFile) {
+    return ruleContext.getRelatedArtifact(outputFile.getRootRelativePath(), ".dwo");
   }
 
   /**
@@ -308,7 +314,6 @@ public final class CppModel {
       builder.addNocopts(nocopts);
     }
 
-    builder.setFdoBuildStamp(CppHelper.getFdoBuildStamp(ruleContext));
     builder.setFeatureConfiguration(featureConfiguration);
     
     return builder;
@@ -356,13 +361,45 @@ public final class CppModel {
       boolean usePic,
       PathFragment ccRelativeName,
       PathFragment autoFdoImportPath,
-      Artifact gcnoFile) {
+      Artifact gcnoFile,
+      Artifact dwoFile) {
     CcToolchainFeatures.Variables.Builder buildVariables =
         new CcToolchainFeatures.Variables.Builder();
     
     // TODO(bazel-team): Pull out string constants for all build variables.
 
-    CppModuleMap cppModuleMap = context.getCppModuleMap();
+    CppCompilationContext builderContext = builder.getContext();
+    CppModuleMap cppModuleMap = builderContext.getCppModuleMap();
+    Artifact sourceFile = builder.getSourceFile();
+    Artifact outputFile = builder.getOutputFile();
+    String realOutputFilePath;
+
+    buildVariables.addVariable("source_file", sourceFile.getExecPathString());
+    buildVariables.addVariable("output_file", outputFile.getExecPathString());
+
+    if (fake) {
+      realOutputFilePath = builder.getTempOutputFile().getPathString();
+    } else {
+      realOutputFilePath = builder.getOutputFile().getExecPathString();
+    }
+
+    if (FileType.contains(outputFile, CppFileTypes.ASSEMBLER, CppFileTypes.PIC_ASSEMBLER)) {
+      buildVariables.addVariable("output_assembly_file", realOutputFilePath);
+    } else if (FileType.contains(outputFile, CppFileTypes.PREPROCESSED_C,
+        CppFileTypes.PREPROCESSED_CPP, CppFileTypes.PIC_PREPROCESSED_C,
+        CppFileTypes.PIC_PREPROCESSED_CPP)) {
+      buildVariables.addVariable("output_preprocess_file", realOutputFilePath);
+    } else {
+      buildVariables.addVariable("output_object_file", realOutputFilePath);
+    }
+
+    DotdFile dotdFile = CppFileTypes.mustProduceDotdFile(sourceFile.getPath().toString())
+        ? Preconditions.checkNotNull(builder.getDotdFile()) : null;
+    // Set dependency_file to enable <object>.d file generation.
+    if (dotdFile != null) {
+      buildVariables.addVariable("dependency_file", dotdFile.getSafeExecPath().getPathString());
+    }
+
     if (featureConfiguration.isEnabled(CppRuleClasses.MODULE_MAPS) && cppModuleMap != null) {
       // If the feature is enabled and cppModuleMap is null, we are about to fail during analysis
       // in any case, but don't crash.
@@ -371,7 +408,7 @@ public final class CppModel {
           cppModuleMap.getArtifact().getExecPathString());
       CcToolchainFeatures.Variables.ValueSequence.Builder sequence =
           new CcToolchainFeatures.Variables.ValueSequence.Builder();
-      for (Artifact artifact : context.getDirectModuleMaps()) {
+      for (Artifact artifact : builderContext.getDirectModuleMaps()) {
         sequence.addValue(artifact.getExecPathString());
       }
       buildVariables.addSequence("dependent_module_map_files", sequence.build());
@@ -381,11 +418,35 @@ public final class CppModel {
     }
     if (featureConfiguration.isEnabled(CppRuleClasses.INCLUDE_PATHS)) {
       buildVariables.addSequenceVariable("include_paths",
-          getSafePathStrings(context.getIncludeDirs()));
+          getSafePathStrings(builderContext.getIncludeDirs()));
       buildVariables.addSequenceVariable("quote_include_paths",
-          getSafePathStrings(context.getQuoteIncludeDirs()));
+          getSafePathStrings(builderContext.getQuoteIncludeDirs()));
       buildVariables.addSequenceVariable("system_include_paths",
-          getSafePathStrings(context.getSystemIncludeDirs()));
+          getSafePathStrings(builderContext.getSystemIncludeDirs()));
+    }
+
+    if (featureConfiguration.isEnabled(CppRuleClasses.PREPROCESSOR_DEFINES)) {
+      String fdoBuildStamp = CppHelper.getFdoBuildStamp(ruleContext);
+      ImmutableList<String> defines;
+      if (fdoBuildStamp != null) {
+        // Stamp FDO builds with FDO subtype string
+        defines = ImmutableList.<String>builder()
+            .addAll(builderContext.getDefines())
+            .add(CppConfiguration.FDO_STAMP_MACRO
+                + "=\"" + CppHelper.getFdoBuildStamp(ruleContext) + "\"")
+            .build();
+      } else {
+        defines = builderContext.getDefines();
+      }
+
+      buildVariables.addSequenceVariable("preprocessor_defines", defines);
+    }
+
+    if (usePic) {
+      if (!featureConfiguration.isEnabled(CppRuleClasses.PIC)) {
+        ruleContext.ruleError("PIC compilation is requested but the toolchain does not support it");
+      }
+      buildVariables.addVariable("pic", "");
     }
 
     if (ccRelativeName != null) {
@@ -394,6 +455,10 @@ public final class CppModel {
     }
     if (gcnoFile != null) {
       buildVariables.addVariable("gcov_gcno_file", gcnoFile.getExecPathString());
+    }
+
+    if (dwoFile != null) {
+      buildVariables.addVariable("per_object_debug_info_file", dwoFile.getExecPathString());
     }
 
     buildVariables.addAllVariables(CppHelper.getToolchain(ruleContext).getBuildVariables());
@@ -428,7 +493,7 @@ public final class CppModel {
       // - the compiled source file is the module map
       // - it creates a header module (.pcm file).
       createSourceAction(outputName, result, env, moduleMapArtifact, builder, ".pcm", ".pcm.d",
-          /*addObject=*/false, /*enableCoverage=*/false);
+          /*addObject=*/false, /*enableCoverage=*/false, /*generateDwo*/false);
     }
 
     for (Pair<Artifact, Label> source : sourceFiles) {
@@ -442,7 +507,8 @@ public final class CppModel {
         createHeaderAction(outputName, result, env, builder);
       } else {
         createSourceAction(outputName, result, env, sourceArtifact, builder, ".o", ".d",
-            /*addObject=*/true, isCodeCoverageEnabled());
+            /*addObject=*/true, isCodeCoverageEnabled(),
+            /*generateDwo*/cppConfiguration.useFission());
       }
     }
 
@@ -458,7 +524,7 @@ public final class CppModel {
         // If we generate pic actions, we prefer the header actions to use the pic artifacts.
         .setPicMode(this.getGeneratePicActions());
     setupBuildVariables(builder, this.getGeneratePicActions(), /*ccRelativeName=*/null,
-        /*autoFdoImportPath=*/null, /*gcnoFile=*/null);
+        /*autoFdoImportPath=*/null, /*gcnoFile=*/null, /*dwoFile=*/null);
     semantics.finalizeCompileActionBuilder(ruleContext, builder);
     CppCompileAction compileAction = builder.build();
     env.registerAction(compileAction);
@@ -474,7 +540,8 @@ public final class CppModel {
       String outputExtension,
       String dependencyFileExtension,
       boolean addObject,
-      boolean enableCoverage) {
+      boolean enableCoverage,
+      boolean generateDwo) {
     PathFragment ccRelativeName = semantics.getEffectiveSourcePath(sourceArtifact);
     if (cppConfiguration.isLipoOptimization()) {
       // TODO(bazel-team): we shouldn't be needing this, merging context with the binary
@@ -484,6 +551,7 @@ public final class CppModel {
       builder.setContext(CppCompilationContext.mergeForLipo(lipoProvider.getLipoContext(),
           context));
     }
+
     boolean generatePicAction = getGeneratePicActions();
     // If we always need pic for everything, then don't bother to create a no-pic action.
     boolean generateNoPicAction = getGenerateNoPicActions();
@@ -491,26 +559,30 @@ public final class CppModel {
     if (fake) {
       boolean usePic = !generateNoPicAction;
       createFakeSourceAction(outputName, result, env, builder, outputExtension,
-          dependencyFileExtension, addObject, ccRelativeName, sourceArtifact.getExecPath(), usePic);
+          dependencyFileExtension, addObject, ccRelativeName, sourceArtifact.getExecPath(), usePic,
+          generateDwo);
     } else {
       // Create PIC compile actions (same as non-PIC, but use -fPIC and
       // generate .pic.o, .pic.d, .pic.gcno instead of .o, .d, .gcno.)
       if (generatePicAction) {
-        CppCompileActionBuilder picBuilder =
-            copyAsPicBuilder(builder, outputName, outputExtension, dependencyFileExtension);
+        Artifact outputFile = ruleContext.getRelatedArtifact(outputName, ".pic" + outputExtension);
+        CppCompileActionBuilder picBuilder = copyAsPicBuilder(
+            builder, outputName, outputFile, dependencyFileExtension);
         Artifact gcnoFile =
             enableCoverage ? ruleContext.getRelatedArtifact(outputName, ".pic.gcno") : null;
-        if (gcnoFile != null) {
-          picBuilder.setGcnoFile(gcnoFile);
-        }
+        Artifact dwoFile = generateDwo ? getDwoFile(outputFile) : null;
+
         setupBuildVariables(picBuilder, /*usePic=*/ true, ccRelativeName,
-            sourceArtifact.getExecPath(), gcnoFile);
+            sourceArtifact.getExecPath(), gcnoFile, dwoFile);
 
         if (maySaveTemps) {
           result.addTemps(
               createTempsActions(sourceArtifact, outputName, picBuilder, /*usePic=*/true,
                 ccRelativeName));
         }
+
+        picBuilder.setGcnoFile(gcnoFile);
+        picBuilder.setDwoFile(dwoFile);
 
         semantics.finalizeCompileActionBuilder(ruleContext, picBuilder);
         CppCompileAction picAction = picBuilder.build();
@@ -523,9 +595,9 @@ public final class CppModel {
             result.addLTOBitcodeFile(picAction.getOutputFile());
           }
         }
-        if (picAction.getDwoFile() != null) {
+        if (dwoFile != null) {
           // Host targets don't produce .dwo files.
-          result.addPicDwoFile(picAction.getDwoFile());
+          result.addPicDwoFile(dwoFile);
         }
         if (cppConfiguration.isLipoContextCollector() && !generateNoPicAction) {
           result.addLipoScannable(picAction);
@@ -533,19 +605,21 @@ public final class CppModel {
       }
 
       if (generateNoPicAction) {
+        Artifact noPicOutputFile = ruleContext.getRelatedArtifact(outputName, outputExtension);
         builder
-            .setOutputFile(ruleContext.getRelatedArtifact(outputName, outputExtension))
+            .setOutputFile(noPicOutputFile)
             .setDotdFile(outputName, dependencyFileExtension);
+
         // Create non-PIC compile actions
         Artifact gcnoFile =
             !cppConfiguration.isLipoOptimization() && enableCoverage
                 ? ruleContext.getRelatedArtifact(outputName, ".gcno")
                 : null;
-        if (gcnoFile != null) {
-          builder.setGcnoFile(gcnoFile);
-        }
+
+        Artifact noPicDwoFile = generateDwo ? getDwoFile(noPicOutputFile) : null;
+
         setupBuildVariables(builder, /*usePic=*/false, ccRelativeName, sourceArtifact.getExecPath(),
-            gcnoFile);
+            gcnoFile, noPicDwoFile);
 
         if (maySaveTemps) {
           result.addTemps(
@@ -556,6 +630,9 @@ public final class CppModel {
                   /*usePic=*/ false,
                   ccRelativeName));
         }
+
+        builder.setGcnoFile(gcnoFile);
+        builder.setDwoFile(noPicDwoFile);
 
         semantics.finalizeCompileActionBuilder(ruleContext, builder);
         CppCompileAction compileAction = builder.build();
@@ -568,9 +645,9 @@ public final class CppModel {
             result.addLTOBitcodeFile(objectFile);
           }
         }
-        if (compileAction.getDwoFile() != null) {
+        if (noPicDwoFile != null) {
           // Host targets don't produce .dwo files.
-          result.addDwoFile(compileAction.getDwoFile());
+          result.addDwoFile(noPicDwoFile);
         }
         if (cppConfiguration.isLipoContextCollector()) {
           result.addLipoScannable(compileAction);
@@ -582,7 +659,7 @@ public final class CppModel {
   private void createFakeSourceAction(PathFragment outputName, CcCompilationOutputs.Builder result,
       AnalysisEnvironment env, CppCompileActionBuilder builder, String outputExtension,
       String dependencyFileExtension, boolean addObject, PathFragment ccRelativeName,
-      PathFragment execPath, boolean usePic) {
+      PathFragment execPath, boolean usePic, boolean generateDwo) {
     if (usePic) {
       outputExtension = ".pic" + outputExtension;
       dependencyFileExtension = ".pic" + dependencyFileExtension;
@@ -596,7 +673,10 @@ public final class CppModel {
         .setOutputFile(outputFile)
         .setDotdFile(outputName, dependencyFileExtension)
         .setTempOutputFile(tempOutputName);
-    setupBuildVariables(builder, usePic, ccRelativeName, execPath, null);
+
+    Artifact dwoFile = generateDwo ? getDwoFile(outputFile) : null;
+    builder.setDwoFile(dwoFile);
+    setupBuildVariables(builder, usePic, ccRelativeName, execPath, null, dwoFile);
     semantics.finalizeCompileActionBuilder(ruleContext, builder);
     CppCompileAction action = builder.build();
     env.registerAction(action);
@@ -778,12 +858,13 @@ public final class CppModel {
    * changing output and dotd file names.
    */
   private CppCompileActionBuilder copyAsPicBuilder(CppCompileActionBuilder builder,
-      PathFragment outputName, String outputExtension, String dependencyFileExtension) {
+      PathFragment outputName, Artifact outputFile, String dependencyFileExtension) {
     CppCompileActionBuilder picBuilder = new CppCompileActionBuilder(builder);
     picBuilder
         .setPicMode(true)
-        .setOutputFile(ruleContext.getRelatedArtifact(outputName, ".pic" + outputExtension))
+        .setOutputFile(outputFile)
         .setDotdFile(outputName, ".pic" + dependencyFileExtension);
+
     return picBuilder;
   }
 
@@ -806,24 +887,25 @@ public final class CppModel {
 
     String iExt = isCFile ? ".i" : ".ii";
     String picExt = usePic ? ".pic" : "";
-    CppCompileActionBuilder dBuilder = new CppCompileActionBuilder(builder);
-    setupBuildVariables(dBuilder, usePic, ccRelativeName, source.getExecPath(), null);
-    CppCompileActionBuilder sdBuilder = new CppCompileActionBuilder(builder);
-    setupBuildVariables(sdBuilder, usePic, ccRelativeName, source.getExecPath(), null);
 
+    CppCompileActionBuilder dBuilder = new CppCompileActionBuilder(builder);
     dBuilder
         .setOutputFile(ruleContext.getRelatedArtifact(outputName, picExt + iExt))
         .setDotdFile(outputName, picExt + iExt + ".d");
+    setupBuildVariables(dBuilder, usePic, ccRelativeName, source.getExecPath(), null, null);
     semantics.finalizeCompileActionBuilder(ruleContext, dBuilder);
     CppCompileAction dAction = dBuilder.build();
     ruleContext.registerAction(dAction);
 
+    CppCompileActionBuilder sdBuilder = new CppCompileActionBuilder(builder);
     sdBuilder
         .setOutputFile(ruleContext.getRelatedArtifact(outputName, picExt + ".s"))
         .setDotdFile(outputName, picExt + ".s.d");
+    setupBuildVariables(sdBuilder, usePic, ccRelativeName, source.getExecPath(), null, null);
     semantics.finalizeCompileActionBuilder(ruleContext, sdBuilder);
     CppCompileAction sdAction = sdBuilder.build();
     ruleContext.registerAction(sdAction);
+
     return ImmutableList.of(
         dAction.getOutputFile(),
         sdAction.getOutputFile());

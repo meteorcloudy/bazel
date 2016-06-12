@@ -129,11 +129,14 @@ public class BlazeCommandDispatcherRcoptionsTest {
 
   @Before
   public final void initializeRuntime() throws Exception {
+    String productName = TestConstants.PRODUCT_NAME;
     BlazeDirectories directories =
         new BlazeDirectories(
-            scratch.dir("install_base"), scratch.dir("output_base"), scratch.dir("pkg"));
+            scratch.dir("install_base"), scratch.dir("output_base"), scratch.dir("pkg"),
+            productName);
     this.runtime =
         new BlazeRuntime.Builder()
+            .setProductName(productName)
             .setDirectories(directories)
             .setStartupOptionsProvider(
                 OptionsParser.newOptionsParser(BlazeServerStartupOptions.class))

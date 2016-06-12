@@ -29,6 +29,7 @@ import com.android.resources.ResourceType;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.StringWriter;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -40,22 +41,26 @@ import java.util.logging.Logger;
 
 import javax.annotation.Nullable;
 import javax.xml.namespace.QName;
+import javax.xml.stream.XMLEventFactory;
 import javax.xml.stream.XMLEventReader;
+import javax.xml.stream.XMLEventWriter;
+import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.events.Attribute;
 import javax.xml.stream.events.Characters;
 import javax.xml.stream.events.EndElement;
+import javax.xml.stream.events.Namespace;
 import javax.xml.stream.events.StartElement;
 import javax.xml.stream.events.XMLEvent;
 
 /**
  * {@link XmlResourceValues} provides methods for getting {@link XmlResourceValue} derived classes.
  *
- * <p>
- * Acts a static factory class containing the general xml parsing logic for resources that are
+ * <p>Acts a static factory class containing the general xml parsing logic for resources that are
  * declared inside the &lt;resources&gt; tag.
  */
 public class XmlResourceValues {
+
   private static final Logger logger = Logger.getLogger(XmlResourceValues.class.getCanonicalName());
 
   private static final QName TAG_EAT_COMMENT = QName.valueOf("eat-comment");
@@ -72,6 +77,12 @@ public class XmlResourceValues {
   private static final QName ATTR_VALUE = QName.valueOf("value");
   private static final QName ATTR_PARENT = QName.valueOf("parent");
   private static final QName ATTR_TYPE = QName.valueOf("type");
+
+  private static final XMLOutputFactory XML_OUTPUT_FACTORY = XMLOutputFactory.newInstance();
+  private static final XMLEventFactory XML_EVENT_FACTORY = XMLEventFactory.newInstance();
+
+  static final String XLIFF_NAMESPACE = "urn:oasis:names:tc:xliff:document:1.2";
+  private static final String XLIFF_PREFIX = "xliff";
 
   static XmlResourceValue parsePlurals(XMLEventReader eventReader) throws XMLStreamException {
     ImmutableMap.Builder<String, String> values = ImmutableMap.builder();
@@ -156,11 +167,7 @@ public class XmlResourceValues {
       throws XMLStreamException {
     // Using a map to deduplicate xmlns declarations on the attributes.
     Map<String, String> attributeMap = new LinkedHashMap<>();
-    @SuppressWarnings({
-      "cast",
-      "unchecked"
-    }) // The interface returns Iterator, force casting based on documentation.
-    Iterator<Attribute> attributes = (Iterator<Attribute>) start.getAttributes();
+    Iterator<Attribute> attributes = iterateAttributesFrom(start);
     while (attributes.hasNext()) {
       Attribute attribute = attributes.next();
       QName name = attribute.getName();
@@ -170,10 +177,14 @@ public class XmlResourceValues {
       }
       String value = escapeXmlValues(attribute.getValue()).replace("\"", "&quot;");
       if (!name.getNamespaceURI().isEmpty()) {
-        // Declare the xmlns here, so that the written xml will be semantically correct,
-        // if a bit verbose. This allows the resource keys to be written into a generic <resources>
-        // tag.
-        attributeMap.put("xmlns:" + name.getPrefix(), name.getNamespaceURI());
+        // xliff is always provided on resources to help with file size
+        if (!(XLIFF_NAMESPACE.equals(name.getNamespaceURI())
+            && XLIFF_PREFIX.equals(name.getPrefix()))) {
+          // Declare the xmlns here, so that the written xml will be semantically correct,
+          // if a bit verbose. This allows the resource keys to be written into a <resources>
+          // tag without a global namespace.
+          attributeMap.put("xmlns:" + name.getPrefix(), name.getNamespaceURI());
+        }
         attributeMap.put(name.getPrefix() + ":" + attribute.getName().getLocalPart(), value);
       } else {
         attributeMap.put(attribute.getName().getLocalPart(), value);
@@ -210,46 +221,59 @@ public class XmlResourceValues {
   @Nullable
   public static String readContentsAsString(XMLEventReader eventReader, QName startTag)
       throws XMLStreamException {
-    StringBuilder contents = new StringBuilder();
+    StringWriter contents = new StringWriter();
+    XMLEventWriter writer = XML_OUTPUT_FACTORY.createXMLEventWriter(contents);
     while (!isEndTag(eventReader.peek(), startTag)) {
       XMLEvent xmlEvent = eventReader.nextEvent();
-      if (xmlEvent.isCharacters()) {
-        contents.append(escapeXmlValues(xmlEvent.asCharacters().getData()));
-      } else if (xmlEvent.isStartElement()) {
+      if (xmlEvent.isStartElement()) {
         // TODO(corysmith): Replace this with a proper representation of the contents that can be
         // serialized and reconstructed appropriately without modification.
-        QName name = xmlEvent.asStartElement().getName();
-        contents.append("<");
-        if (!name.getNamespaceURI().isEmpty()) {
-          contents
-              .append(name.getPrefix())
-              .append(':')
-              .append(name.getLocalPart())
-              .append(' ')
-              .append("xmlns:")
-              .append(name.getPrefix())
-              .append("='")
-              .append(name.getNamespaceURI())
-              .append("'");
-        } else {
-          contents.append(name.getLocalPart());
+        StartElement start = xmlEvent.asStartElement();
+        QName name = start.getName();
+        // Lazy with the list for memory usage -- this code path happens a lot.
+        List<Namespace> namespaces = maybeAddNamespace(name, null);
+        Iterator<Attribute> attributes = iterateAttributesFrom(start);
+        while (attributes.hasNext()) {
+          Attribute attribute = attributes.next();
+          namespaces = maybeAddNamespace(attribute.getName(), namespaces);
         }
-        contents.append(">");
-      } else if (xmlEvent.isEndElement()) {
-        QName name = xmlEvent.asEndElement().getName();
-        contents.append("</");
-        if (!name.getNamespaceURI().isEmpty()) {
-          contents.append(name.getPrefix()).append(':').append(name.getLocalPart());
+        if (namespaces != null) {
+          writer.add(
+              XML_EVENT_FACTORY.createStartElement(
+                  name, iterateAttributesFrom(start), namespaces.iterator()));
         } else {
-          contents.append(name.getLocalPart());
+          writer.add(xmlEvent);
         }
-        contents.append(">");
+      } else {
+        writer.add(xmlEvent);
       }
     }
     // Verify the end element.
     EndElement endElement = eventReader.nextEvent().asEndElement();
     Preconditions.checkArgument(endElement.getName().equals(startTag));
     return contents.toString();
+  }
+
+  @SuppressWarnings({
+    "cast",
+    "unchecked"
+  }) // The interface returns Iterator, force casting based on documentation.
+  private static Iterator<Attribute> iterateAttributesFrom(StartElement start) {
+    return (Iterator<Attribute>) start.getAttributes();
+  }
+
+  private static List<Namespace> maybeAddNamespace(QName name, List<Namespace> namespaces) {
+    // The xliff namespace is provided by default.
+    if (name.getNamespaceURI() != null
+        && !name.getNamespaceURI().isEmpty()
+        && !(XLIFF_NAMESPACE.equals(name.getNamespaceURI())
+            && XLIFF_PREFIX.equals(name.getPrefix()))) {
+      if (namespaces == null) {
+        namespaces = new ArrayList<>();
+      }
+      namespaces.add(XML_EVENT_FACTORY.createNamespace(name.getPrefix(), name.getNamespaceURI()));
+    }
+    return namespaces;
   }
 
   /* XML helper methods follow. */
@@ -329,8 +353,7 @@ public class XmlResourceValues {
         logger.fine(
             String.format(
                 "Invalid characters [%s] found at %s",
-                characters.getData(),
-                characters.getLocation().getLineNumber()));
+                characters.getData(), characters.getLocation().getLineNumber()));
       }
     }
     return eventReader.nextEvent();

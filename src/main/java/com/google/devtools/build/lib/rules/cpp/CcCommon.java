@@ -83,10 +83,16 @@ public final class CcCommon {
    * Features we request to enable unless a rule explicitly doesn't support them.
    */
   private static final ImmutableSet<String> DEFAULT_FEATURES = ImmutableSet.of(
+      CppRuleClasses.DEPENDENCY_FILE,
+      CppRuleClasses.COMPILE_ACTION_FLAGS_IN_FLAG_SET,
+      CppRuleClasses.RANDOM_SEED,
       CppRuleClasses.MODULE_MAPS,
       CppRuleClasses.MODULE_MAP_HOME_CWD,
       CppRuleClasses.HEADER_MODULE_INCLUDES_DEPENDENCIES,
-      CppRuleClasses.INCLUDE_PATHS);
+      CppRuleClasses.INCLUDE_PATHS,
+      CppRuleClasses.PIC,
+      CppRuleClasses.PER_OBJECT_DEBUG_INFO,
+      CppRuleClasses.PREPROCESSOR_DEFINES);
 
   /** C++ configuration */
   private final CppConfiguration cppConfiguration;
@@ -380,23 +386,6 @@ public final class CcCommon {
   }
 
   List<PathFragment> getSystemIncludeDirs() {
-    // Add in any 'includes' attribute values as relative path fragments
-    if (!ruleContext.getRule().isAttributeValueExplicitlySpecified("includes")
-        || !cppConfiguration.useIsystemForIncludes()) {
-      return ImmutableList.of();
-    }
-    return getIncludeDirsFromIncludesAttribute();
-  }
-
-  List<PathFragment> getIncludeDirs() {
-    if (!ruleContext.getRule().isAttributeValueExplicitlySpecified("includes")
-        || cppConfiguration.useIsystemForIncludes()) {
-      return ImmutableList.of();
-    }
-    return getIncludeDirsFromIncludesAttribute();
-  }
-
-  private List<PathFragment> getIncludeDirsFromIncludesAttribute() {
     List<PathFragment> result = new ArrayList<>();
     PackageIdentifier packageIdentifier = ruleContext.getLabel().getPackageIdentifier();
     PathFragment packageFragment = packageIdentifier.getPathFragment();

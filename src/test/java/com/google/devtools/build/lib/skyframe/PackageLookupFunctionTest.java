@@ -26,11 +26,11 @@ import com.google.devtools.build.lib.analysis.BlazeDirectories;
 import com.google.devtools.build.lib.bazel.rules.BazelRulesModule;
 import com.google.devtools.build.lib.cmdline.PackageIdentifier;
 import com.google.devtools.build.lib.events.NullEventHandler;
-import com.google.devtools.build.lib.packages.PackageFactory;
 import com.google.devtools.build.lib.packages.RuleClassProvider;
 import com.google.devtools.build.lib.pkgcache.PathPackageLocator;
 import com.google.devtools.build.lib.skyframe.PackageLookupValue.ErrorReason;
 import com.google.devtools.build.lib.testutil.FoundationTestCase;
+import com.google.devtools.build.lib.testutil.TestConstants;
 import com.google.devtools.build.lib.testutil.TestRuleClassProvider;
 import com.google.devtools.build.lib.util.io.TimestampGranularityMonitor;
 import com.google.devtools.build.lib.vfs.Path;
@@ -72,7 +72,8 @@ public class PackageLookupFunctionTest extends FoundationTestCase {
     AtomicReference<PathPackageLocator> pkgLocator = new AtomicReference<>(
         new PathPackageLocator(outputBase, ImmutableList.of(emptyPackagePath, rootDirectory)));
     deletedPackages = new AtomicReference<>(ImmutableSet.<PackageIdentifier>of());
-    BlazeDirectories directories = new BlazeDirectories(rootDirectory, outputBase, rootDirectory);
+    BlazeDirectories directories = new BlazeDirectories(rootDirectory, outputBase, rootDirectory,
+        TestConstants.PRODUCT_NAME);
     ExternalFilesHelper externalFilesHelper = new ExternalFilesHelper(
         pkgLocator, false, directories);
 
@@ -94,8 +95,10 @@ public class PackageLookupFunctionTest extends FoundationTestCase {
         SkyFunctions.WORKSPACE_FILE,
         new WorkspaceFileFunction(
             ruleClassProvider,
-            new PackageFactory(
-                ruleClassProvider, new BazelRulesModule().getPackageEnvironmentExtension()),
+            TestConstants.PACKAGE_FACTORY_FACTORY_FOR_TESTING.create(
+                ruleClassProvider,
+                new BazelRulesModule().getPackageEnvironmentExtension(),
+                scratch.getFileSystem()),
             directories));
     skyFunctions.put(SkyFunctions.EXTERNAL_PACKAGE, new ExternalPackageFunction());
     differencer = new RecordingDifferencer();
@@ -220,18 +223,7 @@ public class PackageLookupFunctionTest extends FoundationTestCase {
     assertTrue(packageLookupValue.packageExists());
     assertEquals(rootDirectory, packageLookupValue.getRoot());
   }
-
-  // TODO(kchodorow): Clean this up (see TODOs in PackageLookupValue).
-  @Test
-  public void testExternalPackageLookupSemantics() {
-    PackageLookupValue existing = PackageLookupValue.workspace(rootDirectory);
-    assertTrue(existing.isExternalPackage());
-    assertTrue(existing.packageExists());
-    PackageLookupValue nonExistent = PackageLookupValue.workspace(rootDirectory.getRelative("x/y"));
-    assertTrue(nonExistent.isExternalPackage());
-    assertFalse(nonExistent.packageExists());
-  }
-
+  
   @Test
   public void testPackageLookupValueHashCodeAndEqualsContract() throws Exception {
     Path root1 = rootDirectory.getRelative("root1");

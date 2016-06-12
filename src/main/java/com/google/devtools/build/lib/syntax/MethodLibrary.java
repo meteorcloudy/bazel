@@ -24,9 +24,9 @@ import com.google.devtools.build.lib.collect.nestedset.NestedSet;
 import com.google.devtools.build.lib.collect.nestedset.Order;
 import com.google.devtools.build.lib.events.Event;
 import com.google.devtools.build.lib.events.Location;
+import com.google.devtools.build.lib.skylarkinterface.Param;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkModule;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkSignature;
-import com.google.devtools.build.lib.skylarkinterface.SkylarkSignature.Param;
 import com.google.devtools.build.lib.syntax.ClassObject.SkylarkClassObject;
 import com.google.devtools.build.lib.syntax.SkylarkList.MutableList;
 import com.google.devtools.build.lib.syntax.SkylarkList.Tuple;
@@ -883,12 +883,11 @@ public class MethodLibrary {
       mandatoryPositionals = {
           @Param(name = "self", type = String.class, doc = "This string."),
       },
-      extraPositionals = {
+      extraPositionals =
           @Param(name = "args", type = SkylarkList.class, defaultValue = "()",
               doc = "List of arguments"),
-      },
-      extraKeywords = {@Param(name = "kwargs", type = SkylarkDict.class, defaultValue = "{}",
-            doc = "Dictionary of arguments")},
+      extraKeywords = @Param(name = "kwargs", type = SkylarkDict.class, defaultValue = "{}",
+            doc = "Dictionary of arguments"),
       useLocation = true)
   private static final BuiltinFunction format = new BuiltinFunction("format") {
     @SuppressWarnings("unused")
@@ -1086,9 +1085,8 @@ public class MethodLibrary {
     doc =
         "Returns the smallest one of all given arguments. "
             + "If only one argument is provided, it must be a non-empty iterable.",
-    extraPositionals = {
-      @Param(name = "args", type = SkylarkList.class, doc = "The elements to be checked.")
-    },
+    extraPositionals =
+      @Param(name = "args", type = SkylarkList.class, doc = "The elements to be checked."),
     useLocation = true
   )
   private static final BuiltinFunction min = new BuiltinFunction("min") {
@@ -1104,9 +1102,8 @@ public class MethodLibrary {
     doc =
         "Returns the largest one of all given arguments. "
             + "If only one argument is provided, it must be a non-empty iterable.",
-    extraPositionals = {
-      @Param(name = "args", type = SkylarkList.class, doc = "The elements to be checked.")
-    },
+    extraPositionals =
+      @Param(name = "args", type = SkylarkList.class, doc = "The elements to be checked."),
     useLocation = true
   )
   private static final BuiltinFunction max = new BuiltinFunction("max") {
@@ -1829,8 +1826,7 @@ public class MethodLibrary {
       + "multiple values together.Example:<br>"
       + "<pre class=\"language-python\">s = struct(x = 2, y = 3)\n"
       + "return s.x + getattr(s, \"y\")  # returns 5</pre>",
-      extraKeywords = {
-        @Param(name = "kwargs", doc = "the struct attributes")},
+      extraKeywords = @Param(name = "kwargs", doc = "the struct attributes"),
       useLocation = true)
   private static final BuiltinFunction struct = new BuiltinFunction("struct") {
     @SuppressWarnings("unchecked")
@@ -1887,7 +1883,7 @@ public class MethodLibrary {
                 + "exactly two elements: key, value"
       ),
     },
-    extraKeywords = {@Param(name = "kwargs", doc = "Dictionary of additional entries.")},
+    extraKeywords = @Param(name = "kwargs", doc = "Dictionary of additional entries."),
     useLocation = true, useEnvironment = true
   )
   private static final BuiltinFunction dict =
@@ -2151,37 +2147,53 @@ public class MethodLibrary {
     }
   };
 
-  @SkylarkSignature(name = "fail",
-      doc = "Raises an error that cannot be intercepted. It can be used anywhere, "
-          + "both in the loading phase and in the analysis phase.",
-      returnType = Runtime.NoneType.class,
-      mandatoryPositionals = {
-        @Param(name = "msg", type = String.class, doc = "Error message to display for the user")},
-      optionalPositionals = {
-        @Param(name = "attr", type = String.class, noneable = true,
-            defaultValue = "None",
-            doc = "The name of the attribute that caused the error. This is used only for "
-               + "error reporting.")},
-      useLocation = true)
-  private static final BuiltinFunction fail = new BuiltinFunction("fail") {
-    public Runtime.NoneType invoke(String msg, Object attr,
-        Location loc) throws EvalException, ConversionException {
-      if (attr != Runtime.NONE) {
-        msg = String.format("attribute %s: %s", attr, msg);
-      }
-      throw new EvalException(loc, msg);
-    }
-  };
+  @SkylarkSignature(
+    name = "fail",
+    doc =
+        "Raises an error that cannot be intercepted. It can be used anywhere, "
+            + "both in the loading phase and in the analysis phase.",
+    returnType = Runtime.NoneType.class,
+    mandatoryPositionals = {
+      @Param(
+        name = "msg",
+        type = Object.class,
+        doc = "Error to display for the user. The object is converted to a string."
+      )
+    },
+    optionalPositionals = {
+      @Param(
+        name = "attr",
+        type = String.class,
+        noneable = true,
+        defaultValue = "None",
+        doc =
+            "The name of the attribute that caused the error. This is used only for "
+                + "error reporting."
+      )
+    },
+    useLocation = true
+  )
+  private static final BuiltinFunction fail =
+      new BuiltinFunction("fail") {
+        public Runtime.NoneType invoke(Object msg, Object attr, Location loc)
+            throws EvalException, ConversionException {
+          String str = Printer.str(msg);
+          if (attr != Runtime.NONE) {
+            str = String.format("attribute %s: %s", attr, str);
+          }
+          throw new EvalException(loc, str);
+        }
+      };
 
   @SkylarkSignature(name = "print", returnType = Runtime.NoneType.class,
-      doc = "Prints a warning with the text <code>msg</code>. It can be used for debugging or "
+      doc = "Prints <code>args</code> as a warning. It can be used for debugging or "
           + "for transition (before changing to an error). In other cases, warnings are "
           + "discouraged.",
       optionalNamedOnly = {
         @Param(name = "sep", type = String.class, defaultValue = "' '",
             doc = "The separator string between the objects, default is space (\" \").")},
       // NB: as compared to Python3, we're missing optional named-only arguments 'end' and 'file'
-      extraPositionals = {@Param(name = "args", doc = "The objects to print.")},
+      extraPositionals = @Param(name = "args", doc = "The objects to print."),
       useLocation = true, useEnvironment = true)
   private static final BuiltinFunction print = new BuiltinFunction("print") {
     public Runtime.NoneType invoke(String sep, SkylarkList<?> starargs,
@@ -2207,7 +2219,7 @@ public class MethodLibrary {
           + "zip([1, 2])  # == [(1,), (2,)]\n"
           + "zip([1, 2], [3, 4])  # == [(1, 3), (2, 4)]\n"
           + "zip([1, 2], [3, 4, 5])  # == [(1, 3), (2, 4)]</pre>",
-      extraPositionals = {@Param(name = "args", doc = "lists to zip")},
+      extraPositionals = @Param(name = "args", doc = "lists to zip"),
       returnType = MutableList.class, useLocation = true, useEnvironment = true)
   private static final BuiltinFunction zip = new BuiltinFunction("zip") {
     public MutableList<?> invoke(SkylarkList<?> args, Location loc, Environment env)

@@ -36,7 +36,6 @@ import com.google.devtools.build.lib.packages.BuildFileContainsErrorsException;
 import com.google.devtools.build.lib.packages.NoSuchPackageException;
 import com.google.devtools.build.lib.packages.NoSuchTargetException;
 import com.google.devtools.build.lib.packages.Package;
-import com.google.devtools.build.lib.packages.PackageFactory;
 import com.google.devtools.build.lib.packages.Preprocessor;
 import com.google.devtools.build.lib.packages.Rule;
 import com.google.devtools.build.lib.packages.Target;
@@ -82,10 +81,13 @@ public class PackageCacheTest extends FoundationTestCase {
   @Before
   public final void initializeSkyframeExecutor() throws Exception {
     ruleClassProvider = TestRuleClassProvider.getRuleClassProvider();
-    BlazeDirectories directories = new BlazeDirectories(outputBase, outputBase, rootDirectory);
+    BlazeDirectories directories = new BlazeDirectories(outputBase, outputBase, rootDirectory,
+        TestConstants.PRODUCT_NAME);
     skyframeExecutor =
         SequencedSkyframeExecutor.create(
-            new PackageFactory(ruleClassProvider),
+            TestConstants.PACKAGE_FACTORY_FACTORY_FOR_TESTING.create(
+                ruleClassProvider,
+                scratch.getFileSystem()),
             directories,
             null, /* BinTools */
             null, /* workspaceStatusActionFactory */
@@ -95,7 +97,8 @@ public class PackageCacheTest extends FoundationTestCase {
             Preprocessor.Factory.Supplier.NullSupplier.INSTANCE,
             AnalysisMock.get().getSkyFunctions(),
             ImmutableList.<PrecomputedValue.Injected>of(),
-            ImmutableList.<SkyValueDirtinessChecker>of());
+            ImmutableList.<SkyValueDirtinessChecker>of(),
+            TestConstants.PRODUCT_NAME);
     setUpSkyframe(parsePackageCacheOptions());
   }
 

@@ -181,7 +181,7 @@ public class BlazeServerStartupOptions extends OptionsBase {
     defaultValue = "100", // NOTE: purely decorative!  See class docstring.
     category = "server startup",
     help =
-        "If --experimental_oom_more_eagerly is set, Blaze will OOM if, after two full GC's, more "
+        "If this flag is set, Blaze will OOM if, after two full GC's, more "
             + "than this percentage of the (old gen) heap is still occupied."
   )
   public int oomMoreEagerlyThreshold;
@@ -248,7 +248,6 @@ public class BlazeServerStartupOptions extends OptionsBase {
           + "changes instead of scanning every file for a change.")
   public boolean watchFS;
 
-
   @Option(name = "invocation_policy",
       defaultValue = "",
       category = "undocumented",
@@ -263,4 +262,12 @@ public class BlazeServerStartupOptions extends OptionsBase {
       help = "Port to start up the gRPC command server on. If 0, let the kernel choose. If -1, "
           + "use a custom protocol on an AF_UNIX socket.")
   public int commandPort;
+
+  @Option(name = "product_name",
+      defaultValue = "bazel", // NOTE: purely decorative!
+      category = "undocumented",
+      help = "The name of the build system. It is used as part of the name of the generated "
+          + "directories (e.g. productName-bin for binaries) as well as for printing error "
+          + "messages and logging")
+  public String productName;
 }

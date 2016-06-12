@@ -19,6 +19,7 @@ import static com.google.devtools.build.lib.rules.objc.ObjcProvider.CC_LIBRARY;
 import static com.google.devtools.build.lib.rules.objc.ObjcProvider.DEFINE;
 import static com.google.devtools.build.lib.rules.objc.ObjcProvider.FORCE_LOAD_FOR_XCODEGEN;
 import static com.google.devtools.build.lib.rules.objc.ObjcProvider.FRAMEWORK_DIR;
+import static com.google.devtools.build.lib.rules.objc.ObjcProvider.FRAMEWORK_SEARCH_PATH_ONLY;
 import static com.google.devtools.build.lib.rules.objc.ObjcProvider.GENERAL_RESOURCE_DIR;
 import static com.google.devtools.build.lib.rules.objc.ObjcProvider.GENERAL_RESOURCE_FILE;
 import static com.google.devtools.build.lib.rules.objc.ObjcProvider.IMPORTED_LIBRARY;
@@ -56,6 +57,7 @@ import com.google.devtools.build.xcode.xcodegen.proto.XcodeGenProtos.XcodeprojBu
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -90,6 +92,7 @@ public final class XcodeProvider implements TransitiveInfoProvider {
         NestedSetBuilder.linkOrder();
     private final NestedSetBuilder<XcodeProvider> nonPropagatedDependencies =
         NestedSetBuilder.linkOrder();
+    private final NestedSetBuilder<XcodeProvider> jreDependencies = NestedSetBuilder.linkOrder();
     private final ImmutableList.Builder<XcodeprojBuildSetting> xcodeprojBuildSettings =
         new ImmutableList.Builder<>();
     private final ImmutableList.Builder<XcodeprojBuildSetting>
@@ -180,6 +183,18 @@ public final class XcodeProvider implements TransitiveInfoProvider {
       return addDependencies(dependencies, /*doPropagate=*/false);
     }
 
+   /**
+     * Adds {@link XcodeProvider}s corresponding to direct J2ObjC JRE dependencies of this target
+     * which should be added in the {@code .xcodeproj} file and propagated up the dependency chain.
+     */
+    public Builder addJreDependencies(Iterable<XcodeProvider> dependencies) {
+      for (XcodeProvider dependency : dependencies) {
+        this.jreDependencies.add(dependency);
+        this.jreDependencies.addTransitive(dependency.propagatedDependencies);
+      }
+      return addDependencies(dependencies, /*doPropagate=*/true);
+    }
+
     private Builder addDependencies(Iterable<XcodeProvider> dependencies, boolean doPropagate) {
       for (XcodeProvider dependency : dependencies) {
         // TODO(bazel-team): This is messy. Maybe we should make XcodeProvider be able to specify
@@ -194,6 +209,7 @@ public final class XcodeProvider implements TransitiveInfoProvider {
           if (doPropagate) {
             this.propagatedDependencies.add(dependency);
             this.propagatedDependencies.addTransitive(dependency.propagatedDependencies);
+            this.jreDependencies.addTransitive(dependency.jreDependencies);
             this.addTransitiveSets(dependency);
           } else {
             this.nonPropagatedDependencies.add(dependency);
@@ -430,6 +446,7 @@ public final class XcodeProvider implements TransitiveInfoProvider {
   private final Optional<Artifact> bundleInfoplist;
   private final NestedSet<XcodeProvider> propagatedDependencies;
   private final NestedSet<XcodeProvider> nonPropagatedDependencies;
+  private final NestedSet<XcodeProvider> jreDependencies;
   private final ImmutableList<XcodeprojBuildSetting> xcodeprojBuildSettings;
   private final ImmutableList<XcodeprojBuildSetting> companionTargetXcodeprojBuildSettings;
   private final ImmutableList<String> copts;
@@ -455,6 +472,7 @@ public final class XcodeProvider implements TransitiveInfoProvider {
     this.bundleInfoplist = builder.bundleInfoplist;
     this.propagatedDependencies = builder.propagatedDependencies.build();
     this.nonPropagatedDependencies = builder.nonPropagatedDependencies.build();
+    this.jreDependencies = builder.jreDependencies.build();
     this.xcodeprojBuildSettings = builder.xcodeprojBuildSettings.build();
     this.companionTargetXcodeprojBuildSettings =
         builder.companionTargetXcodeprojBuildSettings.build();
@@ -581,9 +599,12 @@ public final class XcodeProvider implements TransitiveInfoProvider {
             .addAllBuildSetting(AppleToolchain.defaultWarningsForXcode())
             .addAllSdkFramework(SdkFramework.names(objcProvider.get(SDK_FRAMEWORK)))
             .addAllFramework(PathFragment.safePathStrings(objcProvider.get(FRAMEWORK_DIR)))
+            .addAllFrameworkSearchPathOnly(
+                PathFragment.safePathStrings(objcProvider.get(FRAMEWORK_SEARCH_PATH_ONLY)))
             .addAllXcassetsDir(PathFragment.safePathStrings(objcProvider.get(XCASSETS_DIR)))
-            .addAllXcdatamodel(PathFragment.safePathStrings(
-                Xcdatamodels.datamodelDirs(objcProvider.get(XCDATAMODEL))))
+            .addAllXcdatamodel(
+                PathFragment.safePathStrings(
+                    Xcdatamodels.datamodelDirs(objcProvider.get(XCDATAMODEL))))
             .addAllBundleImport(PathFragment.safePathStrings(objcProvider.get(BUNDLE_IMPORT_DIR)))
             .addAllSdkDylib(objcProvider.get(SDK_DYLIB))
             .addAllGeneralResourceFile(
@@ -595,7 +616,12 @@ public final class XcodeProvider implements TransitiveInfoProvider {
       // For builds with --ios_multi_cpus set, we may have several copies of some XCodeProviders
       // in the dependencies (one per cpu architecture). We deduplicate the corresponding
       // xcode target names with a LinkedHashSet before adding to the TargetControl.
+      Set<String> jreTargetNames = new HashSet<>();
+      for (XcodeProvider jreDependency : jreDependencies) {
+        jreTargetNames.add(jreDependency.dependencyXcodeTargetName());
+      }
       Set<DependencyControl> dependencySet = new LinkedHashSet<>();
+      Set<DependencyControl> jreDependencySet = new LinkedHashSet<>();
       for (XcodeProvider dependency : propagatedDependencies) {
         // Only add a library target to a binary's dependencies if it has source files to compile
         // and it is not from the "non_propagated_deps" attribute. Xcode cannot build targets
@@ -614,13 +640,19 @@ public final class XcodeProvider implements TransitiveInfoProvider {
         if (hasSources || (dependency.productType == XcodeProductType.BUNDLE
             || (dependency.productType == XcodeProductType.WATCH_OS1_APPLICATION))) {
           String dependencyXcodeTargetName = dependency.dependencyXcodeTargetName();
-          dependencySet.add(DependencyControl.newBuilder()
+          Set<DependencyControl> set = jreTargetNames.contains(dependencyXcodeTargetName)
+              ? jreDependencySet : dependencySet;
+          set.add(DependencyControl.newBuilder()
               .setTargetLabel(dependencyXcodeTargetName)
               .build());
         }
       }
 
       for (DependencyControl dependencyControl : dependencySet) {
+        targetControl.addDependency(dependencyControl);
+      }
+      // Make sure that JRE dependencies are ordered after other propagated dependencies.
+      for (DependencyControl dependencyControl : jreDependencySet) {
         targetControl.addDependency(dependencyControl);
       }
     }

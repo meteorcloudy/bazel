@@ -46,7 +46,7 @@ public class TargetCompletionValue implements SkyValue {
         new Function<ConfiguredTarget, SkyKey>() {
           @Override
           public SkyKey apply(ConfiguredTarget ct) {
-            return SkyKey.create(SkyFunctions.TARGET_COMPLETION, new LabelAndConfiguration(ct));
+            return SkyKey.create(SkyFunctions.TARGET_COMPLETION, LabelAndConfiguration.of(ct));
           }
         });
   }

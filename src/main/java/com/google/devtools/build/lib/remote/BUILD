@@ -5,6 +5,7 @@ package(
 java_library(
     name = "remote",
     srcs = glob(["*.java"]),
+    tags = ["bazel"],
     deps = [
         "//src/main/java/com/google/devtools/build/lib:build-base",
         "//src/main/java/com/google/devtools/build/lib:concurrent",
@@ -12,6 +13,7 @@ java_library(
         "//src/main/java/com/google/devtools/build/lib:io",
         "//src/main/java/com/google/devtools/build/lib:packages-internal",
         "//src/main/java/com/google/devtools/build/lib:runtime",
+        "//src/main/java/com/google/devtools/build/lib:shell",
         "//src/main/java/com/google/devtools/build/lib:util",
         "//src/main/java/com/google/devtools/build/lib:vfs",
         "//src/main/java/com/google/devtools/build/lib/actions",
@@ -23,6 +25,7 @@ java_library(
         "//third_party:gson",
         "//third_party:guava",
         "//third_party:hazelcast",
+        "//third_party/grpc:grpc-jar",
         "//third_party/protobuf",
     ],
 )

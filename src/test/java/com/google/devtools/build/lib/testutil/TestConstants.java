@@ -15,6 +15,7 @@
 package com.google.devtools.build.lib.testutil;
 
 import com.google.common.collect.ImmutableList;
+import com.google.devtools.build.lib.packages.PackageFactory;
 import com.google.devtools.build.lib.runtime.proto.InvocationPolicyOuterClass.InvocationPolicy;
 
 /**
@@ -23,6 +24,8 @@ import com.google.devtools.build.lib.runtime.proto.InvocationPolicyOuterClass.In
 public class TestConstants {
   private TestConstants() {
   }
+
+  public static final String PRODUCT_NAME = "bazel";
 
   /**
    * A list of all embedded binaries that go into the regular Bazel binary.
@@ -75,4 +78,7 @@ public class TestConstants {
 
   public static final InvocationPolicy TEST_INVOCATION_POLICY =
       InvocationPolicy.getDefaultInstance();
+
+  public static final PackageFactory.FactoryForTesting PACKAGE_FACTORY_FACTORY_FOR_TESTING =
+      PackageFactoryFactoryForBazelUnitTests.INSTANCE;
 }

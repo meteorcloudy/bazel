@@ -46,8 +46,6 @@ import java.io.IOException;
 import java.util.UUID;
 import java.util.logging.Logger;
 
-import javax.annotation.Nullable;
-
 /**
  * Action that represents a fake C++ compilation step.
  */
@@ -78,9 +76,7 @@ public class FakeCppCompileAction extends CppCompileAction {
       Class<? extends CppCompileActionContext> actionContext,
       ImmutableList<String> copts,
       Predicate<String> nocopts,
-      @Nullable String fdoBuildStamp,
-      RuleContext ruleContext,
-      boolean usePic) {
+      RuleContext ruleContext) {
     super(
         owner,
         features,
@@ -108,11 +104,9 @@ public class FakeCppCompileAction extends CppCompileAction {
         actionContext,
         copts,
         nocopts,
-        fdoBuildStamp,
         VOID_SPECIAL_INPUTS_HANDLER,
         ImmutableList.<IncludeScannable>of(),
         GUID,
-        usePic,
         ImmutableSet.<String>of(),
         CppCompileAction.CPP_COMPILE,
         ruleContext);
@@ -189,9 +183,15 @@ public class FakeCppCompileAction extends CppCompileAction {
         @Override
         public String apply(String input) {
           String result = ShellEscaper.escapeString(input);
+          // Once -c and -o options are added into action_config, the argument of
+          // getArgv(outputFile.getExecPath()) won't be used anymore. There will always be
+          // -c <tempOutputFile>, but here it has to be outputFile, so we replace it.
+          if (input.equals(tempOutputFile.getPathString())) {
+            result = outputPrefix + ShellEscaper.escapeString(outputFile.getExecPathString());
+          }
           if (input.equals(outputFile.getExecPathString())
               || input.equals(getDotdFile().getSafeExecPath().getPathString())) {
-            result = outputPrefix + result;
+            result = outputPrefix + ShellEscaper.escapeString(input);
           }
           return result;
         }

@@ -34,6 +34,7 @@ import com.google.devtools.build.lib.events.Location;
 import com.google.devtools.build.lib.packages.AttributeMap.AcceptsLabelAttribute;
 import com.google.devtools.build.lib.packages.License.DistributionType;
 import com.google.devtools.build.lib.util.Preconditions;
+import com.google.devtools.build.lib.util.SpellChecker;
 import com.google.devtools.build.lib.vfs.Canonicalizer;
 import com.google.devtools.build.lib.vfs.Path;
 import com.google.devtools.build.lib.vfs.PathFragment;
@@ -209,7 +210,7 @@ public class Package {
    * @precondition {@code name} must be a suffix of
    * {@code filename.getParentDirectory())}.
    */
-  private Package(PackageIdentifier packageId, String runfilesPrefix) {
+  protected Package(PackageIdentifier packageId, String runfilesPrefix) {
     this.packageIdentifier = packageId;
     this.workspaceName = runfilesPrefix;
     this.nameFragment = Canonicalizer.fragments().intern(packageId.getPackageFragment());
@@ -528,16 +529,31 @@ public class Package {
       suffix = "; however, a source file of this name exists.  (Perhaps add "
           + "'exports_files([\"" + targetName + "\"])' to " + name + "/BUILD?)";
     } else {
-      suffix = "";
+      String suggestion = SpellChecker.suggest(targetName, targets.keySet());
+      if (suggestion != null) {
+        suffix = " (did you mean '" + suggestion + "'?)";
+      } else {
+        suffix = "";
+      }
     }
 
+    throw makeNoSuchTargetException(targetName, suffix);
+  }
+
+  protected NoSuchTargetException makeNoSuchTargetException(String targetName, String suffix) {
+    Label label;
     try {
-      throw new NoSuchTargetException(createLabel(targetName), "target '" + targetName
-          + "' not declared in package '" + name + "'" + suffix + " defined by "
-          + this.filename);
+      label = createLabel(targetName);
     } catch (LabelSyntaxException e) {
       throw new IllegalArgumentException(targetName);
     }
+    String msg = String.format(
+        "target '%s' not declared in package '%s'%s defined by %s",
+        targetName,
+        name,
+        suffix,
+        filename);
+    return new NoSuchTargetException(label, msg);
   }
 
   /**
@@ -666,49 +682,49 @@ public class Package {
     }
   }
 
-  /**
-   * Builder class for {@link Package} that does its own globbing.
-   *
-   * <p>Despite its name, this is the normal builder used when parsing BUILD files.
-   */
-  // TODO(bazel-team): This class is no longer needed and can be removed.
-  public static class LegacyBuilder extends Builder {
-    LegacyBuilder(PackageIdentifier packageId, String runfilesPrefix) {
-      super(packageId, runfilesPrefix);
-    }
-
-    /**
-     * Derive a LegacyBuilder from a normal Builder.
-     */
-    LegacyBuilder(Builder builder) {
-      super(builder.pkg);
-      if (builder.getFilename() != null) {
-        setFilename(builder.getFilename());
-      }
-    }
-
-    /**
-     * Removes a target from the {@link Package} under construction. Intended to be used only by
-     * {@link com.google.devtools.build.lib.skyframe.PackageFunction} to remove targets whose
-     * labels cross subpackage boundaries.
-     */
-    public void removeTarget(Target target) {
-      if (target.getPackage() == pkg) {
-        this.targets.remove(target.getName());
-      }
-    }
-  }
-
-  public static LegacyBuilder newExternalPackageBuilder(Path workspacePath, String runfilesPrefix) {
-    LegacyBuilder b = new LegacyBuilder(Label.EXTERNAL_PACKAGE_IDENTIFIER, runfilesPrefix);
+  public static Builder newExternalPackageBuilder(Builder.Helper helper, Path workspacePath,
+      String runfilesPrefix) {
+    Builder b = new Builder(helper.createFreshPackage(
+        Label.EXTERNAL_PACKAGE_IDENTIFIER, runfilesPrefix));
     b.setFilename(workspacePath);
     b.setMakeEnv(new MakeEnvironment.Builder());
     return b;
   }
 
+  /**
+   * A builder for {@link Package} objects. Only intended to be used by {@link PackageFactory} and
+   * {@link com.google.devtools.build.lib.skyframe.PackageFunction}.
+   */
   public static class Builder {
-    protected static Package newPackage(PackageIdentifier packageId, String runfilesPrefix) {
-      return new Package(packageId, runfilesPrefix);
+    public static interface Helper {
+      /**
+       * Returns a fresh {@link Package} instance that a {@link Builder} will internally mutate
+       * during package loading. Called by {@link PackageFactory}.
+       */
+      Package createFreshPackage(PackageIdentifier packageId, String runfilesPrefix);
+
+      /**
+       * Called after {@link com.google.devtools.build.lib.skyframe.PackageFunction} is completely
+       * done loading the given {@link Package}.
+       */
+      void onLoadingComplete(Package pkg);
+    }
+
+    /** {@link Helper} that simply calls the {@link Package} constructor. */
+    public static class DefaultHelper implements Helper {
+      public static final DefaultHelper INSTANCE = new DefaultHelper();
+
+      private DefaultHelper() {
+      }
+
+      @Override
+      public Package createFreshPackage(PackageIdentifier packageId, String runfilesPrefix) {
+        return new Package(packageId, runfilesPrefix);
+      }
+
+      @Override
+      public void onLoadingComplete(Package pkg) {
+      }
     }
 
     /**
@@ -773,8 +789,8 @@ public class Package {
       }
     }
 
-    public Builder(PackageIdentifier id, String runfilesPrefix) {
-      this(newPackage(id, runfilesPrefix));
+    public Builder(Helper helper, PackageIdentifier id, String runfilesPrefix) {
+      this(helper.createFreshPackage(id, runfilesPrefix));
     }
 
     protected PackageIdentifier getPackageIdentifier() {
@@ -1190,6 +1206,7 @@ public class Package {
     }
 
     void addRule(Rule rule) throws NameConflictException {
+      Preconditions.checkArgument(rule.getPackage() == pkg);
       checkForConflicts(rule);
       // Now, modify the package:
       for (OutputFile outputFile : rule.getOutputFiles()) {
@@ -1266,6 +1283,17 @@ public class Package {
         return this;
       }
       return beforeBuild();
+    }
+
+    /**
+     * Removes a target from the {@link Package} under construction. Intended to be used only by
+     * {@link com.google.devtools.build.lib.skyframe.PackageFunction} to remove targets whose
+     * labels cross subpackage boundaries.
+     */
+    public void removeTarget(Target target) {
+      if (target.getPackage() == pkg) {
+        this.targets.remove(target.getName());
+      }
     }
 
     /** Intended for use by {@link com.google.devtools.build.lib.skyframe.PackageFunction} only. */

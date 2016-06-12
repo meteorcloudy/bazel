@@ -40,7 +40,7 @@ public class MavenJarRule implements RuleDefinition {
         <a href="https://maven.apache.org/pom.html#Maven_Coordinates">Maven coordinates</a>.
 
         <p>These descriptions are of the form &lt;groupId&gt:&lt;artifactId&gt;:&lt;version&gt;,
-        see <a href="#maven_jar_examples">the documentation below</a> for an example.
+        see <a href="${link maven_jar_examples}">the documentation below</a> for an example.
         <!-- #END_BLAZE_RULE.ATTRIBUTE --> */
         .add(attr("artifact", Type.STRING))
         /* <!-- #BLAZE_RULE(maven_jar).ATTRIBUTE(repository) -->
@@ -116,6 +116,7 @@ maven_jar(
 )
 </pre>
 
-<p>Targets can specify <code>@guava//jar</code> as a dependency to depend on this jar.</p>
+<p>Targets can specify <code>@com_google_guava_guava//jar</code> as a dependency to depend on this
+jar.</p>
 
 <!-- #END_BLAZE_RULE -->*/

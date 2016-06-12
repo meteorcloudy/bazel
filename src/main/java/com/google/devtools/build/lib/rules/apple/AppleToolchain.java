@@ -81,12 +81,11 @@ public class AppleToolchain {
           .build();
 
   /**
-   * Returns the platform plist name (for example, iPhoneSimulator) for the platform corresponding
-   * to the value of {@code --ios_cpu} in the given configuration.
+   * Returns the platform plist name (for example, iPhoneSimulator) for the single-arch-context
+   * apple platform specified in the configuration.
    */
-  // TODO(bazel-team): Support non-ios platforms.
   public static String getPlatformPlistName(AppleConfiguration configuration) {
-    return Platform.forIosArch(configuration.getIosCpu()).getNameInPlist();
+    return configuration.getSingleArchPlatform().getNameInPlist();
   }
 
   /**

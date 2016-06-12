@@ -36,6 +36,7 @@ import com.google.devtools.build.lib.collect.nestedset.NestedSet;
 import com.google.devtools.build.lib.rules.apple.AppleConfiguration;
 import com.google.devtools.build.lib.rules.apple.AppleToolchain;
 import com.google.devtools.build.lib.rules.apple.Platform;
+import com.google.devtools.build.lib.rules.apple.Platform.PlatformType;
 import com.google.devtools.build.lib.rules.objc.XcodeProvider.Builder;
 import com.google.devtools.build.lib.vfs.FileSystemUtils;
 import com.google.devtools.build.lib.vfs.PathFragment;
@@ -137,8 +138,8 @@ final class BundleSupport {
     Platform platform = null;
     for (String architecture : appleConfiguration.getIosMultiCpus()) {
       if (platform == null) {
-        platform = Platform.forIosArch(architecture);
-      } else if (platform != Platform.forIosArch(architecture)) {
+        platform = Platform.forTarget(PlatformType.IOS, architecture);
+      } else if (platform != Platform.forTarget(PlatformType.IOS, architecture)) {
         ruleContext.ruleError(
             String.format("In builds which require bundling, --ios_multi_cpus does not currently "
                 + "allow values for both simulator and device builds. Flag was %s",
@@ -318,7 +319,8 @@ final class BundleSupport {
                   .add("-XD_MOMC_SDKROOT=" + AppleToolchain.sdkDir())
                   .add("-XD_MOMC_IOS_TARGET_VERSION=" + bundling.getMinimumOsVersion())
                   .add("-MOMC_PLATFORMS")
-                  .add(appleConfiguration.getBundlingPlatform().getLowerCaseNameInPlist())
+                  .add(appleConfiguration.getMultiArchPlatform(PlatformType.IOS)
+                      .getLowerCaseNameInPlist())
                   .add("-XD_MOMC_TARGET_VERSION=10.6")
                   .add(datamodel.getContainer().getSafePathString())
                   .build())
@@ -444,7 +446,8 @@ final class BundleSupport {
             // The next three arguments are positional, i.e. they don't have flags before them.
             .addPath(zipOutput.getExecPath())
             .add("--platform")
-            .add(appleConfiguration.getBundlingPlatform().getLowerCaseNameInPlist())
+            .add(appleConfiguration.getMultiArchPlatform(PlatformType.IOS)
+                .getLowerCaseNameInPlist())
             .addExecPath("--output-partial-info-plist", partialInfoPlist)
             .add("--minimum-deployment-target")
             .add(bundling.getMinimumOsVersion().toString());

@@ -29,8 +29,8 @@ import com.google.devtools.build.lib.packages.RuleClass.Builder;
 import com.google.devtools.build.lib.packages.RuleClass.Builder.RuleClassType;
 import com.google.devtools.build.lib.packages.RuleFactory.InvalidRuleException;
 import com.google.devtools.build.lib.rules.SkylarkAttr.Descriptor;
+import com.google.devtools.build.lib.skylarkinterface.Param;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkSignature;
-import com.google.devtools.build.lib.skylarkinterface.SkylarkSignature.Param;
 import com.google.devtools.build.lib.syntax.BaseFunction;
 import com.google.devtools.build.lib.syntax.BuiltinFunction;
 import com.google.devtools.build.lib.syntax.EvalException;
@@ -101,7 +101,7 @@ public class SkylarkRepositoryModule {
             FuncallExpression ast,
             com.google.devtools.build.lib.syntax.Environment funcallEnv)
             throws EvalException {
-          funcallEnv.checkLoadingPhase("repository_rule", ast.getLocation());
+          funcallEnv.checkLoadingOrWorkspacePhase("repository_rule", ast.getLocation());
           // We'll set the name later, pass the empty string for now.
           Builder builder = new Builder("", RuleClassType.WORKSPACE, true);
 

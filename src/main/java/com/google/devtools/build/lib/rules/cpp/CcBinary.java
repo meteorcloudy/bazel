@@ -149,12 +149,13 @@ public abstract class CcBinary implements RuleConfiguredTargetFactory {
   }
 
   @Override
-  public ConfiguredTarget create(RuleContext context) throws InterruptedException {
-    return CcBinary.init(semantics, context, /*fake =*/ false, /*useTestOnlyFlags =*/ false);
+  public ConfiguredTarget create(RuleContext context)
+      throws InterruptedException, RuleErrorException {
+    return CcBinary.init(semantics, context, /*fake =*/ false, /*isTest =*/ false);
   }
 
   public static ConfiguredTarget init(CppSemantics semantics, RuleContext ruleContext, boolean fake,
-      boolean useTestOnlyFlags) throws InterruptedException {
+      boolean isTest) throws InterruptedException {
     ruleContext.checkSrcsSamePackage(true);
     FeatureConfiguration featureConfiguration = CcCommon.configureFeatures(ruleContext);
     CcCommon common = new CcCommon(ruleContext);
@@ -198,7 +199,7 @@ public abstract class CcBinary implements RuleConfiguredTargetFactory {
             binary,
             linkStaticness,
             linkopts);
-    linkActionBuilder.setUseTestOnlyFlags(useTestOnlyFlags);
+    linkActionBuilder.setUseTestOnlyFlags(isTest);
     linkActionBuilder.addNonLibraryInputs(ccCompilationOutputs.getHeaderTokenFiles());
 
     CcToolchainProvider ccToolchain = CppHelper.getToolchain(ruleContext);
@@ -353,7 +354,7 @@ public abstract class CcBinary implements RuleConfiguredTargetFactory {
           ExecutionInfoProvider.class,
           new ExecutionInfoProvider(ImmutableMap.of("requires-darwin", "")));
     }
-    
+
     return ruleBuilder
         .add(RunfilesProvider.class, RunfilesProvider.simple(runfiles))
         .add(

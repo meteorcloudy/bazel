@@ -18,18 +18,18 @@ package com.google.devtools.build.lib.skyframe;
  */
 public final class LoadingPhaseStartedEvent {
 
-  final LoadingProgressReceiver loadingProgressReceiver;
+  final PackageProgressReceiver packageProgress;
 
   /**
    * Construct the event
    *
    * @param loadingProgressReceiver a receiver that gets updated about the progress of loading
    */
-  public LoadingPhaseStartedEvent(LoadingProgressReceiver loadingProgressReceiver) {
-    this.loadingProgressReceiver = loadingProgressReceiver;
+  public LoadingPhaseStartedEvent(PackageProgressReceiver packageProgress) {
+    this.packageProgress = packageProgress;
   }
 
-  public LoadingProgressReceiver getLoadingProgressReceiver() {
-    return loadingProgressReceiver;
+  public PackageProgressReceiver getPackageProgressReceiver() {
+    return packageProgress;
   }
 }

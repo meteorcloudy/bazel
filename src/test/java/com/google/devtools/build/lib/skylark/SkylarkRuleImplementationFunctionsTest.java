@@ -35,8 +35,8 @@ import com.google.devtools.build.lib.analysis.actions.TemplateExpansionAction.Su
 import com.google.devtools.build.lib.events.Event;
 import com.google.devtools.build.lib.rules.SkylarkRuleContext;
 import com.google.devtools.build.lib.skylark.util.SkylarkTestCase;
+import com.google.devtools.build.lib.skylarkinterface.Param;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkSignature;
-import com.google.devtools.build.lib.skylarkinterface.SkylarkSignature.Param;
 import com.google.devtools.build.lib.syntax.BuiltinFunction;
 import com.google.devtools.build.lib.syntax.Environment;
 import com.google.devtools.build.lib.syntax.EvalException;
@@ -206,18 +206,6 @@ public class SkylarkRuleImplementationFunctionsTest extends SkylarkTestCase {
   public void testListComprehensionsWithNestedSet() throws Exception {
     Object result = eval("[x + x for x in set([1, 2, 3])]");
     assertThat((Iterable<Object>) result).containsExactly(2, 4, 6).inOrder();
-  }
-
-  @Test
-  public void testNestedSetGetsConvertedToSkylarkNestedSet() throws Exception {
-    SkylarkRuleContext ruleContext = createRuleContext("//foo:foo");
-    Object result =
-        evalRuleContextCode(
-            ruleContext,
-            "dep = ruleContext.attr.tools[0]",
-            "provider(dep, 'analysis.FileProvider').files_to_build");
-    SkylarkNestedSet nset = (SkylarkNestedSet) result;
-    assertEquals(Artifact.class, nset.getContentType().getType());
   }
 
   @Test
@@ -644,37 +632,6 @@ public class SkylarkRuleImplementationFunctionsTest extends SkylarkTestCase {
     assertThat(substitutions).hasSize(1);
     assertThat(substitutions.get(0).getValue()).isEqualTo(new String(bytesToDecode, utf8));
   }
-  
-  @Test
-  public void testGetProviderNotTransitiveInfoCollection() throws Exception {
-    checkErrorContains(
-        createRuleContext("//foo:foo"),
-        "Method provider(target: Target, type: string) is not applicable for arguments "
-            + "(string, string): 'target' is string, but should be Target",
-        "provider('some string', 'FileProvider')");
-  }
-
-  @Test
-  public void testGetProviderNonExistingClassType() throws Exception {
-    checkErrorContains(
-        createRuleContext("//foo:foo"),
-        "Unknown class type bad.Bad",
-        "def func():", // we need a func to hold the for loop
-        "  for tic in ruleContext.attr.srcs:",
-        "    provider(tic, 'bad.Bad')",
-        "func()");
-  }
-
-  @Test
-  public void testGetProviderNotTransitiveInfoProviderClassType() throws Exception {
-    checkErrorContains(
-        createRuleContext("//foo:foo"),
-        "Not a TransitiveInfoProvider rules.java.JavaBinary",
-        "def func():", // we need a func to hold the for loop
-        "  for tic in ruleContext.attr.srcs:",
-        "    provider(tic, 'rules.java.JavaBinary')",
-        "func()");
-  }
 
   @Test
   public void testRunfilesAddFromDependencies() throws Exception {
@@ -999,7 +956,7 @@ public class SkylarkRuleImplementationFunctionsTest extends SkylarkTestCase {
         "  ctx.empty_action(",
         "    inputs = [],",
         "  )",
-        "def _foo(attr_map):",
+        "def _foo():",
         "  return native.glob(['*'])",
         "glob_rule = rule(",
         "  implementation = _impl,",
@@ -1015,6 +972,22 @@ public class SkylarkRuleImplementationFunctionsTest extends SkylarkTestCase {
   }
 
   @Test
+  public void testRuleFromBzlFile() throws Exception {
+    scratch.file("test/rule.bzl",
+        "def _impl(ctx): return",
+        "foo = rule(implementation = _impl)");
+    scratch.file("test/ext.bzl",
+        "load('//test:rule.bzl', 'foo')",
+        "a = 1",
+        "foo(name = 'x')");
+    scratch.file("test/BUILD",
+        "load('//test:ext.bzl', 'a')");
+    reporter.removeHandler(failFastHandler);
+    getConfiguredTarget("//test:x");
+    assertContainsEvent("Cannot instantiate a rule when loading a .bzl file");
+  }
+
+  @Test
   public void testImplicitOutputsFromGlob() throws Exception {
     scratch.file("test/glob.bzl",
         "def _impl(ctx):",
@@ -1025,9 +998,9 @@ public class SkylarkRuleImplementationFunctionsTest extends SkylarkTestCase {
         "      output = o,",
         "      content = 'hoho')",
         "",
-        "def _foo(attr_map):",
+        "def _foo(srcs):",
         "  outs = {}",
-        "  for i in attr_map.srcs:",
+        "  for i in srcs:",
         "    outs['foo_' + i.name] = i.name + '.out'",
         "  return outs",
         "",

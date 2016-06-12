@@ -233,6 +233,7 @@ public class RunCommand implements BlazeCommand  {
       }
     }
 
+    String productName = env.getRuntime().getProductName();
     //
     // We now have a unique executable ready to be run.
     //
@@ -242,7 +243,8 @@ public class RunCommand implements BlazeCommand  {
     PathFragment prettyExecutablePath =
         OutputDirectoryLinksUtils.getPrettyPath(executablePath,
             env.getWorkspaceName(), env.getWorkspace(),
-            options.getOptions(BuildRequestOptions.class).getSymlinkPrefix());
+            options.getOptions(BuildRequestOptions.class).getSymlinkPrefix(productName),
+            productName);
     List<String> cmdLine = new ArrayList<>();
     if (runOptions.scriptPath == null) {
       PathFragment processWrapperPath =
@@ -497,7 +499,8 @@ public class RunCommand implements BlazeCommand  {
    * *_test rules, *_binary rules, generated outputs, and inputs.
    */
   private static boolean isExecutable(Target target) {
-    return isPlainFile(target) || isExecutableNonTestRule(target) || TargetUtils.isTestRule(target);
+    return isPlainFile(target) || isExecutableNonTestRule(target) || TargetUtils.isTestRule(target)
+        || isAliasRule(target);
   }
 
   /**
@@ -517,5 +520,14 @@ public class RunCommand implements BlazeCommand  {
 
   private static boolean isPlainFile(Target target) {
     return (target instanceof OutputFile) || (target instanceof InputFile);
+  }
+
+  private static boolean isAliasRule(Target target) {
+    if (!(target instanceof Rule)) {
+      return false;
+    }
+
+    Rule rule = (Rule) target;
+    return rule.getRuleClass().equals("alias") || rule.getRuleClass().equals("bind");
   }
 }

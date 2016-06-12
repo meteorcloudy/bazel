@@ -178,7 +178,7 @@ public abstract class BuildViewTestCase extends FoundationTestCase {
 
   protected OptionsParser optionsParser;
   private PackageCacheOptions packageCacheOptions;
-  private PackageFactory pkgFactory;
+  protected PackageFactory pkgFactory;
 
   protected MockToolsConfig mockToolsConfig;
 
@@ -189,7 +189,8 @@ public abstract class BuildViewTestCase extends FoundationTestCase {
   @Before
   public final void initializeSkyframeExecutor() throws Exception {
     AnalysisMock mock = getAnalysisMock();
-    directories = new BlazeDirectories(outputBase, outputBase, rootDirectory);
+    directories = new BlazeDirectories(outputBase, outputBase, rootDirectory,
+        TestConstants.PRODUCT_NAME);
     binTools = BinTools.forUnitTesting(directories, TestConstants.EMBEDDED_TOOLS);
     mockToolsConfig = new MockToolsConfig(rootDirectory, false);
     mock.setupMockClient(mockToolsConfig);
@@ -201,7 +202,8 @@ public abstract class BuildViewTestCase extends FoundationTestCase {
         new AnalysisTestUtil.DummyWorkspaceStatusActionFactory(directories);
     mutableActionGraph = new MapBasedActionGraph();
     ruleClassProvider = getRuleClassProvider();
-    pkgFactory = new PackageFactory(ruleClassProvider, getEnvironmentExtensions());
+    pkgFactory = TestConstants.PACKAGE_FACTORY_FACTORY_FOR_TESTING.create(
+        ruleClassProvider, getEnvironmentExtensions(), scratch.getFileSystem());
     tsgm = new TimestampGranularityMonitor(BlazeClock.instance());
     skyframeExecutor =
         SequencedSkyframeExecutor.create(
@@ -215,7 +217,8 @@ public abstract class BuildViewTestCase extends FoundationTestCase {
             getPreprocessorFactorySupplier(),
             mock.getSkyFunctions(),
             getPrecomputedValues(),
-            ImmutableList.<SkyValueDirtinessChecker>of());
+            ImmutableList.<SkyValueDirtinessChecker>of(),
+            TestConstants.PRODUCT_NAME);
     skyframeExecutor.preparePackageLoading(
         new PathPackageLocator(outputBase, ImmutableList.of(rootDirectory)),
         ConstantRuleVisibility.PUBLIC, true, 7, "",
@@ -1053,6 +1056,18 @@ public abstract class BuildViewTestCase extends FoundationTestCase {
                     creatingAspectFactory,
                     params)
                 .argument());
+  }
+
+  /**
+   * Strips the C++-contributed prefix out of an output path when tests are run with dynamic
+   * configurations. e.g. turns "bazel-out/gcc-X-glibc-Y-k8-fastbuild/ to "bazel-out/fastbuild/".
+   *
+   * <p>This should be used for targets use configurations with C++ fragments.
+   */
+  protected String stripCppPrefixForDynamicConfigs(String outputPath) {
+    return targetConfig.useDynamicConfigurations()
+        ? AnalysisTestUtil.OUTPUT_PATH_CPP_PREFIX_PATTERN.matcher(outputPath).replaceFirst("")
+        : outputPath;
   }
 
   /**

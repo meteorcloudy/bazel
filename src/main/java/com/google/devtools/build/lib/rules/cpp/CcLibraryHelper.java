@@ -92,7 +92,16 @@ public final class CcLibraryHelper {
             CppCompileAction.CPP_HEADER_PREPROCESSING,
             CppCompileAction.CPP_MODULE_COMPILE,
             CppCompileAction.ASSEMBLE,
-            CppCompileAction.PREPROCESS_ASSEMBLE)),
+            CppCompileAction.PREPROCESS_ASSEMBLE,
+            Link.LinkTargetType.STATIC_LIBRARY.getActionName(),
+            // We need to create pic-specific actions for link actions, as they will produce
+            // differently named outputs.
+            Link.LinkTargetType.PIC_STATIC_LIBRARY.getActionName(),
+            Link.LinkTargetType.INTERFACE_DYNAMIC_LIBRARY.getActionName(),
+            Link.LinkTargetType.DYNAMIC_LIBRARY.getActionName(),
+            Link.LinkTargetType.ALWAYS_LINK_STATIC_LIBRARY.getActionName(),
+            Link.LinkTargetType.ALWAYS_LINK_PIC_STATIC_LIBRARY.getActionName(),
+            Link.LinkTargetType.EXECUTABLE.getActionName())),
     CC_AND_OBJC(
         FileTypeSet.of(
             CppFileTypes.CPP_SOURCE,
@@ -109,10 +118,18 @@ public final class CcLibraryHelper {
             CppCompileAction.OBJCPP_COMPILE,
             CppCompileAction.CPP_HEADER_PARSING,
             CppCompileAction.CPP_HEADER_PREPROCESSING,
-            CppCompileAction.CPP_MODULE_COMPILE,
             CppCompileAction.ASSEMBLE,
-            CppCompileAction.PREPROCESS_ASSEMBLE));
-            
+            CppCompileAction.PREPROCESS_ASSEMBLE,
+            Link.LinkTargetType.STATIC_LIBRARY.getActionName(),
+            // We need to create pic-specific actions for link actions, as they will produce
+            // differently named outputs. 
+            Link.LinkTargetType.PIC_STATIC_LIBRARY.getActionName(),
+            Link.LinkTargetType.INTERFACE_DYNAMIC_LIBRARY.getActionName(),
+            Link.LinkTargetType.DYNAMIC_LIBRARY.getActionName(),
+            Link.LinkTargetType.ALWAYS_LINK_STATIC_LIBRARY.getActionName(),
+            Link.LinkTargetType.ALWAYS_LINK_PIC_STATIC_LIBRARY.getActionName(),
+            Link.LinkTargetType.EXECUTABLE.getActionName()));
+
 
     private final FileTypeSet sourceTypeSet;
     private final Set<String> actionConfigSet;
@@ -234,7 +251,7 @@ public final class CcLibraryHelper {
   private final Set<String> defines = new LinkedHashSet<>();
   private final List<TransitiveInfoCollection> implementationDeps = new ArrayList<>();
   private final List<TransitiveInfoCollection> interfaceDeps = new ArrayList<>();
-  private final List<Artifact> linkstamps = new ArrayList<>();
+  private final NestedSetBuilder<Artifact> linkstamps = NestedSetBuilder.stableOrder();
   private final List<Artifact> prerequisites = new ArrayList<>();
   private final List<PathFragment> looseIncludeDirs = new ArrayList<>();
   private final List<PathFragment> systemIncludeDirs = new ArrayList<>();
@@ -256,8 +273,9 @@ public final class CcLibraryHelper {
   private boolean emitDynamicLibrary = true;
   private boolean checkDepsGenerateCpp = true;
   private boolean emitCompileProviders;
-  private SourceCategory sourceCatagory;
+  private final SourceCategory sourceCategory;
   private List<VariablesExtension> variablesExtensions = new ArrayList<>();
+  @Nullable private CppModuleMap injectedCppModuleMap;
   
   private final FeatureConfiguration featureConfiguration;
 
@@ -278,7 +296,7 @@ public final class CcLibraryHelper {
     this.configuration = ruleContext.getConfiguration();
     this.semantics = Preconditions.checkNotNull(semantics);
     this.featureConfiguration = Preconditions.checkNotNull(featureConfiguration);
-    this.sourceCatagory = Preconditions.checkNotNull(sourceCatagory);
+    this.sourceCategory = Preconditions.checkNotNull(sourceCatagory);
   }
 
   public CcLibraryHelper(
@@ -310,7 +328,6 @@ public final class CcLibraryHelper {
         .addCopts(common.getCopts())
         .addDefines(common.getDefines())
         .addDeps(ruleContext.getPrerequisites("deps", Mode.TARGET))
-        .addIncludeDirs(common.getIncludeDirs())
         .addLooseIncludeDirs(common.getLooseIncludeDirs())
         .addPicIndependentObjectFiles(common.getLinkerScripts())
         .addSystemIncludeDirs(common.getSystemIncludeDirs())
@@ -426,7 +443,7 @@ public final class CcLibraryHelper {
   private void addSource(Artifact source, Label label) {
     boolean isHeader = CppFileTypes.CPP_HEADER.matches(source.getExecPath());
     boolean isTextualInclude = CppFileTypes.CPP_TEXTUAL_INCLUDE.matches(source.getExecPath());
-    boolean isCompiledSource = sourceCatagory.getSourceTypes().matches(source.getExecPathString());
+    boolean isCompiledSource = sourceCategory.getSourceTypes().matches(source.getExecPathString());
     if (isHeader || isTextualInclude) {
       privateHeaders.add(source);
     }
@@ -601,8 +618,7 @@ public final class CcLibraryHelper {
    */
   public CcLibraryHelper addLinkstamps(Iterable<? extends TransitiveInfoCollection> linkstamps) {
     for (TransitiveInfoCollection linkstamp : linkstamps) {
-      Iterables.addAll(this.linkstamps,
-          linkstamp.getProvider(FileProvider.class).getFilesToBuild());
+      this.linkstamps.addTransitive(linkstamp.getProvider(FileProvider.class).getFilesToBuild());
     }
     return this;
   }
@@ -665,6 +681,15 @@ public final class CcLibraryHelper {
   public CcLibraryHelper addVariableExtension(VariablesExtension variableExtension) {
     Preconditions.checkNotNull(variableExtension);
     this.variablesExtensions.add(variableExtension);
+    return this;
+  }
+  
+  /**
+   * Sets the module map artifact for this build.
+   */
+  public CcLibraryHelper setCppModuleMap(CppModuleMap cppModuleMap) {
+    Preconditions.checkNotNull(cppModuleMap);
+    this.injectedCppModuleMap = cppModuleMap;
     return this;
   }
   
@@ -1015,24 +1040,24 @@ public final class CcLibraryHelper {
     }
 
     if (featureConfiguration.isEnabled(CppRuleClasses.MODULE_MAPS)) {
-      CppModuleMap cppModuleMap = CppHelper.addCppModuleMapToContext(ruleContext, contextBuilder);
-      // TODO(bazel-team): addCppModuleMapToContext second-guesses whether module maps should
-      // actually be enabled, so we need to double-check here. Who would write code like this?
-      if (cppModuleMap != null) {
-        CppModuleMapAction action =
-            new CppModuleMapAction(
-                ruleContext.getActionOwner(),
-                cppModuleMap,
-                privateHeaders,
-                publicHeaders,
-                collectModuleMaps(),
-                additionalExportedHeaders,
-                featureConfiguration.isEnabled(CppRuleClasses.HEADER_MODULES),
-                featureConfiguration.isEnabled(CppRuleClasses.MODULE_MAP_HOME_CWD),
-                featureConfiguration.isEnabled(CppRuleClasses.GENERATE_SUBMODULES),
-                !featureConfiguration.isEnabled(CppRuleClasses.MODULE_MAP_WITHOUT_EXTERN_MODULE));
-        ruleContext.registerAction(action);
-      }
+      CppModuleMap cppModuleMap =
+          injectedCppModuleMap == null
+              ? CppHelper.createDefaultCppModuleMap(ruleContext)
+              : injectedCppModuleMap;
+      contextBuilder.setCppModuleMap(cppModuleMap);
+      CppModuleMapAction action =
+          new CppModuleMapAction(
+              ruleContext.getActionOwner(),
+              cppModuleMap,
+              privateHeaders,
+              publicHeaders,
+              collectModuleMaps(),
+              additionalExportedHeaders,
+              featureConfiguration.isEnabled(CppRuleClasses.HEADER_MODULES),
+              featureConfiguration.isEnabled(CppRuleClasses.MODULE_MAP_HOME_CWD),
+              featureConfiguration.isEnabled(CppRuleClasses.GENERATE_SUBMODULES),
+              !featureConfiguration.isEnabled(CppRuleClasses.MODULE_MAP_WITHOUT_EXTERN_MODULE));
+      ruleContext.registerAction(action);
       if (model.getGeneratesPicHeaderModule()) {
         contextBuilder.setPicHeaderModule(model.getPicHeaderModule(cppModuleMap.getArtifact()));
       }
@@ -1120,14 +1145,17 @@ public final class CcLibraryHelper {
       final boolean forcePic) {
     return new CcLinkParamsStore() {
       @Override
-      protected void collect(CcLinkParams.Builder builder, boolean linkingStatically,
-          boolean linkShared) {
-        builder.addLinkstamps(linkstamps, cppCompilationContext);
-        builder.addTransitiveTargets(implementationDeps,
-            CcLinkParamsProvider.TO_LINK_PARAMS, CcSpecificLinkParamsProvider.TO_LINK_PARAMS);
+      protected void collect(
+          CcLinkParams.Builder builder, boolean linkingStatically, boolean linkShared) {
+        builder.addLinkstamps(linkstamps.build(), cppCompilationContext);
+        builder.addTransitiveTargets(
+            implementationDeps,
+            CcLinkParamsProvider.TO_LINK_PARAMS,
+            CcSpecificLinkParamsProvider.TO_LINK_PARAMS);
         if (!neverlink) {
-          builder.addLibraries(ccLinkingOutputs.getPreferredLibraries(linkingStatically,
-              /*preferPic=*/linkShared || forcePic));
+          builder.addLibraries(
+              ccLinkingOutputs.getPreferredLibraries(
+                  linkingStatically, /*preferPic=*/ linkShared || forcePic));
           builder.addLinkOpts(linkopts);
         }
       }

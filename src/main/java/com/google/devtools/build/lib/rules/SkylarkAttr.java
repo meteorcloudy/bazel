@@ -15,6 +15,7 @@
 package com.google.devtools.build.lib.rules;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.devtools.build.lib.cmdline.Label;
 import com.google.devtools.build.lib.packages.Attribute;
@@ -23,9 +24,9 @@ import com.google.devtools.build.lib.packages.Attribute.ConfigurationTransition;
 import com.google.devtools.build.lib.packages.Attribute.SkylarkLateBound;
 import com.google.devtools.build.lib.packages.BuildType;
 import com.google.devtools.build.lib.packages.SkylarkAspect;
+import com.google.devtools.build.lib.skylarkinterface.Param;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkModule;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkSignature;
-import com.google.devtools.build.lib.skylarkinterface.SkylarkSignature.Param;
 import com.google.devtools.build.lib.syntax.BuiltinFunction;
 import com.google.devtools.build.lib.syntax.Environment;
 import com.google.devtools.build.lib.syntax.EvalException;
@@ -42,9 +43,13 @@ import com.google.devtools.build.lib.syntax.Type.ConversionException;
 import com.google.devtools.build.lib.syntax.UserDefinedFunction;
 import com.google.devtools.build.lib.util.FileType;
 import com.google.devtools.build.lib.util.FileTypeSet;
+import com.google.devtools.build.lib.util.Preconditions;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+
+import javax.annotation.Nullable;
 
 /**
  * A helper class to provide Attr module in Skylark.
@@ -249,15 +254,32 @@ public final class SkylarkAttr {
     }
   }
 
+  private static final Map<Type<?>, String> whyNotConfigurable =
+      ImmutableMap.<Type<?>, String>builder()
+          .put(BuildType.LICENSE,
+              "loading phase license checking logic assumes non-configurable values")
+          .put(BuildType.OUTPUT, "output paths are part of the static graph structure")
+          .build();
+
+  /**
+   * If the given attribute type is non-configurable, returns the reason why. Otherwise, returns
+   * {@code null}.
+   */
+  @Nullable
+  public static String maybeGetNonConfigurableReason(Type<?> type) {
+    return whyNotConfigurable.get(type);
+  }
+
   private static Descriptor createNonconfigurableAttrDescriptor(
       SkylarkDict<String, Object> kwargs,
       Type<?> type,
-      String whyNotConfigurable,
       FuncallExpression ast,
       Environment env) throws EvalException {
+    String whyNotConfigurableReason =
+        Preconditions.checkNotNull(maybeGetNonConfigurableReason(type), type);
     try {
       return new Descriptor(
-          createAttribute(type, kwargs, ast, env).nonconfigurable(whyNotConfigurable));
+          createAttribute(type, kwargs, ast, env).nonconfigurable(whyNotConfigurableReason));
     } catch (ConversionException e) {
       throw new EvalException(ast.getLocation(), e.getMessage());
     }
@@ -298,7 +320,7 @@ public final class SkylarkAttr {
             Environment env)
             throws EvalException {
           // TODO(bazel-team): Replace literal strings with constants.
-          env.checkLoadingPhase("attr.int", ast.getLocation());
+          env.checkLoadingOrWorkspacePhase("attr.int", ast.getLocation());
           return createAttrDescriptor(
               EvalUtils.<String, Object>optionMap(
                   env, DEFAULT_ARG, defaultInt, MANDATORY_ARG, mandatory, VALUES_ARG, values),
@@ -342,7 +364,7 @@ public final class SkylarkAttr {
             FuncallExpression ast,
             Environment env)
             throws EvalException {
-          env.checkLoadingPhase("attr.string", ast.getLocation());
+          env.checkLoadingOrWorkspacePhase("attr.string", ast.getLocation());
           return createAttrDescriptor(
               EvalUtils.<String, Object>optionMap(
                   env, DEFAULT_ARG, defaultString, MANDATORY_ARG, mandatory, VALUES_ARG, values),
@@ -431,7 +453,7 @@ public final class SkylarkAttr {
             FuncallExpression ast,
             Environment env)
             throws EvalException {
-          env.checkLoadingPhase("attr.label", ast.getLocation());
+          env.checkLoadingOrWorkspacePhase("attr.label", ast.getLocation());
           return createAttrDescriptor(
               EvalUtils.<String, Object>optionMap(
                   env,
@@ -488,7 +510,7 @@ public final class SkylarkAttr {
             FuncallExpression ast,
             Environment env)
             throws EvalException {
-          env.checkLoadingPhase("attr.string_list", ast.getLocation());
+          env.checkLoadingOrWorkspacePhase("attr.string_list", ast.getLocation());
           return createAttrDescriptor(
               EvalUtils.<String, Object>optionMap(
                   env,
@@ -534,7 +556,7 @@ public final class SkylarkAttr {
             FuncallExpression ast,
             Environment env)
             throws EvalException {
-          env.checkLoadingPhase("attr.int_list", ast.getLocation());
+          env.checkLoadingOrWorkspacePhase("attr.int_list", ast.getLocation());
           return createAttrDescriptor(
               EvalUtils.<String, Object>optionMap(
                   env,
@@ -634,7 +656,7 @@ public final class SkylarkAttr {
             FuncallExpression ast,
             Environment env)
             throws EvalException {
-          env.checkLoadingPhase("attr.label_list", ast.getLocation());
+          env.checkLoadingOrWorkspacePhase("attr.label_list", ast.getLocation());
           SkylarkDict<String, Object> kwargs = EvalUtils.<String, Object>optionMap(
               env,
               DEFAULT_ARG,
@@ -683,7 +705,7 @@ public final class SkylarkAttr {
         public Descriptor invoke(
             Boolean defaultO, Boolean mandatory, FuncallExpression ast, Environment env)
             throws EvalException {
-          env.checkLoadingPhase("attr.bool", ast.getLocation());
+          env.checkLoadingOrWorkspacePhase("attr.bool", ast.getLocation());
           return createAttrDescriptor(
               EvalUtils.<String, Object>optionMap(
                   env, DEFAULT_ARG, defaultO, MANDATORY_ARG, mandatory),
@@ -720,12 +742,11 @@ public final class SkylarkAttr {
         public Descriptor invoke(
             Object defaultO, Boolean mandatory, FuncallExpression ast, Environment env)
             throws EvalException {
-          env.checkLoadingPhase("attr.output", ast.getLocation());
+          env.checkLoadingOrWorkspacePhase("attr.output", ast.getLocation());
           return createNonconfigurableAttrDescriptor(
               EvalUtils.<String, Object>optionMap(
                   env, DEFAULT_ARG, defaultO, MANDATORY_ARG, mandatory),
               BuildType.OUTPUT,
-              "output paths are part of the static graph structure",
               ast,
               env);
         }
@@ -763,7 +784,7 @@ public final class SkylarkAttr {
             FuncallExpression ast,
             Environment env)
             throws EvalException {
-          env.checkLoadingPhase("attr.output_list", ast.getLocation());
+          env.checkLoadingOrWorkspacePhase("attr.output_list", ast.getLocation());
           return createAttrDescriptor(
               EvalUtils.<String, Object>optionMap(
                   env,
@@ -804,7 +825,7 @@ public final class SkylarkAttr {
             FuncallExpression ast,
             Environment env)
             throws EvalException {
-          env.checkLoadingPhase("attr.string_dict", ast.getLocation());
+          env.checkLoadingOrWorkspacePhase("attr.string_dict", ast.getLocation());
           return createAttrDescriptor(
               EvalUtils.<String, Object>optionMap(
                   env, DEFAULT_ARG, defaultO, MANDATORY_ARG, mandatory, NON_EMPTY_ARG, nonEmpty),
@@ -840,7 +861,7 @@ public final class SkylarkAttr {
             FuncallExpression ast,
             Environment env)
             throws EvalException {
-          env.checkLoadingPhase("attr.string_list_dict", ast.getLocation());
+          env.checkLoadingOrWorkspacePhase("attr.string_list_dict", ast.getLocation());
           return createAttrDescriptor(
               EvalUtils.<String, Object>optionMap(
                   env, DEFAULT_ARG, defaultO, MANDATORY_ARG, mandatory, NON_EMPTY_ARG, nonEmpty),
@@ -870,12 +891,11 @@ public final class SkylarkAttr {
         public Descriptor invoke(
             Object defaultO, Boolean mandatory, FuncallExpression ast, Environment env)
             throws EvalException {
-          env.checkLoadingPhase("attr.license", ast.getLocation());
+          env.checkLoadingOrWorkspacePhase("attr.license", ast.getLocation());
           return createNonconfigurableAttrDescriptor(
               EvalUtils.<String, Object>optionMap(
                   env, DEFAULT_ARG, defaultO, MANDATORY_ARG, mandatory),
               BuildType.LICENSE,
-              "loading phase license checking logic assumes non-configurable values",
               ast,
               env);
         }

@@ -24,11 +24,12 @@ import com.google.devtools.build.lib.cmdline.Label;
 import com.google.devtools.build.lib.cmdline.LabelSyntaxException;
 import com.google.devtools.build.lib.cmdline.LabelValidator;
 import com.google.devtools.build.lib.events.Event;
+import com.google.devtools.build.lib.events.NullEventHandler;
 import com.google.devtools.build.lib.events.StoredEventHandler;
 import com.google.devtools.build.lib.packages.Package.Builder;
-import com.google.devtools.build.lib.packages.Package.LegacyBuilder;
 import com.google.devtools.build.lib.packages.Package.NameConflictException;
 import com.google.devtools.build.lib.packages.PackageFactory.EnvironmentExtension;
+import com.google.devtools.build.lib.skylarkinterface.Param;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkSignature;
 import com.google.devtools.build.lib.syntax.BaseFunction;
 import com.google.devtools.build.lib.syntax.BuildFileAST;
@@ -73,7 +74,7 @@ public class WorkspaceFactory {
           "DEFAULT_SERVER_JAVABASE", // serializable so optional
           PackageFactory.PKG_CONTEXT);
 
-  private final LegacyBuilder builder;
+  private final Builder builder;
 
   private final Path installDir;
   private final Path workspaceDir;
@@ -102,7 +103,7 @@ public class WorkspaceFactory {
    * @param mutability the Mutability for the current evaluation context
    */
   public WorkspaceFactory(
-      LegacyBuilder builder,
+      Builder builder,
       RuleClassProvider ruleClassProvider,
       ImmutableList<EnvironmentExtension> environmentExtensions,
       Mutability mutability) {
@@ -119,7 +120,7 @@ public class WorkspaceFactory {
    * @param workspaceDir the workspace directory
    */
   public WorkspaceFactory(
-      LegacyBuilder builder,
+      Builder builder,
       RuleClassProvider ruleClassProvider,
       ImmutableList<EnvironmentExtension> environmentExtensions,
       Mutability mutability,
@@ -247,7 +248,7 @@ public class WorkspaceFactory {
       Package aPackage,
       ImmutableMap<String, Extension> importMap,
       ImmutableMap<String, Object> bindings)
-      throws NameConflictException {
+      throws NameConflictException, InterruptedException {
     this.parentVariableBindings = bindings;
     this.parentImportMap = importMap;
     builder.setWorkspaceName(aPackage.getWorkspaceName());
@@ -256,8 +257,24 @@ public class WorkspaceFactory {
     if (aPackage.containsErrors()) {
       builder.setContainsErrors();
     }
-    for (Target target : aPackage.getTargets(Rule.class)) {
-      builder.addRule((Rule) target);
+    for (Rule rule : aPackage.getTargets(Rule.class)) {
+      try {
+        // The old rule references another Package instance and we wan't to keep the invariant that
+        // every Rule references the Package it is contained within
+        Rule newRule = builder.createRule(
+            rule.getLabel(),
+            rule.getRuleClassObject(),
+            rule.getLocation(),
+            rule.getAttributeContainer());
+        newRule.populateOutputFiles(NullEventHandler.INSTANCE, builder);
+        if (rule.containsErrors()) {
+          newRule.setContainsErrors();
+        }
+        builder.addRule(newRule);
+      } catch (LabelSyntaxException e) {
+        // This rule has already been created once, so it should have worked the second time, too
+        throw new IllegalStateException(e);
+      }
     }
   }
 
@@ -271,8 +288,7 @@ public class WorkspaceFactory {
             + "github.com/bazelbuild/bazel should use com_github_bazelbuild_bazel. Names must "
             + "start with a letter and can only contain letters, numbers, and underscores.",
     mandatoryPositionals = {
-      @SkylarkSignature.Param(name = "name", type = String.class, doc = "the name of the workspace."
-      )
+      @Param(name = "name", type = String.class, doc = "the name of the workspace.")
     },
     documented = true,
     useAst = true,
@@ -320,7 +336,7 @@ public class WorkspaceFactory {
         try {
           nameLabel = Label.parseAbsolute("//external:" + name);
           try {
-            LegacyBuilder builder = PackageFactory.getContext(env, ast).pkgBuilder;
+            Builder builder = PackageFactory.getContext(env, ast).pkgBuilder;
             RuleClass ruleClass = ruleFactory.getRuleClass("bind");
             builder
                 .externalPackageData()

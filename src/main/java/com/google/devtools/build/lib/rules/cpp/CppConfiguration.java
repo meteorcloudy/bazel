@@ -328,7 +328,7 @@ public class CppConfiguration extends BuildConfiguration.Fragment {
   private final ImmutableMap<String, String> commandLineDefines;
   private final String solibDirectory;
   private final CompilationMode compilationMode;
-  private final Path execRoot;
+
   /**
    *  If true, the ConfiguredTarget is only used to get the necessary cross-referenced
    *  CppCompilationContexts, but registering build actions is disabled.
@@ -349,7 +349,7 @@ public class CppConfiguration extends BuildConfiguration.Fragment {
     this.ccToolchainLabel = params.ccToolchainLabel;
     this.compilationMode = params.commonOptions.compilationMode;
     this.lipoContextCollector = cppOptions.lipoCollector;
-    this.execRoot = params.execRoot;
+
 
     this.crosstoolTopPathFragment = crosstoolTop.getPackageIdentifier().getPathFragment();
 
@@ -692,6 +692,115 @@ public class CppConfiguration extends BuildConfiguration.Fragment {
       return toolchain;
     }
     try {
+      if (!features.contains("dependency_file")) {
+        // Gcc options:
+        //  -MD turns on .d file output as a side-effect (doesn't imply -E)
+        //  -MM[D] enables user includes only, not system includes
+        //  -MF <name> specifies the dotd file name
+        // Issues:
+        //  -M[M] alone subverts actual .o output (implies -E)
+        //  -M[M]D alone breaks some of the .d naming assumptions
+        // This combination gets user and system includes with specified name:
+        //  -MD -MF <name>
+        TextFormat.merge(""
+            + "feature {"
+            + "  name: 'dependency_file'"
+            + "  flag_set {"
+            + "    action: 'assemble'"
+            + "    action: 'preprocess-assemble'"
+            + "    action: 'c-compile'"
+            + "    action: 'c++-compile'"
+            + "    action: 'c++-module-compile'"
+            + "    action: 'objc-compile'"
+            + "    action: 'objc++-compile'"
+            + "    action: 'c++-header-preprocessing'"
+            + "    action: 'c++-header-parsing'"
+            + "    expand_if_all_available: 'dependency_file'"
+            + "    flag_group {"
+            + "      flag: '-MD'"
+            + "      flag: '-MF'"
+            + "      flag: '%{dependency_file}'"
+            + "    }"
+            + "  }"
+            + "}",
+            toolchainBuilder);
+      }
+
+      if (!features.contains("random_seed")) {
+        // GCC and Clang give randomized names to symbols which are defined in
+        // an anonymous namespace but have external linkage.  To make
+        // computation of these deterministic, we want to override the
+        // default seed for the random number generator.  It's safe to use
+        // any value which differs for all translation units; we use the
+        // path to the object file.
+        TextFormat.merge(""
+            + "feature {"
+            + "  name: 'random_seed'"
+            + "  flag_set {"
+            + "    action: 'c++-compile'"
+            + "    action: 'c++-module-compile'"
+            + "    flag_group {"
+            + "      flag: '-frandom-seed=%{output_file}'"
+            + "    }"
+            + "  }"
+            + "}",
+            toolchainBuilder);
+      }
+
+      if (!features.contains("pic")) {
+        TextFormat.merge(""
+            + "feature {"
+            + "  name: 'pic'"
+            + "  flag_set {"
+            + "    action: 'c-compile'"
+            + "    action: 'c++-compile'"
+            + "    action: 'c++-module-compile'"
+            + "    action: 'preprocess-assemble'"
+            + "    expand_if_all_available: 'pic'"
+            + "    flag_group {"
+            + "      flag: '-fPIC'"
+            + "    }"
+            + "  }"
+            + "}",
+            toolchainBuilder);
+      }
+
+      if (!features.contains("per_object_debug_info")) {
+        TextFormat.merge(""
+            + "feature {"
+            + "  name: 'per_object_debug_info'"
+            + "  flag_set {"
+            + "    action: 'c-compile'"
+            + "    action: 'c++-compile'"
+            + "    action: 'assemble'"
+            + "    action: 'preprocess-assemble'"
+            + "    expand_if_all_available: 'per_object_debug_info_file'"
+            + "    flag_group {"
+            + "      flag: '-gsplit-dwarf'"
+            + "    }"
+            + "  }"
+            + "}",
+            toolchainBuilder);
+      }
+
+      if (!features.contains("preprocessor_defines")) {
+        TextFormat.merge(""
+            + "feature {"
+            + "  name: 'preprocessor_defines'"
+            + "  flag_set {"
+            + "    action: 'preprocess-assemble'"
+            + "    action: 'c-compile'"
+            + "    action: 'c++-compile'"
+            + "    action: 'c++-header-parsing'"
+            + "    action: 'c++-header-preprocessing'"
+            + "    action: 'c++-module-compile'"
+            + "    flag_group {"
+            + "      flag: '-D%{preprocessor_defines}'"
+            + "    }"
+            + "  }"
+            + "}",
+            toolchainBuilder);
+      }
       if (!features.contains("include_paths")) {
         TextFormat.merge(""
             + "feature {"
@@ -727,7 +836,13 @@ public class CppConfiguration extends BuildConfiguration.Fragment {
                 + "  flag_set {"
                 + "    action: 'c-compile'"
                 + "    action: 'c++-compile'"
-                + "    action: 'c++-link'"
+                + "    action: 'c++-link-static-library'"
+                + "    action: 'c++-link-pic-static-library'"
+                + "    action: 'c++-link-interface-dynamic-library'"
+                + "    action: 'c++-link-dynamic-library'"
+                + "    action: 'c++-link-alwayslink-static-library'"
+                + "    action: 'c++-link-alwayslink-pic-static-library'"
+                + "    action: 'c++-link-executable'"
                 + "    flag_group {"
                 + "      flag: '-Xgcc-only=-fprofile-generate=%{fdo_instrument_path}'"
                 + "      flag: '-Xclang-only=-fprofile-instr-generate=%{fdo_instrument_path}'"
@@ -816,7 +931,13 @@ public class CppConfiguration extends BuildConfiguration.Fragment {
                 + "    }"
                 + "  }"
                 + "  flag_set {"
-                + "    action: 'c++-link'"
+                + "    action: 'c++-link-static-library'"
+                + "    action: 'c++-link-pic-static-library'"
+                + "    action: 'c++-link-interface-dynamic-library'"
+                + "    action: 'c++-link-dynamic-library'"
+                + "    action: 'c++-link-always-link-static-library'"
+                + "    action: 'c++-link-always-link-pic-static-library'"
+                + "    action: 'c++-link-executable'"
                 + "    flag_group {"
                 + "      flag: '-lgcov'"
                 + "    }"
@@ -948,6 +1069,13 @@ public class CppConfiguration extends BuildConfiguration.Fragment {
    */
   public String getToolchainIdentifier() {
     return toolchainIdentifier;
+  }
+
+  /**
+   * Returns the path of the crosstool.
+   */
+  public PathFragment getCrosstoolTopPathFragment() {
+    return crosstoolTopPathFragment;
   }
 
   /**
@@ -1518,13 +1646,6 @@ public class CppConfiguration extends BuildConfiguration.Fragment {
   }
 
   /**
-   * Returns the extra warnings enabled for C compilation.
-   */
-  public ImmutableList<String> getCWarns() {
-    return ImmutableList.copyOf(cppOptions.cWarns);
-  }
-
-  /**
    * Returns true if mostly-static C++ binaries should be skipped.
    */
   public boolean skipStaticOutputs() {
@@ -1607,10 +1728,6 @@ public class CppConfiguration extends BuildConfiguration.Fragment {
 
   public boolean getInmemoryDotdFiles() {
     return cppOptions.inmemoryDotdFiles;
-  }
-
-  public boolean useIsystemForIncludes() {
-    return cppOptions.useIsystemForIncludes;
   }
 
   public LibcTop getLibcTop() {

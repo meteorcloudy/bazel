@@ -18,9 +18,27 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-
 /**
  * An annotation to mark built-in keyword argument methods accessible from Skylark.
+ *
+ * <p>Use this annotation around a {@link com.google.devtools.build.lib.syntax.BuiltinFunction} or
+ * a {@link com.google.devtools.build.lib.syntax.BuiltinFunction.Factory}. The annotated function
+ * should expect the arguments described by {@link #parameters()},
+ * {@link #optionalPositionals()}, {@link #extraPositionals()}, {@link #mandatoryNamedOnly()},
+ * {@link #optionalNamedOnly()} and {@link #extraKeywords()}. It should also expect the following
+ * extraneous arguments:
+ *
+ * <ul>
+ *   <li>
+ *     {@link com.google.devtools.build.lib.events.Location} if {@link #useLocation()} is
+ *     true.
+ *   </li>
+ *   <li>{@link com.google.devtools.build.lib.syntax.ASTNode} if {@link #useAst()} is true.</li>
+ *   <li>
+ *     {@link com.google.devtools.build.lib.syntax.Environment} if {@link #useEnvironment()} )}
+ *     is true.
+ *   </li>
+ * </ul>
  */
 @Target({ElementType.FIELD})
 @Retention(RetentionPolicy.RUNTIME)
@@ -30,59 +48,93 @@ public @interface SkylarkSignature {
   // in Skylark syntax, e.g.: signature = "foo(a: string, b: ListOf(int)) -> NoneType"
   // String signature() default "";
 
+  /**
+   * Name of the method as exposed to Skylark.
+   */
   String name();
 
+  /**
+   * General documentation block of the method. See the skylark documentation at
+   * http://www.bazel.io/docs/skylark/.
+   */
   String doc() default "";
 
+  /**
+   * List of mandatory positional parameters for calling this method. These parameters have
+   * to be placed first in the list of arguments when calling that method.
+   */
   Param[] mandatoryPositionals() default {};
 
+  /**
+   * List of optional positional parameters for calling this method. These parameters have
+   * to be placed before any named parameters when calling the method.
+   */
   Param[] optionalPositionals() default {};
 
+  /**
+   * List of optional named parameters for calling this method. These parameters can be specified
+   * in the list of arguments using the <code>key=value</code> format in calling the method.
+   */
   Param[] optionalNamedOnly() default {};
 
+  /**
+   * List of mandatory named parameters for calling this method. These parameters must be specified
+   * in the list of arguments using the <code>key=value</code> format in calling the method.
+   */
   Param[] mandatoryNamedOnly() default {};
 
-  Param[] extraPositionals() default {};
+  /**
+   * Defines a catch all positional parameters. By default, it is an error to define more
+   * positional parameters that specified but by defining an extraPositionals argument, one can
+   * catch those. See python's <code>*args</code>
+   * (http://thepythonguru.com/python-args-and-kwargs/).
+   */
+  Param extraPositionals() default @Param(name = "");
 
-  Param[] extraKeywords() default {};
+  /**
+   * Defines a catch all named parameters. By default, it is an error to define more
+   * named parameters that specified but by defining an extraKeywords argument, one can catch those.
+   * See python's <code>**kwargs</code> (http://thepythonguru.com/python-args-and-kwargs/).
+   */
+  Param extraKeywords() default @Param(name = "");
 
+  /**
+   * Set <code>documented</code> to <code>false</code> if this method should not be mentioned
+   * in the documentation of Skylark. This is generally used for experimental APIs or duplicate
+   * methods already documented on another call.
+   */
   boolean documented() default true;
 
+  /**
+   * Type of the object associated to that function. If this field is
+   * <code>Object.class</code>, then the function will be considered as an object method.
+   * For example, to add a function to the string object, set it to <code>String.class</code>.
+   */
   Class<?> objectType() default Object.class;
 
+  /**
+   * Return type of the function. Use {@link com.google.devtools.build.lib.syntax.Runtime.NoneType}
+   * for a void function.
+   */
   Class<?> returnType() default Object.class;
 
   // TODO(bazel-team): determine this way whether to accept mutable Lists
   // boolean mutableLists() default false;
 
+  /**
+   * If true the location of the call site will be passed as an argument of the annotated function.
+   */
   boolean useLocation() default false;
 
+  /**
+   * If true the AST of the call site will be passed as an argument of the annotated function.
+   */
   boolean useAst() default false;
 
-  boolean useEnvironment() default false;
-
   /**
-   * An annotation for parameters of Skylark built-in functions.
+   * If true the AST of the Skylark Environment
+   * ({@link com.google.devtools.build.lib.syntax.Environment}) will be passed as an argument of the
+   * annotated function.
    */
-  @Retention(RetentionPolicy.RUNTIME)
-  public @interface Param {
-
-    String name();
-
-    String doc() default "";
-
-    String defaultValue() default "";
-
-    Class<?> type() default Object.class;
-
-    Class<?> generic1() default Object.class;
-
-    boolean callbackEnabled() default false;
-
-    boolean noneable() default false;
-
-    // TODO(bazel-team): parse the type from a single field in Skylark syntax,
-    // and allow a Union as "ThisType or ThatType or NoneType":
-    // String type() default "Object";
-  }
+  boolean useEnvironment() default false;
 }

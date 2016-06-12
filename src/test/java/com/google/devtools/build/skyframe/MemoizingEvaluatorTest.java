@@ -596,6 +596,24 @@ public class MemoizingEvaluatorTest {
   }
 
   @Test
+  public void noKeepGoingErrorAfterKeepGoingError() throws Exception {
+    SkyKey topKey = GraphTester.skyKey("top");
+    SkyKey errorKey = GraphTester.skyKey("error");
+    tester.getOrCreate(errorKey).setHasError(true);
+    tester.getOrCreate(topKey).addDependency(errorKey).setComputedValue(CONCATENATE);
+    EvaluationResult<StringValue> result = tester.eval(/*keepGoing=*/ true, topKey);
+    assertThatEvaluationResult(result)
+        .hasErrorEntryForKeyThat(topKey)
+        .rootCauseOfExceptionIs(errorKey);
+    tester.getOrCreate(topKey, /*markAsModified=*/ true);
+    tester.invalidate();
+    result = tester.eval(/*keepGoing=*/ false, topKey);
+    assertThatEvaluationResult(result)
+        .hasErrorEntryForKeyThat(topKey)
+        .rootCauseOfExceptionIs(errorKey);
+  }
+
+  @Test
   public void transientErrorValueInvalidation() throws Exception {
     // Verify that invalidating errors causes all transient error values to be rerun.
     tester.getOrCreate("error-value").setHasTransientError(true).setProgress(
@@ -1047,9 +1065,8 @@ public class MemoizingEvaluatorTest {
 
   @Test
   public void cycleAndSelfEdgeWithDirtyValueInSameGroup() throws Exception {
-    makeGraphDeterministic();
-    final SkyKey cycleKey1 = GraphTester.toSkyKey("zcycleKey1");
-    final SkyKey cycleKey2 = GraphTester.toSkyKey("acycleKey2");
+    final SkyKey cycleKey1 = GraphTester.toSkyKey("cycleKey1");
+    final SkyKey cycleKey2 = GraphTester.toSkyKey("cycleKey2");
     tester.getOrCreate(cycleKey2).addDependency(cycleKey2).setComputedValue(CONCATENATE);
     tester
         .getOrCreate(cycleKey1)
@@ -1059,8 +1076,9 @@ public class MemoizingEvaluatorTest {
               @Override
               public SkyValue compute(SkyKey skyKey, Environment env)
                   throws SkyFunctionException, InterruptedException {
+                // The order here is important -- 2 before 1.
                 Map<SkyKey, SkyValue> result =
-                    env.getValues(ImmutableList.of(cycleKey1, cycleKey2));
+                    env.getValues(ImmutableList.of(cycleKey2, cycleKey1));
                 Preconditions.checkState(env.valuesMissing(), result);
                 return null;
               }
@@ -1936,7 +1954,11 @@ public class MemoizingEvaluatorTest {
                 new StringValue("second"),
                 ImmutableList.<SkyKey>of()));
     // And mid is independently marked as modified,
-    tester.getOrCreate(midKey, /*markAsModified=*/ true);
+    tester
+        .getOrCreate(midKey, /*markAsModified=*/ true)
+        .removeDependency(changedKey)
+        .setComputedValue(null)
+        .setConstantValue(new StringValue("mid"));
     tester.invalidate();
     SkyKey newTopKey = GraphTester.skyKey("newTop");
     // And changed will start rebuilding independently of midKey, because it's requested directly by
@@ -4125,6 +4147,16 @@ public class MemoizingEvaluatorTest {
     tester.getOrCreate(inactiveKey, /*markAsModified=*/ true);
     tester.invalidate();
     assertThat(tester.evalAndGet(/*keepGoing=*/ true, inactiveKey)).isEqualTo(val);
+  }
+
+  @Test
+  public void errorChanged() throws Exception {
+    SkyKey error = GraphTester.skyKey("error");
+    tester.getOrCreate(error).setHasTransientError(true);
+    assertThatErrorInfo(tester.evalAndGetError(error)).hasExceptionThat().isNotNull();
+    tester.getOrCreate(error, /*markAsModified=*/ true);
+    tester.invalidate();
+    assertThatErrorInfo(tester.evalAndGetError(error)).hasExceptionThat().isNotNull();
   }
 
   /** A graph tester that is specific to the memoizing evaluator, with some convenience methods. */

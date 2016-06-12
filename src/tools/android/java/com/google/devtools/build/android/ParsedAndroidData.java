@@ -21,6 +21,7 @@ import com.google.common.collect.Iterables;
 import com.google.devtools.build.android.xml.StyleableXmlResourceValue;
 
 import com.android.ide.common.res2.MergingException;
+import com.android.resources.ResourceFolderType;
 
 import java.io.IOException;
 import java.nio.file.FileVisitOption;
@@ -30,7 +31,6 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -38,8 +38,10 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Set;
+import java.util.logging.Logger;
 
 import javax.annotation.concurrent.Immutable;
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamException;
 
@@ -52,7 +54,9 @@ import javax.xml.stream.XMLStreamException;
  */
 @Immutable
 public class ParsedAndroidData {
+  private static final Logger logger = Logger.getLogger(ParsedAndroidData.class.getCanonicalName());
 
+  @NotThreadSafe
   static class Builder {
     private final Map<DataKey, DataResource> overwritingResources;
     private final Map<DataKey, DataResource> combiningResources;
@@ -96,6 +100,21 @@ public class ParsedAndroidData {
           ImmutableMap.copyOf(overwritingResources),
           ImmutableMap.copyOf(combiningResources),
           ImmutableMap.copyOf(assets));
+    }
+
+    /** Copies the data to the targetBuilder from the current builder. */
+   public void copyTo(Builder targetBuilder) {
+      KeyValueConsumers consumers = targetBuilder.consumers();
+      for (Entry<DataKey, DataResource> entry : overwritingResources.entrySet()) {
+        consumers.overwritingConsumer.consume(entry.getKey(), entry.getValue());
+      }
+      for (Entry<DataKey, DataResource> entry : combiningResources.entrySet()) {
+        consumers.combiningConsumer.consume(entry.getKey(), entry.getValue());
+      }
+      for (Entry<DataKey, DataAsset> entry : assets.entrySet()) {
+        consumers.assetConsumer.consume(entry.getKey(), entry.getValue());
+      }
+      targetBuilder.conflicts.addAll(conflicts);
     }
 
     ResourceFileVisitor resourceVisitor() {
@@ -226,7 +245,7 @@ public class ParsedAndroidData {
     private final KeyValueConsumer<DataKey, DataResource> overwritingConsumer;
     private final KeyValueConsumer<DataKey, DataResource> combiningResources;
     private final List<Exception> errors;
-    private boolean inValuesSubtree;
+    private ResourceFolderType folderType;
     private FullyQualifiedName.Factory fqnFactory;
     private final XMLInputFactory xmlInputFactory = XMLInputFactory.newFactory();
 
@@ -260,19 +279,28 @@ public class ParsedAndroidData {
     public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs)
         throws IOException {
       final String[] dirNameAndQualifiers = dir.getFileName().toString().split("-");
-      inValuesSubtree = "values".equals(dirNameAndQualifiers[0]);
-      fqnFactory = FullyQualifiedName.Factory.fromDirectoryName(dirNameAndQualifiers);
-      return FileVisitResult.CONTINUE;
+      folderType = ResourceFolderType.getTypeByName(dirNameAndQualifiers[0]);
+      if (folderType == null) {
+        return FileVisitResult.CONTINUE;
+      }
+      try {
+        fqnFactory = FullyQualifiedName.Factory.fromDirectoryName(dirNameAndQualifiers);
+        return FileVisitResult.CONTINUE;
+      } catch (IllegalArgumentException e) {
+        logger.warning(
+            String.format("%s is an invalid resource directory due to %s", dir, e.getMessage()));
+        return FileVisitResult.SKIP_SUBTREE;
+      }
     }
 
     @Override
     public FileVisitResult visitFile(Path path, BasicFileAttributes attrs) throws IOException {
       try {
         if (!Files.isDirectory(path) && !path.getFileName().toString().startsWith(".")) {
-          if (inValuesSubtree) {
+          if (folderType == ResourceFolderType.VALUES) {
             DataResourceXml.parse(
                 xmlInputFactory, path, fqnFactory, overwritingConsumer, combiningResources);
-          } else {
+          } else if (folderType != null) {
             String rawFqn = deriveRawFullyQualifiedName(path);
             FullyQualifiedName key = fqnFactory.parse(rawFqn);
             overwritingConsumer.consume(key, DataValueFile.of(path));
@@ -430,12 +458,20 @@ public class ParsedAndroidData {
     return overwritingResources.containsKey(name);
   }
 
+  public boolean containsCombineable(DataKey key) {
+    return combiningResources.containsKey(key);
+  }
+
   Iterable<Entry<DataKey, DataResource>> iterateOverwritableEntries() {
     return overwritingResources.entrySet();
   }
 
   Iterable<Entry<DataKey, DataResource>> iterateDataResourceEntries() {
     return Iterables.concat(overwritingResources.entrySet(), combiningResources.entrySet());
+  }
+
+  public Iterable<Entry<DataKey, DataResource>> iterateCombiningEntries() {
+    return combiningResources.entrySet();
   }
 
   boolean containsAsset(DataKey name) {
@@ -454,16 +490,6 @@ public class ParsedAndroidData {
     return MergeConflict.between(key, assets.get(key), value);
   }
 
-  ImmutableMap<DataKey, DataResource> mergeCombining(ParsedAndroidData other) {
-    Map<DataKey, DataResource> merged = new HashMap<>();
-    CombiningConsumer consumer = new CombiningConsumer(merged);
-    for (Entry<DataKey, DataResource> entry :
-        Iterables.concat(
-            combiningResources.entrySet(), other.combiningResources.entrySet())) {
-      consumer.consume(entry.getKey(), entry.getValue());
-    }
-    return ImmutableMap.copyOf(merged);
-  }
 
   ImmutableSet<MergeConflict> conflicts() {
     return conflicts;

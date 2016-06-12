@@ -40,6 +40,7 @@ import com.google.devtools.build.lib.analysis.BuildView.AnalysisResult;
 import com.google.devtools.build.lib.analysis.config.InvalidConfigurationException;
 import com.google.devtools.build.lib.analysis.util.AnalysisMock;
 import com.google.devtools.build.lib.analysis.util.BuildViewTestBase;
+import com.google.devtools.build.lib.analysis.util.ExpectedDynamicConfigurationErrors;
 import com.google.devtools.build.lib.cmdline.Label;
 import com.google.devtools.build.lib.packages.Attribute;
 import com.google.devtools.build.lib.packages.Rule;
@@ -151,8 +152,8 @@ public class BuildViewTest extends BuildViewTestBase {
     OutputFileConfiguredTarget outputCT = (OutputFileConfiguredTarget)
         getConfiguredTarget("//pkg:a.out");
     Artifact outputArtifact = outputCT.getArtifact();
-    assertEquals(getTargetConfiguration().getBinDirectory(), outputArtifact.getRoot());
-    assertEquals(getTargetConfiguration().getBinFragment().getRelative("pkg/a.out"),
+    assertEquals(outputCT.getConfiguration().getBinDirectory(), outputArtifact.getRoot());
+    assertEquals(outputCT.getConfiguration().getBinFragment().getRelative("pkg/a.out"),
         outputArtifact.getExecPath());
     assertEquals(new PathFragment("pkg/a.out"), outputArtifact.getRootRelativePath());
 
@@ -345,7 +346,7 @@ public class BuildViewTest extends BuildViewTestBase {
       fileDependency =
           Dependency.withTransitionAndAspects(
               Label.parseAbsolute("//package:file"),
-              Attribute.ConfigurationTransition.NONE,
+              Attribute.ConfigurationTransition.NULL,
               ImmutableSet.<AspectDescriptor>of());
     } else {
       innerDependency =
@@ -860,11 +861,20 @@ public class BuildViewTest extends BuildViewTestBase {
 
   @Test
   public void testCycleDueToJavaLauncherConfiguration() throws Exception {
+    if (defaultFlags().contains(Flag.DYNAMIC_CONFIGURATIONS)) {
+      // Dynamic configurations don't yet support late-bound attributes. Development testing already
+      // runs all tests with dynamic configurations enabled, so this will still fail for developers
+      // and won't get lost in the fog.
+      return;
+    }
     scratch.file("foo/BUILD",
         "java_binary(name = 'java', srcs = ['DoesntMatter.java'])",
         "cc_binary(name = 'cpp', data = [':java'])");
     // Everything is fine - the dependency graph is acyclic.
     update("//foo:java", "//foo:cpp");
+    if (getTargetConfiguration().useDynamicConfigurations()) {
+      fail(ExpectedDynamicConfigurationErrors.LATE_BOUND_ATTRIBUTES_UNSUPPORTED);
+    }
     // Now there will be an analysis-phase cycle because the java_binary now has an implicit dep on
     // the cc_binary launcher.
     useConfiguration("--java_launcher=//foo:cpp");
@@ -1136,6 +1146,96 @@ public class BuildViewTest extends BuildViewTestBase {
     }
   }
 
+  @Test
+  public void testNonTopLevelErrorsPrintedExactlyOnce() throws Exception {
+    scratch.file("parent/BUILD",
+        "sh_library(name = 'a', deps = ['//child:b'])");
+    scratch.file("child/BUILD",
+        "sh_library(name = 'b')",
+        "undefined_symbol");
+    reporter.removeHandler(failFastHandler);
+    try {
+      update("//parent:a");
+      fail();
+    } catch (LoadingFailedException | ViewCreationFailedException expected) {
+    }
+    assertContainsEventWithFrequency("name 'undefined_symbol' is not defined", 1);
+    assertContainsEventWithFrequency(
+        "Target '//child:b' contains an error and its package is in error and referenced "
+        + "by '//parent:a'", 1);
+  }
+
+  @Test
+  public void testNonTopLevelErrorsPrintedExactlyOnce_KeepGoing() throws Exception {
+    scratch.file("parent/BUILD",
+        "sh_library(name = 'a', deps = ['//child:b'])");
+    scratch.file("child/BUILD",
+        "sh_library(name = 'b')",
+        "undefined_symbol");
+    reporter.removeHandler(failFastHandler);
+    update(defaultFlags().with(Flag.KEEP_GOING), "//parent:a");
+    assertContainsEventWithFrequency("name 'undefined_symbol' is not defined", 1);
+    assertContainsEventWithFrequency(
+        "Target '//child:b' contains an error and its package is in error and referenced "
+        + "by '//parent:a'", 1);
+  }
+
+  @Test
+  public void testNonTopLevelErrorsPrintedExactlyOnce_ActionListener() throws Exception {
+    scratch.file("parent/BUILD",
+        "sh_library(name = 'a', deps = ['//child:b'])");
+    scratch.file("child/BUILD",
+        "sh_library(name = 'b')",
+        "undefined_symbol");
+    scratch.file("okay/BUILD",
+        "sh_binary(name = 'okay', srcs = ['okay.sh'])");
+    useConfiguration("--experimental_action_listener=//parent:a");
+    reporter.removeHandler(failFastHandler);
+    try {
+      update("//okay");
+      fail();
+    } catch (LoadingFailedException | ViewCreationFailedException e) {
+    }
+    assertContainsEventWithFrequency("name 'undefined_symbol' is not defined", 1);
+    assertContainsEventWithFrequency(
+        "Target '//child:b' contains an error and its package is in error and referenced "
+        + "by '//parent:a'", 1);
+  }
+
+  @Test
+  public void testNonTopLevelErrorsPrintedExactlyOnce_ActionListener_KeepGoing() throws Exception {
+    scratch.file("parent/BUILD",
+        "sh_library(name = 'a', deps = ['//child:b'])");
+    scratch.file("child/BUILD",
+        "sh_library(name = 'b')",
+        "undefined_symbol");
+    scratch.file("okay/BUILD",
+        "sh_binary(name = 'okay', srcs = ['okay.sh'])");
+    useConfiguration("--experimental_action_listener=//parent:a");
+    reporter.removeHandler(failFastHandler);
+    try {
+      update(defaultFlags().with(Flag.KEEP_GOING), "//okay");
+    } catch (LoadingFailedException ignored) {
+      // In the legacy case, we get a loading exception even with keep going. Why?
+    }
+    assertContainsEventWithFrequency("name 'undefined_symbol' is not defined", 1);
+    assertContainsEventWithFrequency(
+        "Target '//child:b' contains an error and its package is in error and referenced "
+        + "by '//parent:a'", 1);
+  }
+
+  @Test
+  public void testTopLevelTargetsAreTrimmedWithDynamicConfigurations() throws Exception {
+    scratch.file("foo/BUILD",
+        "sh_library(name='x', ",
+        "        srcs=['x.sh'])");
+    useConfiguration("--experimental_dynamic_configs");
+    AnalysisResult res = update("//foo:x");
+    ConfiguredTarget topLevelTarget = Iterables.getOnlyElement(res.getTargetsToBuild());
+    assertThat(topLevelTarget.getConfiguration().getAllFragments().keySet()).containsExactly(
+        ruleClassProvider.getUniversalFragment());
+  }
+
   /** Runs the same test with the reduced loading phase. */
   @TestSpec(size = Suite.SMALL_TESTS)
   @RunWith(JUnit4.class)
@@ -1143,6 +1243,16 @@ public class BuildViewTest extends BuildViewTestBase {
     @Override
     protected FlagBuilder defaultFlags() {
       return super.defaultFlags().with(Flag.SKYFRAME_LOADING_PHASE);
+    }
+  }
+
+  /** Runs the same test with dynamic configurations. */
+  @TestSpec(size = Suite.SMALL_TESTS)
+  @RunWith(JUnit4.class)
+  public static class WithDynamicConfigurations extends BuildViewTest {
+    @Override
+    protected FlagBuilder defaultFlags() {
+      return super.defaultFlags().with(Flag.DYNAMIC_CONFIGURATIONS);
     }
   }
 }

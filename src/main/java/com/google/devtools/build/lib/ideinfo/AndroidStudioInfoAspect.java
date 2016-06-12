@@ -41,7 +41,6 @@ import com.google.devtools.build.lib.analysis.RuleContext;
 import com.google.devtools.build.lib.analysis.TransitiveInfoCollection;
 import com.google.devtools.build.lib.analysis.actions.BinaryFileWriteAction;
 import com.google.devtools.build.lib.analysis.actions.CustomCommandLine;
-import com.google.devtools.build.lib.analysis.actions.FileWriteAction;
 import com.google.devtools.build.lib.analysis.actions.SpawnAction;
 import com.google.devtools.build.lib.analysis.config.BuildConfiguration;
 import com.google.devtools.build.lib.cmdline.Label;
@@ -52,6 +51,7 @@ import com.google.devtools.build.lib.ideinfo.androidstudio.AndroidStudioIdeInfo.
 import com.google.devtools.build.lib.ideinfo.androidstudio.AndroidStudioIdeInfo.CRuleIdeInfo;
 import com.google.devtools.build.lib.ideinfo.androidstudio.AndroidStudioIdeInfo.CToolchainIdeInfo;
 import com.google.devtools.build.lib.ideinfo.androidstudio.AndroidStudioIdeInfo.JavaRuleIdeInfo;
+import com.google.devtools.build.lib.ideinfo.androidstudio.AndroidStudioIdeInfo.JavaToolchainIdeInfo;
 import com.google.devtools.build.lib.ideinfo.androidstudio.AndroidStudioIdeInfo.LibraryArtifact;
 import com.google.devtools.build.lib.ideinfo.androidstudio.AndroidStudioIdeInfo.RuleIdeInfo;
 import com.google.devtools.build.lib.ideinfo.androidstudio.AndroidStudioIdeInfo.RuleIdeInfo.Kind;
@@ -75,12 +75,15 @@ import com.google.devtools.build.lib.rules.java.JavaGenJarsProvider;
 import com.google.devtools.build.lib.rules.java.JavaRuleOutputJarsProvider;
 import com.google.devtools.build.lib.rules.java.JavaRuleOutputJarsProvider.OutputJar;
 import com.google.devtools.build.lib.rules.java.JavaSourceInfoProvider;
+import com.google.devtools.build.lib.rules.java.JavaToolchainProvider;
 import com.google.devtools.build.lib.syntax.Type;
 import com.google.devtools.build.lib.vfs.PathFragment;
 import com.google.protobuf.MessageLite;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.List;
 
@@ -133,6 +136,8 @@ public class AndroidStudioInfoAspect extends NativeAspectClass implements Config
     builder.add(new PrerequisiteAttr("exports", BuildType.LABEL_LIST));
     // From android_test
     builder.add(new PrerequisiteAttr("binary_under_test", BuildType.LABEL));
+    // from java_* rules
+    builder.add(new PrerequisiteAttr(":java_toolchain", BuildType.LABEL));
     // from cc_* rules
     builder.add(new PrerequisiteAttr(":cc_toolchain", BuildType.LABEL));
 
@@ -329,13 +334,14 @@ public class AndroidStudioInfoAspect extends NativeAspectClass implements Config
     // Java rules
     JavaRuleOutputJarsProvider outputJarsProvider =
         base.getProvider(JavaRuleOutputJarsProvider.class);
-    if (outputJarsProvider != null) {
+    if (outputJarsProvider != null && !androidStudioInfoSemantics.suppressJavaRuleInfo(base)) {
       Artifact packageManifest = createPackageManifest(base, ruleContext);
       if (packageManifest != null) {
         providerBuilder.ideInfoFilesBuilder().add(packageManifest);
         ruleContext.registerAction(
-            makePackageManifestAction(ruleContext, packageManifest, getJavaSources(ruleContext))
-        );
+            makePackageManifestAction(ruleContext,
+                packageManifest,
+                getJavaSourcefForPackageManifest(ruleContext)));
       }
 
       JavaRuleIdeInfo javaRuleIdeInfo = makeJavaRuleIdeInfo(
@@ -344,26 +350,31 @@ public class AndroidStudioInfoAspect extends NativeAspectClass implements Config
     }
 
     // C rules
-    CppCompilationContext cppCompilationContext = base.getProvider(CppCompilationContext.class);
-    if (cppCompilationContext != null) {
-      CRuleIdeInfo cRuleIdeInfo =
-          makeCRuleIdeInfo(base, ruleContext, cppCompilationContext, ideResolveArtifacts);
-      outputBuilder.setCRuleIdeInfo(cRuleIdeInfo);
+    if (isCppRule(base)) {
+      CppCompilationContext cppCompilationContext = base.getProvider(CppCompilationContext.class);
+      if (cppCompilationContext != null) {
+        CRuleIdeInfo cRuleIdeInfo =
+            makeCRuleIdeInfo(base, ruleContext, cppCompilationContext, ideResolveArtifacts);
+        outputBuilder.setCRuleIdeInfo(cRuleIdeInfo);
+      }
     }
 
     // CCToolchain rule
-    CppConfiguration cppConfiguration = getCppConfiguration(base);
-    if (cppConfiguration != null) {
-      CToolchainIdeInfo cToolchainIdeInfo = makeCToolchainIdeInfo(ruleContext, cppConfiguration);
-      if (cToolchainIdeInfo != null) {
-        outputBuilder.setCToolchainIdeInfo(cToolchainIdeInfo);
+    CcToolchainProvider ccToolchainProvider = base.getProvider(CcToolchainProvider.class);
+    if (ccToolchainProvider != null) {
+      CppConfiguration cppConfiguration = ccToolchainProvider.getCppConfiguration();
+      if (cppConfiguration != null) {
+        CToolchainIdeInfo cToolchainIdeInfo = makeCToolchainIdeInfo(ruleContext, cppConfiguration);
+        if (cToolchainIdeInfo != null) {
+          outputBuilder.setCToolchainIdeInfo(cToolchainIdeInfo);
+        }
       }
     }
 
     // Android rules
     AndroidIdeInfoProvider androidIdeInfoProvider = base.getProvider(AndroidIdeInfoProvider.class);
     if (androidIdeInfoProvider != null) {
-      outputBuilder.setAndroidRuleIdeInfo(makeAndroidRuleIdeInfo(base,
+      outputBuilder.setAndroidRuleIdeInfo(makeAndroidRuleIdeInfo(
           androidIdeInfoProvider, dependenciesResult, ideResolveArtifacts));
     }
 
@@ -377,6 +388,17 @@ public class AndroidStudioInfoAspect extends NativeAspectClass implements Config
       }
       outputBuilder.setTestInfo(builder);
     }
+
+    // Java toolchain rule
+    JavaToolchainProvider javaToolchainProvider = base.getProvider(JavaToolchainProvider.class);
+    if (javaToolchainProvider != null) {
+      outputBuilder.setJavaToolchainIdeInfo(JavaToolchainIdeInfo.newBuilder()
+          .setSourceVersion(javaToolchainProvider.getSourceVersion())
+          .setTargetVersion(javaToolchainProvider.getTargetVersion()));
+    }
+
+    androidStudioInfoSemantics.augmentRuleInfo(
+        outputBuilder, base, ruleContext, ideResolveArtifacts);
 
     AndroidStudioInfoFilesProvider provider = providerBuilder.build();
 
@@ -394,9 +416,23 @@ public class AndroidStudioInfoAspect extends NativeAspectClass implements Config
     return provider;
   }
 
+  private boolean isCppRule(ConfiguredTarget base) {
+    String ruleClass = base.getTarget().getAssociatedRule().getRuleClass();
+    switch (ruleClass) {
+      case "cc_library":
+      case "cc_binary":
+      case "cc_test":
+      case "cc_inc_library:":
+        return true;
+      default:
+        // Fall through
+    }
+    return androidStudioInfoSemantics.checkForAdditionalCppRules(ruleClass);
+  }
+
   @Nullable private static Artifact createPackageManifest(ConfiguredTarget base,
       RuleContext ruleContext) {
-    Collection<Artifact> sourceFiles = getJavaSources(ruleContext);
+    Collection<Artifact> sourceFiles = getJavaSourcefForPackageManifest(ruleContext);
     if (sourceFiles.isEmpty()) {
       return null;
     }
@@ -432,11 +468,11 @@ public class AndroidStudioInfoAspect extends NativeAspectClass implements Config
       new Function<Artifact, String>() {
         @Override
         public String apply(Artifact artifact) {
-          ArtifactLocation location = makeArtifactLocation(artifact);
+          Root root = artifact.getRoot();
           return Joiner.on(",").join(
-              location.getRootExecutionPathFragment(),
-              location.getRelativePath(),
-              location.getRootPath()
+              root.getExecPath().toString(),
+              artifact.getRootRelativePath().toString(),
+              root.getPath().toString() // Remove me once we remove ArtifactLocation root
           );
         }
       };
@@ -455,7 +491,6 @@ public class AndroidStudioInfoAspect extends NativeAspectClass implements Config
   }
 
   private static AndroidRuleIdeInfo makeAndroidRuleIdeInfo(
-      ConfiguredTarget base,
       AndroidIdeInfoProvider androidIdeInfoProvider,
       DependenciesResult dependenciesResult,
       NestedSetBuilder<Artifact> ideResolveArtifacts) {
@@ -498,6 +533,15 @@ public class AndroidStudioInfoAspect extends NativeAspectClass implements Config
       builder.setLegacyResources(dependenciesResult.resources.toString());
     }
 
+    OutputJar resourceJar = androidIdeInfoProvider.getResourceJar();
+    if (resourceJar != null) {
+      LibraryArtifact resourceLibraryArtifact = makeLibraryArtifact(ideResolveArtifacts,
+          resourceJar.getClassJar(), resourceJar.getIJar(), resourceJar.getSrcJar());
+      if (resourceLibraryArtifact != null) {
+        builder.setResourceJar(resourceLibraryArtifact);
+      }
+    }
+
     return builder.build();
   }
 
@@ -515,16 +559,21 @@ public class AndroidStudioInfoAspect extends NativeAspectClass implements Config
         /*makeExecutable =*/ false);
   }
 
-  private static FileWriteAction makeProtoTextWriteAction(
+  private static BinaryFileWriteAction makeProtoTextWriteAction(
       ActionOwner actionOwner, final MessageLite message, Artifact artifact) {
-    return new FileWriteAction(
+    return new BinaryFileWriteAction(
         actionOwner,
         artifact,
-        message.toString(),
+        new ByteSource() {
+          @Override
+          public InputStream openStream() throws IOException {
+            return new ByteArrayInputStream(message.toString().getBytes(StandardCharsets.UTF_8));
+          }
+        },
         /*makeExecutable =*/ false);
   }
 
-  protected static ArtifactLocation makeArtifactLocation(Artifact artifact) {
+  public static ArtifactLocation makeArtifactLocation(Artifact artifact) {
     return makeArtifactLocation(artifact.getRoot(), artifact.getRootRelativePath());
   }
 
@@ -552,7 +601,7 @@ public class AndroidStudioInfoAspect extends NativeAspectClass implements Config
         .build();
   }
 
-  private static JavaRuleIdeInfo makeJavaRuleIdeInfo(
+  private JavaRuleIdeInfo makeJavaRuleIdeInfo(
       ConfiguredTarget base,
       RuleContext ruleContext,
       JavaRuleOutputJarsProvider outputJarsProvider,
@@ -597,11 +646,6 @@ public class AndroidStudioInfoAspect extends NativeAspectClass implements Config
       builder.addSource(makeArtifactLocation(sourceFile));
     }
 
-    Collection<Artifact> exportedHeaderFiles = getExportedHeaders(ruleContext);
-    for (Artifact exportedHeaderFile : exportedHeaderFiles) {
-      builder.addExportedHeader(makeArtifactLocation(exportedHeaderFile));
-    }
-
     builder.addAllRuleInclude(getIncludes(ruleContext));
     builder.addAllRuleDefine(getDefines(ruleContext));
     builder.addAllRuleCopt(getCopts(ruleContext));
@@ -627,8 +671,8 @@ public class AndroidStudioInfoAspect extends NativeAspectClass implements Config
       builder.addTransitiveSystemIncludeDirectory(pathFragment.getSafePathString());
     }
 
-    androidStudioInfoSemantics
-        .updateCppRuleInfo(builder, base, ruleContext, cppCompilationContext, ideResolveArtifacts);
+    androidStudioInfoSemantics.augmentCppRuleInfo(
+        builder, base, ruleContext, cppCompilationContext, ideResolveArtifacts);
 
     return builder.build();
   }
@@ -724,11 +768,11 @@ public class AndroidStudioInfoAspect extends NativeAspectClass implements Config
     }
   }
 
-  private static Collection<Artifact> getJavaSources(RuleContext ruleContext) {
+  private static Collection<Artifact> getJavaSourcefForPackageManifest(RuleContext ruleContext) {
     Collection<Artifact> srcs = getSources(ruleContext);
     List<Artifact> javaSrcs = Lists.newArrayList();
     for (Artifact src : srcs) {
-      if (src.getRootRelativePathString().endsWith(".java")) {
+      if (src.isSourceArtifact() && src.getRootRelativePathString().endsWith(".java")) {
         javaSrcs.add(src);
       }
     }
@@ -737,10 +781,6 @@ public class AndroidStudioInfoAspect extends NativeAspectClass implements Config
 
   private static Collection<Artifact> getSources(RuleContext ruleContext) {
     return getTargetListAttribute(ruleContext, "srcs");
-  }
-
-  private static Collection<Artifact> getExportedHeaders(RuleContext ruleContext) {
-    return getTargetListAttribute(ruleContext, "hdrs");
   }
 
   private static Collection<String> getIncludes(RuleContext ruleContext) {
@@ -784,12 +824,6 @@ public class AndroidStudioInfoAspect extends NativeAspectClass implements Config
     if (!artifact.isSourceArtifact()) {
       ideResolveArtifacts.add(artifact);
     }
-  }
-
-  @Nullable
-  private static CppConfiguration getCppConfiguration(ConfiguredTarget base) {
-    CcToolchainProvider ccToolchainProvider = base.getProvider(CcToolchainProvider.class);
-    return ccToolchainProvider != null ? ccToolchainProvider.getCppConfiguration() : null;
   }
 
   @Deprecated

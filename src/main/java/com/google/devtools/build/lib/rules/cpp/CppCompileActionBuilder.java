@@ -61,6 +61,7 @@ public class CppCompileActionBuilder {
   private final NestedSetBuilder<Artifact> mandatoryInputsBuilder;
   private Artifact optionalSourceFile;
   private Artifact outputFile;
+  private Artifact dwoFile;
   private PathFragment tempOutputFile;
   private DotdFile dotdFile;
   private Artifact gcnoFile;
@@ -71,8 +72,7 @@ public class CppCompileActionBuilder {
   private final List<Pattern> nocopts = new ArrayList<>();
   private AnalysisEnvironment analysisEnvironment;
   private ImmutableList<PathFragment> extraSystemIncludePrefixes = ImmutableList.of();
-  private String fdoBuildStamp;
-  private boolean usePic; 
+  private boolean usePic;
   private SpecialInputsHandler specialInputsHandler = CppCompileAction.VOID_SPECIAL_INPUTS_HANDLER;
   private UUID actionClassId = GUID;
   private Class<? extends CppCompileActionContext> actionContext;
@@ -128,6 +128,7 @@ public class CppCompileActionBuilder {
         .addTransitive(other.mandatoryInputsBuilder.build());
     this.optionalSourceFile = other.optionalSourceFile;
     this.outputFile = other.outputFile;
+    this.dwoFile = other.dwoFile;
     this.tempOutputFile = other.tempOutputFile;
     this.dotdFile = other.dotdFile;
     this.gcnoFile = other.gcnoFile;
@@ -142,7 +143,6 @@ public class CppCompileActionBuilder {
     this.actionClassId = other.actionClassId;
     this.actionContext = other.actionContext;
     this.cppConfiguration = other.cppConfiguration;
-    this.fdoBuildStamp = other.fdoBuildStamp;
     this.usePic = other.usePic;
     this.lipoScannableMap = other.lipoScannableMap;
     this.ruleContext = other.ruleContext;
@@ -163,25 +163,6 @@ public class CppCompileActionBuilder {
 
   public NestedSet<Artifact> getMandatoryInputs() {
     return mandatoryInputsBuilder.build();
-  }
-
-  /**
-   * Returns the .dwo output file that matches the specified .o output file. If Fission mode
-   * isn't enabled for this build, this is null (we don't produce .dwo files in that case).
-   */
-  private static Artifact getDwoFile(RuleContext ruleContext, Artifact outputFile,
-      CppConfiguration cppConfiguration) {
-
-    // Only create .dwo's for .o compilations (i.e. not .ii or .S).
-    boolean isObjectOutput = CppFileTypes.OBJECT_FILE.matches(outputFile.getExecPath())
-        || CppFileTypes.PIC_OBJECT_FILE.matches(outputFile.getExecPath());
-
-    // Note configurations can be null for tests.
-    if (cppConfiguration != null && cppConfiguration.useFission() && isObjectOutput) {
-      return ruleContext.getRelatedArtifact(outputFile.getRootRelativePath(), ".dwo");
-    } else {
-      return null;
-    }
   }
 
   private static Predicate<String> getNocoptPredicate(Collection<Pattern> patterns) {
@@ -284,13 +265,25 @@ public class CppCompileActionBuilder {
     
     // Copying the collections is needed to make the builder reusable.
     if (fake) {
-      return new FakeCppCompileAction(owner, ImmutableList.copyOf(features), featureConfiguration,
-          variables, sourceFile, shouldScanIncludes, sourceLabel,
-          realMandatoryInputsBuilder.build(), outputFile,
-          tempOutputFile, dotdFile, configuration, cppConfiguration, context, actionContext,
+      return new FakeCppCompileAction(
+          owner,
+          ImmutableList.copyOf(features),
+          featureConfiguration,
+          variables,
+          sourceFile,
+          shouldScanIncludes,
+          sourceLabel,
+          realMandatoryInputsBuilder.build(),
+          outputFile,
+          tempOutputFile,
+          dotdFile,
+          configuration,
+          cppConfiguration,
+          context,
+          actionContext,
           ImmutableList.copyOf(copts),
-          getNocoptPredicate(nocopts), fdoBuildStamp, ruleContext,
-          usePic);
+          getNocoptPredicate(nocopts),
+          ruleContext);
     } else {
       NestedSet<Artifact> realMandatoryInputs = realMandatoryInputsBuilder.build();
 
@@ -306,7 +299,7 @@ public class CppCompileActionBuilder {
           outputFile,
           dotdFile,
           gcnoFile,
-          getDwoFile(ruleContext, outputFile, cppConfiguration),
+          dwoFile,
           optionalSourceFile,
           configuration,
           cppConfiguration,
@@ -314,11 +307,9 @@ public class CppCompileActionBuilder {
           actionContext,
           ImmutableList.copyOf(copts),
           getNocoptPredicate(nocopts),
-          fdoBuildStamp,
           specialInputsHandler,
           getLipoScannables(realMandatoryInputs),
           actionClassId,
-          usePic,
           executionRequirements,
           getActionName(),
           ruleContext);
@@ -390,6 +381,15 @@ public class CppCompileActionBuilder {
     return this;
   }
 
+  public CppCompileActionBuilder setDwoFile(Artifact dwoFile) {
+    this.dwoFile = dwoFile;
+    return this;
+  }
+
+  Artifact getOutputFile() {
+    return outputFile;
+  }
+
   /**
    * The temp output file is not an artifact, since it does not appear in the outputs of the
    * action.
@@ -426,6 +426,10 @@ public class CppCompileActionBuilder {
     return this;
   }
 
+  public DotdFile getDotdFile() {
+    return this.dotdFile;
+  }
+
   public CppCompileActionBuilder setGcnoFile(Artifact gcnoFile) {
     this.gcnoFile = gcnoFile;
     return this;
@@ -453,11 +457,6 @@ public class CppCompileActionBuilder {
 
   public CppCompileActionBuilder setContext(CppCompilationContext context) {
     this.context = context;
-    return this;
-  }
-
-  public CppCompileActionBuilder setFdoBuildStamp(String fdoBuildStamp) {
-    this.fdoBuildStamp = fdoBuildStamp;
     return this;
   }
 

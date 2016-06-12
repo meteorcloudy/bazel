@@ -14,9 +14,11 @@
 
 package com.google.devtools.build.lib.rules.cpp;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.devtools.build.lib.actions.Action;
@@ -31,6 +33,7 @@ import com.google.devtools.build.lib.analysis.util.ActionTester.ActionCombinatio
 import com.google.devtools.build.lib.analysis.util.BuildViewTestCase;
 import com.google.devtools.build.lib.collect.nestedset.NestedSetBuilder;
 import com.google.devtools.build.lib.collect.nestedset.Order;
+import com.google.devtools.build.lib.rules.cpp.CcToolchainFeatures.FeatureConfiguration;
 import com.google.devtools.build.lib.rules.cpp.CppLinkAction.Builder;
 import com.google.devtools.build.lib.rules.cpp.Link.LinkStaticness;
 import com.google.devtools.build.lib.rules.cpp.Link.LinkTargetType;
@@ -65,6 +68,62 @@ public class CppLinkActionTest extends BuildViewTestCase {
         }, masterConfig);
   }
 
+  @Test
+  public void testToolchainFeatureFlags() throws Exception {
+    FeatureConfiguration featureConfiguration =
+        CcToolchainFeaturesTest.buildFeatures(
+                "feature {",
+                "   name: 'a'",
+                "   flag_set {",
+                "      action: '" + Link.LinkTargetType.EXECUTABLE.getActionName() + "'",
+                "      flag_group { flag: 'some_flag' }",
+                "   }",
+                "}",
+                "action_config {",
+                "   config_name: '" + Link.LinkTargetType.EXECUTABLE.getActionName() + "'",
+                "   action_name: '" + Link.LinkTargetType.EXECUTABLE.getActionName() + "'",
+                "   tool {",
+                "      tool_path: 'toolchain/mock_tool'",
+                "   }",
+                "}")
+            .getFeatureConfiguration("a", Link.LinkTargetType.EXECUTABLE.getActionName());
+
+    CppLinkAction linkAction =
+        createLinkBuilder(
+                Link.LinkTargetType.EXECUTABLE,
+                "out",
+                ImmutableList.<Artifact>of(),
+                ImmutableList.<LibraryToLink>of(),
+                featureConfiguration)
+            .build();
+    assertThat(Joiner.on(" ").join(linkAction.getArgv())).contains("mock_tool");
+    assertThat(linkAction.getArgv()).contains("some_flag");
+  }
+
+  @Test
+  public void testToolchainFeatureEnv() throws Exception {
+    FeatureConfiguration featureConfiguration =
+        CcToolchainFeaturesTest.buildFeatures(
+                "feature {",
+                "   name: 'a'",
+                "   env_set {",
+                "      action: '" + Link.LinkTargetType.EXECUTABLE.getActionName() + "'",
+                "      env_entry { key: 'foo', value: 'bar' }",
+                "   }",
+                "}")
+            .getFeatureConfiguration("a");
+
+    CppLinkAction linkAction =
+        createLinkBuilder(
+                Link.LinkTargetType.EXECUTABLE,
+                "out",
+                ImmutableList.<Artifact>of(),
+                ImmutableList.<LibraryToLink>of(),
+                featureConfiguration)
+            .build();
+    assertThat(linkAction.getEnvironment()).containsEntry("foo", "bar");
+  }
+  
   /**
    * This mainly checks that non-static links don't have identical keys. Many options are only
    * allowed on non-static links, and we test several of them here.
@@ -100,6 +159,8 @@ public class CppLinkActionTest extends BuildViewTestCase {
             builder.setWholeArchive((i & 16) == 0);
             builder.setFake((i & 32) == 0);
             builder.setRuntimeSolibDir((i & 64) == 0 ? null : new PathFragment("so1"));
+            builder.setFeatureConfiguration(new FeatureConfiguration());
+
             return builder.build();
           }
         });
@@ -188,11 +249,15 @@ public class CppLinkActionTest extends BuildViewTestCase {
       objects.add(getOutputArtifact("object" + i + ".o"));
     }
 
-    CppLinkAction linkAction = createLinkBuilder(
-        Link.LinkTargetType.EXECUTABLE, "binary2", objects.build(),
-        ImmutableList.<LibraryToLink>of())
-        .setFake(true)
-        .build();
+    CppLinkAction linkAction =
+        createLinkBuilder(
+                Link.LinkTargetType.EXECUTABLE,
+                "binary2",
+                objects.build(),
+                ImmutableList.<LibraryToLink>of(),
+                new FeatureConfiguration())
+            .setFake(true)
+            .build();
 
     // Ensure that minima are enforced.
     ResourceSet resources = linkAction.estimateResourceConsumptionLocal();
@@ -215,22 +280,31 @@ public class CppLinkActionTest extends BuildViewTestCase {
     assertTrue(resources.getIoUsage() == CppLinkAction.MIN_STATIC_LINK_RESOURCES.getIoUsage()
       || resources.getIoUsage() == scaledSet.getIoUsage());
   }
-  private Builder createLinkBuilder(Link.LinkTargetType type, String outputPath,
-      Iterable<Artifact> nonLibraryInputs, ImmutableList<LibraryToLink> libraryInputs)
+
+  private Builder createLinkBuilder(
+      Link.LinkTargetType type,
+      String outputPath,
+      Iterable<Artifact> nonLibraryInputs,
+      ImmutableList<LibraryToLink> libraryInputs,
+      FeatureConfiguration featureConfiguration)
       throws Exception {
     RuleContext ruleContext = createDummyRuleContext();
-    Builder builder = new CppLinkAction.Builder(
-        ruleContext,
-        new Artifact(new PathFragment(outputPath), getTargetConfiguration().getBinDirectory()),
-        ruleContext.getConfiguration(),
-        null)
-        .addNonLibraryInputs(nonLibraryInputs)
-        .addLibraries(NestedSetBuilder.wrap(Order.LINK_ORDER, libraryInputs))
-        .setLinkType(type)
-        .setCrosstoolInputs(NestedSetBuilder.<Artifact>emptySet(Order.STABLE_ORDER))
-        .setLinkStaticness(type.isStaticLibraryLink()
-            ? LinkStaticness.FULLY_STATIC
-            : LinkStaticness.MOSTLY_STATIC);
+    Builder builder =
+        new CppLinkAction.Builder(
+                ruleContext,
+                new Artifact(
+                    new PathFragment(outputPath), getTargetConfiguration().getBinDirectory()),
+                ruleContext.getConfiguration(),
+                null)
+            .addNonLibraryInputs(nonLibraryInputs)
+            .addLibraries(NestedSetBuilder.wrap(Order.LINK_ORDER, libraryInputs))
+            .setLinkType(type)
+            .setCrosstoolInputs(NestedSetBuilder.<Artifact>emptySet(Order.STABLE_ORDER))
+            .setLinkStaticness(
+                type.isStaticLibraryLink()
+                    ? LinkStaticness.FULLY_STATIC
+                    : LinkStaticness.MOSTLY_STATIC)
+            .setFeatureConfiguration(featureConfiguration);
     return builder;
   }
 

@@ -91,8 +91,10 @@ public abstract class ConfigurationTestCase extends FoundationTestCase {
     PathPackageLocator pkgLocator =
         new PathPackageLocator(outputBase, ImmutableList.of(rootDirectory));
     final PackageFactory pkgFactory;
-    BlazeDirectories directories = new BlazeDirectories(outputBase, outputBase, rootDirectory);
-    pkgFactory = new PackageFactory(ruleClassProvider);
+    BlazeDirectories directories = new BlazeDirectories(outputBase, outputBase, rootDirectory,
+        TestConstants.PRODUCT_NAME);
+    pkgFactory = TestConstants.PACKAGE_FACTORY_FACTORY_FOR_TESTING.create(
+        ruleClassProvider, scratch.getFileSystem());
     AnalysisTestUtil.DummyWorkspaceStatusActionFactory workspaceStatusActionFactory =
         new AnalysisTestUtil.DummyWorkspaceStatusActionFactory(directories);
     AnalysisMock analysisMock = getAnalysisMock();
@@ -109,7 +111,8 @@ public abstract class ConfigurationTestCase extends FoundationTestCase {
             Preprocessor.Factory.Supplier.NullSupplier.INSTANCE,
             analysisMock.getSkyFunctions(),
             ImmutableList.<PrecomputedValue.Injected>of(),
-            ImmutableList.<SkyValueDirtinessChecker>of());
+            ImmutableList.<SkyValueDirtinessChecker>of(),
+            TestConstants.PRODUCT_NAME);
 
     skyframeExecutor.preparePackageLoading(
         pkgLocator,

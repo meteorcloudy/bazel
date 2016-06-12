@@ -57,6 +57,7 @@ import javax.annotation.Nullable;
  */
 @Immutable
 public final class LinkCommandLine extends CommandLine {
+  private final String actionName;
   private final BuildConfiguration configuration;
   private final CppConfiguration cppConfiguration;
   private final ActionOwner owner;
@@ -85,14 +86,8 @@ public final class LinkCommandLine extends CommandLine {
   @Nullable private final Artifact paramFile;
   @Nullable private final Artifact interfaceSoBuilder;
 
-
-  /**
-   * A string constant for the c++ link action, used to access the feature
-   * configuration.
-   */
-  public static final String CPP_LINK = "c++-link";
-
   private LinkCommandLine(
+      String actionName,
       BuildConfiguration configuration,
       ActionOwner owner,
       Artifact output,
@@ -140,6 +135,7 @@ public final class LinkCommandLine extends CommandLine {
           "the need whole archive flag must be false for static links");
     }
 
+    this.actionName = actionName;
     this.configuration = Preconditions.checkNotNull(configuration);
     this.cppConfiguration = configuration.getFragment(CppConfiguration.class);
     this.variables = variables;
@@ -385,45 +381,61 @@ public final class LinkCommandLine extends CommandLine {
    */
   public List<String> getRawLinkArgv() {
     List<String> argv = new ArrayList<>();
-    switch (linkTargetType) {
-      case EXECUTABLE:
-        addCppArgv(argv);
-        break;
 
-      case DYNAMIC_LIBRARY:
-        if (interfaceOutput != null) {
-          argv.add(configuration.getShExecutable().getPathString());
-          argv.add("-c");
-          argv.add("build_iface_so=\"$0\"; impl=\"$1\"; iface=\"$2\"; cmd=\"$3\"; shift 3; "
-              + "\"$cmd\" \"$@\" && \"$build_iface_so\" \"$impl\" \"$iface\"");
-          argv.add(interfaceSoBuilder.getExecPathString());
+    // We create the command line from the feature configuration.  If no configuration is present,
+    // we use hard-coded flags.
+    if (featureConfiguration.actionIsConfigured(actionName)) {
+      argv.add(featureConfiguration
+            .getToolForAction(actionName)
+            .getToolPath(cppConfiguration.getCrosstoolTopPathFragment())
+            .getPathString());
+      argv.addAll(featureConfiguration.getCommandLine(actionName, variables));
+    } else {
+      // TODO(b/28928350): In order to simplify the extraction of this logic into the linux
+      // crosstool, this switch statement should be reframed as a group of action_configs and
+      // features.  Until they can be migrated into the linux crosstool, those features should
+      // be added to CppConfiguration.addLegacyFeatures().
+      switch (linkTargetType) {
+        case EXECUTABLE:
+          addCppArgv(argv);
+          break;
+
+        case DYNAMIC_LIBRARY:
+          if (interfaceOutput != null) {
+            argv.add(configuration.getShExecutable().getPathString());
+            argv.add("-c");
+            argv.add(
+                "build_iface_so=\"$0\"; impl=\"$1\"; iface=\"$2\"; cmd=\"$3\"; shift 3; "
+                    + "\"$cmd\" \"$@\" && \"$build_iface_so\" \"$impl\" \"$iface\"");
+            argv.add(interfaceSoBuilder.getExecPathString());
+            argv.add(output.getExecPathString());
+            argv.add(interfaceOutput.getExecPathString());
+          }
+          addCppArgv(argv);
+          // -pie is not compatible with -shared and should be
+          // removed when the latter is part of the link command. Should we need to further
+          // distinguish between shared libraries and executables, we could add additional
+          // command line / CROSSTOOL flags that distinguish them. But as long as this is
+          // the only relevant use case we're just special-casing it here.
+          Iterables.removeIf(argv, Predicates.equalTo("-pie"));
+          break;
+
+        case STATIC_LIBRARY:
+        case PIC_STATIC_LIBRARY:
+        case ALWAYS_LINK_STATIC_LIBRARY:
+        case ALWAYS_LINK_PIC_STATIC_LIBRARY:
+          // The static library link command follows this template:
+          // ar <cmd> <output_archive> <input_files...>
+          argv.add(cppConfiguration.getArExecutable().getPathString());
+          argv.addAll(
+              cppConfiguration.getArFlags(cppConfiguration.archiveType() == Link.ArchiveType.THIN));
           argv.add(output.getExecPathString());
-          argv.add(interfaceOutput.getExecPathString());
-        }
-        addCppArgv(argv);
-        // -pie is not compatible with -shared and should be
-        // removed when the latter is part of the link command. Should we need to further
-        // distinguish between shared libraries and executables, we could add additional
-        // command line / CROSSTOOL flags that distinguish them. But as long as this is
-        // the only relevant use case we're just special-casing it here.
-        Iterables.removeIf(argv, Predicates.equalTo("-pie"));
-        break;
+          addInputFileLinkOptions(argv, /*needWholeArchive=*/ false);
+          break;
 
-      case STATIC_LIBRARY:
-      case PIC_STATIC_LIBRARY:
-      case ALWAYS_LINK_STATIC_LIBRARY:
-      case ALWAYS_LINK_PIC_STATIC_LIBRARY:
-        // The static library link command follows this template:
-        // ar <cmd> <output_archive> <input_files...>
-        argv.add(cppConfiguration.getArExecutable().getPathString());
-        argv.addAll(
-            cppConfiguration.getArFlags(cppConfiguration.archiveType() == Link.ArchiveType.THIN));
-        argv.add(output.getExecPathString());
-        addInputFileLinkOptions(argv, /*needWholeArchive=*/false);
-        break;
-
-      default:
-        throw new IllegalArgumentException();
+        default:
+          throw new IllegalArgumentException();
+      }
     }
 
     // Fission mode: debug info is in .dwo files instead of .o files. Inform the linker of this.
@@ -691,7 +703,7 @@ public final class LinkCommandLine extends CommandLine {
     argv.addAll(cppConfiguration.getLinkOptions());
     // The feature config can be null for tests.
     if (featureConfiguration != null) {
-      argv.addAll(featureConfiguration.getCommandLine(CPP_LINK, variables));
+      argv.addAll(featureConfiguration.getCommandLine(actionName, variables));
     }
   }
 
@@ -1001,6 +1013,7 @@ public final class LinkCommandLine extends CommandLine {
     private final ActionOwner owner;
     @Nullable private final RuleContext ruleContext;
 
+    private String actionName;
     @Nullable private Artifact output;
     @Nullable private Artifact interfaceOutput;
     @Nullable private Artifact symbolCountsOutput;
@@ -1063,6 +1076,7 @@ public final class LinkCommandLine extends CommandLine {
         variables = buildVariables.build();
       }
       return new LinkCommandLine(
+          actionName,
           configuration,
           owner,
           output,
@@ -1087,6 +1101,14 @@ public final class LinkCommandLine extends CommandLine {
           interfaceSoBuilder,
           variables,
           featureConfiguration);
+    }
+
+    /**
+     * Sets the name of the action for the purposes of querying the crosstool.
+     */
+    public Builder setActionName(String actionName) {
+      this.actionName = actionName;
+      return this;
     }
 
     /**

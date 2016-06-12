@@ -93,6 +93,7 @@ public abstract class AnalysisTestCase extends FoundationTestCase {
   public enum Flag {
     KEEP_GOING,
     SKYFRAME_LOADING_PHASE,
+    DYNAMIC_CONFIGURATIONS,
   }
 
   /** Helper class to make it easy to enable and disable flags. */
@@ -138,7 +139,8 @@ public abstract class AnalysisTestCase extends FoundationTestCase {
   public final void createMocks() throws Exception {
     analysisMock = AnalysisMock.get();
     pkgLocator = new PathPackageLocator(outputBase, ImmutableList.of(rootDirectory));
-    directories = new BlazeDirectories(outputBase, outputBase, rootDirectory);
+    directories = new BlazeDirectories(outputBase, outputBase, rootDirectory,
+        TestConstants.PRODUCT_NAME);
     workspaceStatusActionFactory =
         new AnalysisTestUtil.DummyWorkspaceStatusActionFactory(directories);
 
@@ -156,7 +158,8 @@ public abstract class AnalysisTestCase extends FoundationTestCase {
   protected void useRuleClassProvider(ConfiguredRuleClassProvider ruleClassProvider)
       throws Exception {
     this.ruleClassProvider = ruleClassProvider;
-    PackageFactory pkgFactory = new PackageFactory(ruleClassProvider);
+    PackageFactory pkgFactory = TestConstants.PACKAGE_FACTORY_FACTORY_FOR_TESTING.create(
+        ruleClassProvider, scratch.getFileSystem());
     BinTools binTools = BinTools.forUnitTesting(directories, TestConstants.EMBEDDED_TOOLS);
     skyframeExecutor =
         SequencedSkyframeExecutor.create(
@@ -170,7 +173,8 @@ public abstract class AnalysisTestCase extends FoundationTestCase {
             Preprocessor.Factory.Supplier.NullSupplier.INSTANCE,
             analysisMock.getSkyFunctions(),
             getPrecomputedValues(),
-            ImmutableList.<SkyValueDirtinessChecker>of());
+            ImmutableList.<SkyValueDirtinessChecker>of(),
+            TestConstants.PRODUCT_NAME);
     skyframeExecutor.preparePackageLoading(
         pkgLocator,
         Options.getDefaults(PackageCacheOptions.class).defaultVisibility,
@@ -212,6 +216,9 @@ public abstract class AnalysisTestCase extends FoundationTestCase {
         ruleClassProvider.getConfigurationOptions()));
     optionsParser.parse(new String[] {"--default_visibility=public" });
     optionsParser.parse(args);
+    if (defaultFlags().contains(Flag.DYNAMIC_CONFIGURATIONS)) {
+      optionsParser.parse("--experimental_dynamic_configs");
+    }
 
     InvocationPolicyEnforcer optionsPolicyEnforcer =
         new InvocationPolicyEnforcer(TestConstants.TEST_INVOCATION_POLICY);
@@ -409,7 +416,7 @@ public abstract class AnalysisTestCase extends FoundationTestCase {
   }
 
   /**
-   * Makes {@code rules} available in tests, in addition to all the rules available to Blaze at 
+   * Makes {@code rules} available in tests, in addition to all the rules available to Blaze at
    * running time (e.g., java_library).
    */
   protected final void setRulesAvailableInTests(RuleDefinition... rules) throws Exception {

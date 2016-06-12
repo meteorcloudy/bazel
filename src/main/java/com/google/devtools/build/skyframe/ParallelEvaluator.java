@@ -30,6 +30,7 @@ import com.google.devtools.build.lib.collect.nestedset.NestedSetBuilder;
 import com.google.devtools.build.lib.collect.nestedset.NestedSetVisitor;
 import com.google.devtools.build.lib.concurrent.AbstractQueueVisitor;
 import com.google.devtools.build.lib.concurrent.ErrorClassifier;
+import com.google.devtools.build.lib.concurrent.ErrorHandler;
 import com.google.devtools.build.lib.concurrent.ForkJoinQuiescingExecutor;
 import com.google.devtools.build.lib.concurrent.QuiescingExecutor;
 import com.google.devtools.build.lib.concurrent.ThreadSafety.ThreadCompatible;
@@ -39,6 +40,7 @@ import com.google.devtools.build.lib.events.StoredEventHandler;
 import com.google.devtools.build.lib.profiler.Profiler;
 import com.google.devtools.build.lib.profiler.ProfilerTask;
 import com.google.devtools.build.lib.util.BlazeClock;
+import com.google.devtools.build.lib.util.GroupedList;
 import com.google.devtools.build.lib.util.GroupedList.GroupedListHelper;
 import com.google.devtools.build.lib.util.Preconditions;
 import com.google.devtools.build.skyframe.EvaluationProgressReceiver.EvaluationState;
@@ -146,6 +148,7 @@ public final class ParallelEvaluator implements Evaluator {
   private final DirtyKeyTracker dirtyKeyTracker;
   private final Receiver<Collection<SkyKey>> inflightKeysReceiver;
   private final EventFilter storedEventFilter;
+  private final ErrorHandler errorHandler;
 
   public ParallelEvaluator(
       ProcessableGraph graph,
@@ -173,6 +176,7 @@ public final class ParallelEvaluator implements Evaluator {
         new NestedSetVisitor<>(new NestedSetEventReceiver(reporter), emittedEventState);
     this.storedEventFilter = storedEventFilter;
     this.forkJoinPool = null;
+    this.errorHandler = ErrorHandler.NullHandler.INSTANCE;
   }
 
   public ParallelEvaluator(
@@ -187,7 +191,8 @@ public final class ParallelEvaluator implements Evaluator {
       @Nullable EvaluationProgressReceiver progressReceiver,
       DirtyKeyTracker dirtyKeyTracker,
       Receiver<Collection<SkyKey>> inflightKeysReceiver,
-      ForkJoinPool forkJoinPool) {
+      ForkJoinPool forkJoinPool,
+      ErrorHandler errorHandler) {
     this.graph = graph;
     this.skyFunctions = skyFunctions;
     this.graphVersion = graphVersion;
@@ -203,6 +208,7 @@ public final class ParallelEvaluator implements Evaluator {
         new NestedSetVisitor<>(new NestedSetEventReceiver(reporter), emittedEventState);
     this.storedEventFilter = storedEventFilter;
     this.forkJoinPool = Preconditions.checkNotNull(forkJoinPool);
+    this.errorHandler = errorHandler;
   }
 
   /**
@@ -231,6 +237,7 @@ public final class ParallelEvaluator implements Evaluator {
     private boolean building = true;
     private SkyKey depErrorKey = null;
     private final SkyKey skyKey;
+    private final Set<SkyKey> oldDeps;
     private SkyValue value = null;
     private ErrorInfo errorInfo = null;
     private final Map<SkyKey, ValueWithMetadata> bubbleErrorInfo;
@@ -268,25 +275,38 @@ public final class ParallelEvaluator implements Evaluator {
           }
         };
 
-    private SkyFunctionEnvironment(SkyKey skyKey, Set<SkyKey> directDeps, ValueVisitor visitor) {
-      this(skyKey, directDeps, null, visitor);
+    private SkyFunctionEnvironment(
+        SkyKey skyKey, GroupedList<SkyKey> directDeps, Set<SkyKey> oldDeps, ValueVisitor visitor) {
+      this(skyKey, directDeps, null, oldDeps, visitor);
     }
 
-    private SkyFunctionEnvironment(SkyKey skyKey, Set<SkyKey> directDeps,
-        @Nullable Map<SkyKey, ValueWithMetadata> bubbleErrorInfo, ValueVisitor visitor) {
+    private SkyFunctionEnvironment(
+        SkyKey skyKey,
+        GroupedList<SkyKey> directDeps,
+        @Nullable Map<SkyKey, ValueWithMetadata> bubbleErrorInfo,
+        Set<SkyKey> oldDeps,
+        ValueVisitor visitor) {
       this.skyKey = skyKey;
+      this.oldDeps = oldDeps;
       this.directDeps = Collections.unmodifiableMap(
           batchPrefetch(directDeps, /*assertDone=*/bubbleErrorInfo == null, skyKey));
       this.bubbleErrorInfo = bubbleErrorInfo;
       this.visitor = visitor;
+      Preconditions.checkState(
+          !this.directDeps.containsKey(ErrorTransienceValue.KEY),
+          "%s cannot have a dep on ErrorTransienceValue during building",
+          skyKey);
     }
 
     private Map<SkyKey, NodeEntry> batchPrefetch(
-        Set<SkyKey> keys, boolean assertDone, SkyKey keyForDebugging) {
-      Map<SkyKey, NodeEntry> batchMap = graph.getBatch(keys);
-      if (batchMap.size() != keys.size()) {
-        throw new IllegalStateException("Missing keys for " + keyForDebugging + ": "
-            + Sets.difference(keys, batchMap.keySet()));
+        GroupedList<SkyKey> keys, boolean assertDone, SkyKey keyForDebugging) {
+      Map<SkyKey, NodeEntry> batchMap = graph.getBatch(Iterables.concat(keys));
+      if (batchMap.size() != keys.numElements()) {
+        throw new IllegalStateException(
+            "Missing keys for "
+                + keyForDebugging
+                + ": "
+                + Sets.difference(keys.toSet(), batchMap.keySet()));
       }
       if (assertDone) {
         for (Map.Entry<SkyKey, NodeEntry> entry : batchMap.entrySet()) {
@@ -311,14 +331,16 @@ public final class ParallelEvaluator implements Evaluator {
       }
       if (storedEventFilter.storeEvents()) {
         // Only do the work of processing children if we're going to store events.
-        Set<SkyKey> depKeys = graph.get(skyKey).getTemporaryDirectDeps();
-        Map<SkyKey, SkyValue> deps = getValuesMaybeFromError(depKeys, bubbleErrorInfo);
-        if (!missingChildren && depKeys.size() != deps.size()) {
+        GroupedList<SkyKey> depKeys = graph.get(skyKey).getTemporaryDirectDeps();
+        Map<SkyKey, SkyValue> deps =
+            getValuesMaybeFromError(
+                Iterables.concat(depKeys), bubbleErrorInfo, depKeys.numElements());
+        if (!missingChildren && depKeys.numElements() != deps.size()) {
           throw new IllegalStateException(
               "Missing keys for "
                   + skyKey
                   + ": "
-                  + Sets.difference(depKeys, deps.keySet())
+                  + Sets.difference(depKeys.toSet(), deps.keySet())
                   + ", "
                   + graph.get(skyKey));
         }
@@ -373,8 +395,13 @@ public final class ParallelEvaluator implements Evaluator {
           "%s %s %s", skyKey, this.errorInfo, errorInfo);
 
       if (isDirectlyTransient) {
-        DependencyState triState =
-            graph.get(ErrorTransienceValue.KEY).addReverseDepAndCheckIfDone(skyKey);
+        NodeEntry errorTransienceNode = graph.get(ErrorTransienceValue.KEY);
+        DependencyState triState;
+        if (oldDeps.contains(ErrorTransienceValue.KEY)) {
+          triState = errorTransienceNode.checkIfDoneForDirtyReverseDep(skyKey);
+        } else {
+          triState = errorTransienceNode.addReverseDepAndCheckIfDone(skyKey);
+        }
         Preconditions.checkState(triState == DependencyState.DONE,
             "%s %s %s", skyKey, triState, errorInfo);
 
@@ -388,9 +415,11 @@ public final class ParallelEvaluator implements Evaluator {
     }
 
     private Map<SkyKey, SkyValue> getValuesMaybeFromError(
-        Set<SkyKey> keys, @Nullable Map<SkyKey, ValueWithMetadata> bubbleErrorInfo) {
+        Iterable<SkyKey> keys,
+        @Nullable Map<SkyKey, ValueWithMetadata> bubbleErrorInfo,
+        int keySize) {
       ImmutableMap.Builder<SkyKey, SkyValue> builder = ImmutableMap.builder();
-      ArrayList<SkyKey> missingKeys = new ArrayList<>(keys.size());
+      ArrayList<SkyKey> missingKeys = new ArrayList<>(keySize);
       for (SkyKey key : keys) {
         NodeEntry entry = directDeps.get(key);
         if (entry != null) {
@@ -417,7 +446,8 @@ public final class ParallelEvaluator implements Evaluator {
           !depKeys.contains(ErrorTransienceValue.KEY),
           "Error transience key cannot be in requested deps of %s",
           skyKey);
-      Map<SkyKey, SkyValue> values = getValuesMaybeFromError(depKeys, bubbleErrorInfo);
+      Map<SkyKey, SkyValue> values =
+          getValuesMaybeFromError(depKeys, bubbleErrorInfo, depKeys.size());
       for (Map.Entry<SkyKey, SkyValue> depEntry : values.entrySet()) {
         SkyKey depKey = depEntry.getKey();
         SkyValue depValue = depEntry.getValue();
@@ -593,6 +623,14 @@ public final class ParallelEvaluator implements Evaluator {
         Preconditions.checkState(enqueueParents, "%s %s", skyKey, primaryEntry);
         valueWithMetadata = ValueWithMetadata.normal(value, errorInfo, events);
       }
+      if (!oldDeps.isEmpty()) {
+        // Remove the rdep on this entry for each of its old deps that is no longer a direct dep.
+        Set<SkyKey> depsToRemove =
+            Sets.difference(oldDeps, primaryEntry.getTemporaryDirectDeps().toSet());
+        for (NodeEntry oldDepEntry : graph.getBatch(depsToRemove).values()) {
+          oldDepEntry.removeReverseDep(skyKey);
+        }
+      }
       // If this entry is dirty, setValue may not actually change it, if it determines that
       // the data being written now is the same as the data already present in the entry.
       // We could consider using max(childVersions) here instead of graphVersion. When full
@@ -667,7 +705,7 @@ public final class ParallelEvaluator implements Evaluator {
 
     private ValueVisitor(ForkJoinPool forkJoinPool) {
       quiescingExecutor =
-          new ForkJoinQuiescingExecutor(forkJoinPool, VALUE_VISITOR_ERROR_CLASSIFIER);
+          new ForkJoinQuiescingExecutor(forkJoinPool, VALUE_VISITOR_ERROR_CLASSIFIER, errorHandler);
     }
 
     private ValueVisitor(int threadCount) {
@@ -680,7 +718,8 @@ public final class ParallelEvaluator implements Evaluator {
               /*failFastOnException*/ true,
               /*failFastOnInterrupt*/ true,
               "skyframe-evaluator",
-              VALUE_VISITOR_ERROR_CLASSIFIER);
+              VALUE_VISITOR_ERROR_CLASSIFIER,
+              errorHandler);
     }
 
     private void waitForCompletion() throws InterruptedException {
@@ -741,29 +780,11 @@ public final class ParallelEvaluator implements Evaluator {
   }
 
   /**
-   * If the entry is dirty and not already rebuilding, puts it in a state that it can rebuild, and
-   * removes it as a reverse dep from any dirty direct deps it had yet to check.
+   * If the entry is dirty and not already rebuilding, puts it in a state so that it can rebuild.
    */
-  private void maybeMarkRebuildingAndRemoveRemainingDirtyDirectDeps(SkyKey key, NodeEntry entry) {
+  private static void maybeMarkRebuilding(NodeEntry entry) {
     if (entry.isDirty() && entry.getDirtyState() != DirtyState.REBUILDING) {
-      Collection<SkyKey> depsToRemove = entry.markRebuildingAndGetAllRemainingDirtyDirectDeps();
-      Map<SkyKey, NodeEntry> depsToClearFrom = graph.getBatch(depsToRemove);
-      if (depsToClearFrom.size() != depsToRemove.size()) {
-        throw new IllegalStateException(
-            "At least one dep of a dirty node wasn't present in the graph: "
-                + Sets.difference(ImmutableSet.copyOf(depsToRemove), depsToClearFrom.keySet())
-                + " for "
-                + key
-                + " with entry "
-                + entry
-                + ". Sizes: "
-                + depsToRemove.size()
-                + ", "
-                + depsToClearFrom.size());
-      }
-      for (NodeEntry depEntry : depsToClearFrom.values()) {
-        depEntry.removeReverseDep(key);
-      }
+      entry.markRebuilding();
     }
   }
 
@@ -785,11 +806,15 @@ public final class ParallelEvaluator implements Evaluator {
       this.skyKey = skyKey;
     }
 
-    private void enqueueChild(SkyKey skyKey, NodeEntry entry, SkyKey child, NodeEntry childEntry,
-        boolean dirtyParent) {
+    private void enqueueChild(
+        SkyKey skyKey,
+        NodeEntry entry,
+        SkyKey child,
+        NodeEntry childEntry,
+        boolean depAlreadyExists) {
       Preconditions.checkState(!entry.isDone(), "%s %s", skyKey, entry);
       DependencyState dependencyState =
-          dirtyParent
+          depAlreadyExists
               ? childEntry.checkIfDoneForDirtyReverseDep(skyKey)
               : childEntry.addReverseDepAndCheckIfDone(skyKey);
       switch (dependencyState) {
@@ -895,7 +920,7 @@ public final class ParallelEvaluator implements Evaluator {
               : graph.createIfAbsentBatch(directDepsToCheck).entrySet()) {
             SkyKey directDep = e.getKey();
             NodeEntry directDepEntry = e.getValue();
-            enqueueChild(skyKey, state, directDep, directDepEntry, /*dirtyParent=*/ true);
+            enqueueChild(skyKey, state, directDep, directDepEntry, /*depAlreadyExists=*/ true);
           }
           return DirtyOutcome.ALREADY_PROCESSED;
         case VERIFIED_CLEAN:
@@ -916,7 +941,7 @@ public final class ParallelEvaluator implements Evaluator {
           signalValuesAndEnqueueIfReady(visitor, reverseDeps, state.getVersion());
           return DirtyOutcome.ALREADY_PROCESSED;
         case NEEDS_REBUILDING:
-          maybeMarkRebuildingAndRemoveRemainingDirtyDirectDeps(skyKey, state);
+          maybeMarkRebuilding(state);
           // Fall through to REBUILDING case.
         case REBUILDING:
           return DirtyOutcome.NEEDS_EVALUATION;
@@ -933,16 +958,9 @@ public final class ParallelEvaluator implements Evaluator {
         return;
       }
 
-      // TODO(bazel-team): Once deps are requested in a deterministic order within a group, or the
-      // framework is resilient to rearranging group order, change this so that
-      // SkyFunctionEnvironment "follows along" as the node builder runs, iterating through the
-      // direct deps that were requested on a previous run. This would allow us to avoid the
-      // conversion of the direct deps into a set.
-      Set<SkyKey> directDeps = state.getTemporaryDirectDeps();
-      Preconditions.checkState(!directDeps.contains(ErrorTransienceValue.KEY),
-          "%s cannot have a dep on ErrorTransienceValue during building: %s", skyKey, state);
-      // Get the corresponding SkyFunction and call it on this value.
-      SkyFunctionEnvironment env = new SkyFunctionEnvironment(skyKey, directDeps, visitor);
+      Set<SkyKey> oldDeps = state.getAllRemainingDirtyDirectDeps();
+      SkyFunctionEnvironment env =
+          new SkyFunctionEnvironment(skyKey, state.getTemporaryDirectDeps(), oldDeps, visitor);
       SkyFunctionName functionName = skyKey.functionName();
       SkyFunction factory = skyFunctions.get(functionName);
       Preconditions.checkState(factory != null,
@@ -983,7 +1001,7 @@ public final class ParallelEvaluator implements Evaluator {
           }
           ErrorInfo errorInfo = ErrorInfo.fromException(reifiedBuilderException,
               isTransitivelyTransient);
-          registerNewlyDiscoveredDepsForDoneEntry(skyKey, state, newlyRequestedDeps, env);
+          registerNewlyDiscoveredDepsForDoneEntry(skyKey, state, newlyRequestedDeps, oldDeps, env);
           env.setError(errorInfo, /*isDirectlyTransient=*/ reifiedBuilderException.isTransient());
           env.commit(/*enqueueParents=*/keepGoing);
           if (!shouldFailFast) {
@@ -1022,8 +1040,8 @@ public final class ParallelEvaluator implements Evaluator {
             + "but requested dependencies that weren't computed yet (one of %s), ValueEntry: %s",
             skyKey, newDirectDeps, state);
         env.setValue(value);
-        registerNewlyDiscoveredDepsForDoneEntry(skyKey, state,
-            graph.getBatch(env.newlyRequestedDeps), env);
+        registerNewlyDiscoveredDepsForDoneEntry(
+            skyKey, state, graph.getBatch(env.newlyRequestedDeps), oldDeps, env);
         env.commit(/*enqueueParents=*/true);
         return;
       }
@@ -1038,8 +1056,8 @@ public final class ParallelEvaluator implements Evaluator {
         NodeEntry childErrorEntry = Preconditions.checkNotNull(graph.get(childErrorKey),
             "skyKey: %s, state: %s childErrorKey: %s", skyKey, state, childErrorKey);
         Preconditions.checkState(
-            !state.getTemporaryDirectDeps().contains(childErrorKey),
-            "Done error was already know: %s %s %s %s",
+            !state.getTemporaryDirectDeps().expensiveContains(childErrorKey),
+            "Done error was already known: %s %s %s %s",
             skyKey,
             state,
             childErrorKey,
@@ -1047,7 +1065,12 @@ public final class ParallelEvaluator implements Evaluator {
         Preconditions.checkState(
             newDirectDeps.contains(childErrorKey), "%s %s %s", state, childErrorKey, newDirectDeps);
         state.addTemporaryDirectDeps(GroupedListHelper.create(ImmutableList.of(childErrorKey)));
-        DependencyState childErrorState = childErrorEntry.addReverseDepAndCheckIfDone(skyKey);
+        DependencyState childErrorState;
+        if (oldDeps.contains(childErrorKey)) {
+          childErrorState = childErrorEntry.checkIfDoneForDirtyReverseDep(skyKey);
+        } else {
+          childErrorState = childErrorEntry.addReverseDepAndCheckIfDone(skyKey);
+        }
         Preconditions.checkState(
             childErrorState == DependencyState.DONE,
             "skyKey: %s, state: %s childErrorKey: %s",
@@ -1092,7 +1115,12 @@ public final class ParallelEvaluator implements Evaluator {
       for (Map.Entry<SkyKey, NodeEntry> e : graph.createIfAbsentBatch(newDirectDeps).entrySet()) {
         SkyKey newDirectDep = e.getKey();
         NodeEntry newDirectDepEntry = e.getValue();
-        enqueueChild(skyKey, state, newDirectDep, newDirectDepEntry, /*dirtyParent=*/ false);
+        enqueueChild(
+            skyKey,
+            state,
+            newDirectDep,
+            newDirectDepEntry,
+            /*depAlreadyExists=*/ oldDeps.contains(newDirectDep));
       }
       // It is critical that there is no code below this point.
     }
@@ -1169,7 +1197,10 @@ public final class ParallelEvaluator implements Evaluator {
    * enforce that condition.
    */
   private void registerNewlyDiscoveredDepsForDoneEntry(
-      SkyKey skyKey, NodeEntry entry, Map<SkyKey, NodeEntry> newlyRequestedDepMap,
+      SkyKey skyKey,
+      NodeEntry entry,
+      Map<SkyKey, NodeEntry> newlyRequestedDepMap,
+      Set<SkyKey> oldDeps,
       SkyFunctionEnvironment env) {
     Set<SkyKey> unfinishedDeps = new HashSet<>();
    for (SkyKey dep : env.newlyRequestedDeps) {
@@ -1184,7 +1215,10 @@ public final class ParallelEvaluator implements Evaluator {
       // null entry, then it would have been added to unfinishedDeps and then removed from
       // env.newlyRequestedDeps just above this loop.
       NodeEntry depEntry = Preconditions.checkNotNull(newlyRequestedDepMap.get(newDep), newDep);
-      DependencyState triState = depEntry.addReverseDepAndCheckIfDone(skyKey);
+      DependencyState triState =
+          oldDeps.contains(newDep)
+              ? depEntry.checkIfDoneForDirtyReverseDep(skyKey)
+              : depEntry.addReverseDepAndCheckIfDone(skyKey);
       Preconditions.checkState(DependencyState.DONE == triState,
           "new dep %s was not already done for %s. ValueEntry: %s. DepValueEntry: %s",
           newDep, skyKey, entry, depEntry);
@@ -1448,7 +1482,7 @@ public final class ParallelEvaluator implements Evaluator {
           continue;
         }
         if (visitor.isInflight(bubbleParent)
-            && bubbleParentEntry.getTemporaryDirectDeps().contains(errorKey)) {
+            && bubbleParentEntry.getTemporaryDirectDeps().expensiveContains(errorKey)) {
           // Only bubble up to parent if it's part of this build. If this node was dirtied and
           // re-evaluated, but in a build without this parent, we may try to bubble up to that
           // parent. Don't -- it's not part of the build.
@@ -1479,7 +1513,7 @@ public final class ParallelEvaluator implements Evaluator {
             parentEntry.signalDep();
             // Fall through to NEEDS_REBUILDING, since state is now NEEDS_REBUILDING.
           case NEEDS_REBUILDING:
-            maybeMarkRebuildingAndRemoveRemainingDirtyDirectDeps(parent, parentEntry);
+            maybeMarkRebuilding(parentEntry);
             // Fall through to REBUILDING.
           case REBUILDING:
             break;
@@ -1488,7 +1522,12 @@ public final class ParallelEvaluator implements Evaluator {
         }
       }
       SkyFunctionEnvironment env =
-          new SkyFunctionEnvironment(parent, ImmutableSet.<SkyKey>of(), bubbleErrorInfo, visitor);
+          new SkyFunctionEnvironment(
+              parent,
+              new GroupedList<SkyKey>(),
+              bubbleErrorInfo,
+              ImmutableSet.<SkyKey>of(),
+              visitor);
       externalInterrupt = externalInterrupt || Thread.currentThread().isInterrupted();
       try {
         // This build is only to check if the parent node can give us a better error. We don't
@@ -1701,16 +1740,19 @@ public final class ParallelEvaluator implements Evaluator {
           // error.
           Preconditions.checkState(entry.isReady(), "%s not ready. ValueEntry: %s", key, entry);
         } else if (!entry.isReady()) {
-          removeIncompleteChildrenForCycle(key, entry, entry.getTemporaryDirectDeps());
+          removeIncompleteChildrenForCycle(
+              key, entry, Iterables.concat(entry.getTemporaryDirectDeps()));
         }
-        maybeMarkRebuildingAndRemoveRemainingDirtyDirectDeps(key, entry);
-        Set<SkyKey> directDeps = entry.getTemporaryDirectDeps();
+        maybeMarkRebuilding(entry);
+        GroupedList<SkyKey> directDeps = entry.getTemporaryDirectDeps();
         // Find out which children have errors. Similar logic to that in Evaluate#run().
-        List<ErrorInfo> errorDeps = getChildrenErrorsForCycle(directDeps);
+        List<ErrorInfo> errorDeps = getChildrenErrorsForCycle(Iterables.concat(directDeps));
         Preconditions.checkState(!errorDeps.isEmpty(),
             "Value %s was not successfully evaluated, but had no child errors. ValueEntry: %s", key,
             entry);
-        SkyFunctionEnvironment env = new SkyFunctionEnvironment(key, directDeps, visitor);
+        SkyFunctionEnvironment env =
+            new SkyFunctionEnvironment(
+                key, directDeps, entry.getAllRemainingDirtyDirectDeps(), visitor);
         env.setError(ErrorInfo.fromChildErrors(key, errorDeps), /*isDirectlyTransient=*/false);
         env.commit(/*enqueueParents=*/false);
       } else {
@@ -1739,7 +1781,7 @@ public final class ParallelEvaluator implements Evaluator {
           // cycles, and this is the only missing one). Thus, it will not be removed below in
           // removeDescendantsOfCycleValue, so it is safe here to signal that it is done.
           entry.signalDep();
-          maybeMarkRebuildingAndRemoveRemainingDirtyDirectDeps(key, entry);
+          maybeMarkRebuilding(entry);
         }
         if (keepGoing) {
           // Any children of this node that we haven't already visited are not worth visiting,
@@ -1752,13 +1794,19 @@ public final class ParallelEvaluator implements Evaluator {
 
 
           SkyFunctionEnvironment env =
-              new SkyFunctionEnvironment(key, entry.getTemporaryDirectDeps(),
-                  ImmutableMap.of(cycleChild, dummyValue), visitor);
+              new SkyFunctionEnvironment(
+                  key,
+                  entry.getTemporaryDirectDeps(),
+                  ImmutableMap.of(cycleChild, dummyValue),
+                  entry.getAllRemainingDirtyDirectDeps(),
+                  visitor);
 
           // Construct error info for this node. Get errors from children, which are all done
           // except possibly for the cycleChild.
           List<ErrorInfo> allErrors =
-              getChildrenErrors(entry.getTemporaryDirectDeps(), /*unfinishedChild=*/cycleChild);
+              getChildrenErrors(
+                  Iterables.concat(entry.getTemporaryDirectDeps()), /*unfinishedChild=*/
+                  cycleChild);
           CycleInfo cycleInfo = new CycleInfo(cycle);
           // Add in this cycle.
           allErrors.add(ErrorInfo.fromCycle(cycleInfo));
@@ -1775,7 +1823,7 @@ public final class ParallelEvaluator implements Evaluator {
       }
 
       // This node is not yet known to be in a cycle. So process its children.
-      Iterable<SkyKey> children = entry.getTemporaryDirectDeps();
+      Iterable<SkyKey> children = Iterables.concat(entry.getTemporaryDirectDeps());
       if (Iterables.isEmpty(children)) {
         continue;
       }
@@ -1864,7 +1912,9 @@ public final class ParallelEvaluator implements Evaluator {
    */
   private void removeDescendantsOfCycleValue(SkyKey key, NodeEntry entry,
       @Nullable SkyKey cycleChild, Iterable<SkyKey> toVisit, int cycleLength) {
-    Set<SkyKey> unvisitedDeps = new HashSet<>(entry.getTemporaryDirectDeps());
+    GroupedList<SkyKey> directDeps = entry.getTemporaryDirectDeps();
+    Set<SkyKey> unvisitedDeps = Sets.newHashSetWithExpectedSize(directDeps.numElements());
+    Iterables.addAll(unvisitedDeps, Iterables.concat(directDeps));
     unvisitedDeps.remove(cycleChild);
     // Remove any children from this node that are not part of the cycle we just found. They are
     // irrelevant to the node as it stands, and if they are deleted from the graph because they are
@@ -1876,7 +1926,7 @@ public final class ParallelEvaluator implements Evaluator {
       // and was built.
       entry.signalDep();
     }
-    maybeMarkRebuildingAndRemoveRemainingDirtyDirectDeps(key, entry);
+    maybeMarkRebuilding(entry);
     Preconditions.checkState(entry.isReady(), "%s %s %s", key, cycleChild, entry);
     Iterator<SkyKey> it = toVisit.iterator();
     while (it.hasNext()) {
@@ -1969,13 +2019,7 @@ public final class ParallelEvaluator implements Evaluator {
         // we want to avoid, because it indicates confusion of input values and derived values.
         Preconditions.checkState(
             prevEntry.noDepsLastBuild(), "existing entry for %s has deps: %s", key, prevEntry);
-        // Put the node into a "rebuilding" state and verify that there were no dirty deps
-        // remaining.
-        Preconditions.checkState(
-            prevEntry.markRebuildingAndGetAllRemainingDirtyDirectDeps().isEmpty(),
-            "%s %s",
-            key,
-            prevEntry);
+        prevEntry.markRebuilding();
       }
       prevEntry.setValue(value, version);
       // Now that this key's injected value is set, it is no longer dirty.

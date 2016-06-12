@@ -31,6 +31,8 @@ macro), use the constant [PACKAGE_NAME](lib/globals.html#PACKAGE_NAME).
 
 * [Macro creating Skylark rules](cookbook.md#macro_skylark).
 
+* [Macro combining Skylark and native rules](cookbook.md#macro_compound).
+
 ## Debugging
 
 * `bazel query --output=build //my/path:all` will show you how the BUILD
@@ -71,7 +73,7 @@ optional (don't give a default value).
 
 * In most cases, optional parameters should have a default value of `None`.
   `None` can be passed directly to native rules, which treat it the same as if
-  you had not passing any argument. Thus, there is no need to replace it with
+  you had not passed in any argument. Thus, there is no need to replace it with
   `0`, `False`, or `[]` for this purpose. Instead, the macro should defer to the
   rules it creates, as their defaults may be complex or may change over time.
   Additionally, a parameter that is explicitly set to its default value looks

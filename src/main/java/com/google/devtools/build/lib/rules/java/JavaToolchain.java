@@ -27,6 +27,7 @@ import com.google.devtools.build.lib.analysis.TransitiveInfoCollection;
 import com.google.devtools.build.lib.collect.nestedset.NestedSet;
 import com.google.devtools.build.lib.collect.nestedset.NestedSetBuilder;
 import com.google.devtools.build.lib.collect.nestedset.Order;
+import com.google.devtools.build.lib.packages.RuleClass.ConfiguredTargetFactory.RuleErrorException;
 import com.google.devtools.build.lib.rules.RuleConfiguredTargetFactory;
 import com.google.devtools.build.lib.syntax.Type;
 
@@ -38,7 +39,7 @@ import java.util.List;
 public final class JavaToolchain implements RuleConfiguredTargetFactory {
 
   @Override
-  public ConfiguredTarget create(RuleContext ruleContext) {
+  public ConfiguredTarget create(RuleContext ruleContext) throws RuleErrorException {
     final String source = ruleContext.attributes().get("source_version", Type.STRING);
     final String target = ruleContext.attributes().get("target_version", Type.STRING);
     final NestedSet<Artifact> bootclasspath = getArtifactList("bootclasspath", ruleContext);
@@ -77,6 +78,8 @@ public final class JavaToolchain implements RuleConfiguredTargetFactory {
             genClass,
             ijar);
     RuleConfiguredTargetBuilder builder = new RuleConfiguredTargetBuilder(ruleContext)
+        .addSkylarkTransitiveInfo(JavaToolchainSkylarkApiProvider.NAME,
+            new JavaToolchainSkylarkApiProvider())
         .add(JavaToolchainProvider.class, provider)
         .setFilesToBuild(new NestedSetBuilder<Artifact>(Order.STABLE_ORDER).build())
         .add(RunfilesProvider.class, RunfilesProvider.simple(Runfiles.EMPTY));

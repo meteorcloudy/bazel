@@ -20,8 +20,6 @@ import static com.google.devtools.build.lib.packages.BuildType.LABEL;
 import com.google.common.collect.ImmutableMap;
 import com.google.devtools.build.lib.analysis.BaseRuleClasses;
 import com.google.devtools.build.lib.analysis.ConfiguredTarget;
-import com.google.devtools.build.lib.analysis.LicensesProvider;
-import com.google.devtools.build.lib.analysis.LicensesProviderImpl;
 import com.google.devtools.build.lib.analysis.RuleConfiguredTarget.Mode;
 import com.google.devtools.build.lib.analysis.RuleContext;
 import com.google.devtools.build.lib.analysis.RuleDefinition;
@@ -30,6 +28,7 @@ import com.google.devtools.build.lib.analysis.VisibilityProvider;
 import com.google.devtools.build.lib.analysis.VisibilityProviderImpl;
 import com.google.devtools.build.lib.packages.RuleClass;
 import com.google.devtools.build.lib.packages.RuleClass.Builder;
+import com.google.devtools.build.lib.packages.RuleClass.ConfiguredTargetFactory.RuleErrorException;
 import com.google.devtools.build.lib.util.FileTypeSet;
 
 /**
@@ -37,14 +36,15 @@ import com.google.devtools.build.lib.util.FileTypeSet;
  */
 public class Alias implements RuleConfiguredTargetFactory {
   @Override
-  public ConfiguredTarget create(RuleContext ruleContext) throws InterruptedException {
+  public ConfiguredTarget create(RuleContext ruleContext)
+      throws InterruptedException, RuleErrorException {
     ConfiguredTarget actual = (ConfiguredTarget) ruleContext.getPrerequisite("actual", Mode.TARGET);
     return new AliasConfiguredTarget(
+        ruleContext.getConfiguration(),
         actual,
         ImmutableMap.of(
             AliasProvider.class, AliasProvider.fromAliasRule(ruleContext.getLabel(), actual),
-            VisibilityProvider.class, new VisibilityProviderImpl(ruleContext.getVisibility()),
-            LicensesProvider.class, LicensesProviderImpl.of(ruleContext)));
+            VisibilityProvider.class, new VisibilityProviderImpl(ruleContext.getVisibility())));
   }
 
   /**
@@ -58,6 +58,8 @@ public class Alias implements RuleConfiguredTargetFactory {
           The target this alias refers to. It does not need to be a rule, it can also be an input
           file.
           <!-- #END_BLAZE_RULE.ATTRIBUTE -->*/
+          .removeAttribute("licenses")
+          .removeAttribute("distribs")
           .add(attr("actual", LABEL)
               .allowedFileTypes(FileTypeSet.ANY_FILE)
               .allowedRuleClasses(ANY_RULE)
@@ -88,7 +90,7 @@ public class Alias implements RuleConfiguredTargetFactory {
 </p>
 
 <p>
-  The alias rule has its own visibility and license declaration. In all other respects, it behaves
+  The alias rule has its own visibility declaration. In all other respects, it behaves
   like the rule it references with some minor exceptions:
 
   <ul>

@@ -17,6 +17,7 @@ package com.google.devtools.build.lib.remote;
 import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.client.config.ClientConfig;
 import com.hazelcast.client.config.ClientNetworkConfig;
+import com.hazelcast.config.Config;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 
@@ -26,18 +27,27 @@ import java.util.concurrent.ConcurrentMap;
  * A factory class for providing a {@link ConcurrentMap} object implemented by Hazelcast.
  * Hazelcast will work as a distributed memory cache.
  */
-final class HazelcastCacheFactory {
+public final class HazelcastCacheFactory {
 
   private static final String CACHE_NAME = "hazelcast-build-cache";
 
-  static ConcurrentMap<String, byte[]> create(RemoteOptions options) {
+  public static ConcurrentMap<String, byte[]> create(RemoteOptions options) {
     HazelcastInstance instance;
     if (options.hazelcastNode != null) {
-      // If --hazelast_node is then create a client instance.
+      // If --hazelcast_node is then create a client instance.
       ClientConfig config = new ClientConfig();
       ClientNetworkConfig net = config.getNetworkConfig();
       net.addAddress(options.hazelcastNode.split(","));
       instance = HazelcastClient.newHazelcastClient(config);
+    } else if (options.hazelcastStandaloneListenPort != 0) {
+      Config config = new Config();
+      config
+          .getNetworkConfig()
+          .setPort(options.hazelcastStandaloneListenPort)
+          .getJoin()
+          .getMulticastConfig()
+          .setEnabled(false);
+      instance = Hazelcast.newHazelcastInstance(config);
     } else {
       // Otherwise create a default instance. This is going to look at
       // -Dhazelcast.config=some-hazelcast.xml for configuration.

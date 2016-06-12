@@ -22,13 +22,15 @@ import com.google.devtools.build.lib.analysis.RuleConfiguredTarget.Mode;
 import com.google.devtools.build.lib.analysis.RuleContext;
 import com.google.devtools.build.lib.collect.nestedset.NestedSetBuilder;
 import com.google.devtools.build.lib.rules.RuleConfiguredTargetFactory;
+import com.google.devtools.build.lib.rules.apple.AppleConfiguration;
 import com.google.devtools.build.lib.rules.cpp.CcLibraryHelper;
 import com.google.devtools.build.lib.rules.cpp.CcToolchainFeatures.FeatureConfiguration;
 import com.google.devtools.build.lib.rules.cpp.CcToolchainFeatures.Variables.Builder;
+import com.google.devtools.build.lib.rules.cpp.CcToolchainFeatures.Variables.ValueSequence;
 import com.google.devtools.build.lib.rules.cpp.CcToolchainFeatures.Variables.VariablesExtension;
 import com.google.devtools.build.lib.rules.cpp.CcToolchainProvider;
+import com.google.devtools.build.lib.rules.cpp.CppRuleClasses;
 import com.google.devtools.build.lib.rules.cpp.PrecompiledFiles;
-import com.google.devtools.build.lib.rules.objc.ObjcCommon.CompilationAttributes;
 
 import java.util.Collection;
 
@@ -38,46 +40,82 @@ import java.util.Collection;
 public class ExperimentalObjcLibrary implements RuleConfiguredTargetFactory {
 
   private static final String PCH_FILE_VARIABLE_NAME = "pch_file";
+  private static final String FRAMEWORKS_VARIABLE_NAME = "framework_paths";
+  private static final String MODULES_MAPS_DIR_NAME = "module_maps_dir";
+  private static final String OBJC_MODULE_CACHE_DIR_NAME = "_objc_module_cache";
+  private static final String OBJC_MODULE_CACHE_KEY = "modules_cache_path";
+  private static final String OBJC_MODULE_FEATURE_NAME = "use_objc_modules";
   private static final Iterable<String> ACTIVATED_ACTIONS =
       ImmutableList.of("objc-compile", "objc++-compile");
-  
-  private VariablesExtension variablesExtension(final RuleContext ruleContext) {
-    return new VariablesExtension() {
-      @Override
-      public void addVariables(Builder builder) {
-        if (ruleContext.getPrerequisiteArtifact("pch", Mode.TARGET) != null) {
-          builder.addVariable(PCH_FILE_VARIABLE_NAME,
-              ruleContext.getPrerequisiteArtifact("pch", Mode.TARGET).getExecPathString());
-        }
+
+  /**
+   * Build variable extensions for templating a toolchain for objc builds.
+   */
+  private static class ObjcVariablesExtension implements VariablesExtension {
+
+    private final RuleContext ruleContext;
+    private final ObjcProvider objcProvider;
+
+    public ObjcVariablesExtension(RuleContext ruleContext, ObjcProvider objcProvider) {
+      this.ruleContext = ruleContext;
+      this.objcProvider = objcProvider;
+    }
+
+    @Override
+    public void addVariables(Builder builder) {
+      addPchVariables(builder);
+      addFrameworkVariables(builder);
+      if (ObjcCommon.shouldUseObjcModules(ruleContext)) {
+        addModuleMapVariables(builder);
       }
-    };
+    }
+
+    private void addPchVariables(Builder builder) {
+       if (ruleContext.getPrerequisiteArtifact("pch", Mode.TARGET) != null) {
+        builder.addVariable(
+            PCH_FILE_VARIABLE_NAME,
+            ruleContext.getPrerequisiteArtifact("pch", Mode.TARGET).getExecPathString());
+      }
+    }
+
+    private void addFrameworkVariables(Builder builder) {
+       ValueSequence.Builder frameworkSequence = new ValueSequence.Builder();
+      for (String framework :
+          CompilationSupport.commonFrameworkNames(
+              objcProvider, ruleContext.getFragment(AppleConfiguration.class))) {
+        frameworkSequence.addValue(framework);
+      }
+      builder.addSequence(FRAMEWORKS_VARIABLE_NAME, frameworkSequence.build());
+    }
+
+    private void addModuleMapVariables(Builder builder) {
+      builder.addVariable(
+          MODULES_MAPS_DIR_NAME,
+          ObjcRuleClasses.intermediateArtifacts(ruleContext)
+              .moduleMap()
+              .getArtifact()
+              .getExecPath()
+              .getParentDirectory()
+              .toString());
+      builder.addVariable(
+          OBJC_MODULE_CACHE_KEY,
+          ruleContext.getConfiguration().getGenfilesFragment() + "/" + OBJC_MODULE_CACHE_DIR_NAME);
+    }
   }
-  
+
   @Override
-  public ConfiguredTarget create(RuleContext ruleContext) throws InterruptedException {
+  public ConfiguredTarget create(RuleContext ruleContext)
+      throws InterruptedException, RuleErrorException {
+    validateAttributes(ruleContext);
 
     CompilationArtifacts compilationArtifacts =
         CompilationSupport.compilationArtifacts(ruleContext);
-    CompilationAttributes compilationAttributes = new CompilationAttributes(ruleContext);
+    CompilationAttributes compilationAttributes =
+        CompilationAttributes.Builder.fromRuleContext(ruleContext).build();
     PrecompiledFiles precompiledFiles = new PrecompiledFiles(ruleContext);
 
     ObjcCommon common = common(ruleContext, compilationAttributes, compilationArtifacts);
 
-    CcToolchainProvider toolchain =
-        ruleContext
-            .getPrerequisite(":cc_toolchain", Mode.TARGET)
-            .getProvider(CcToolchainProvider.class);
-
-    ImmutableList.Builder<String> activatedCrosstoolSelectables =
-        ImmutableList.<String>builder().addAll(ACTIVATED_ACTIONS);
-    if (ruleContext.getPrerequisiteArtifact("pch", Mode.TARGET) != null) {
-      activatedCrosstoolSelectables.add("pch");
-    }
-
-    FeatureConfiguration featureConfiguration =
-        toolchain.getFeatures().getFeatureConfiguration(activatedCrosstoolSelectables.build());
-   
-    
     Collection<Artifact> sources = Sets.newHashSet(compilationArtifacts.getSrcs());
     Collection<Artifact> privateHdrs = Sets.newHashSet(compilationArtifacts.getPrivateHdrs());
     Collection<Artifact> publicHdrs = Sets.newHashSet(compilationAttributes.hdrs());
@@ -85,8 +123,8 @@ public class ExperimentalObjcLibrary implements RuleConfiguredTargetFactory {
     CcLibraryHelper helper =
         new CcLibraryHelper(
                 ruleContext,
-                ObjcCppSemantics.INSTANCE,
-                featureConfiguration,
+                new ObjcCppSemantics(common.getObjcProvider()),
+                getFeatureConfiguration(ruleContext),
                 CcLibraryHelper.SourceCategory.CC_AND_OBJC)
             .addSources(sources)
             .addSources(privateHdrs)
@@ -94,7 +132,12 @@ public class ExperimentalObjcLibrary implements RuleConfiguredTargetFactory {
             .addPublicHeaders(publicHdrs)
             .addPrecompiledFiles(precompiledFiles)
             .addDeps(ruleContext.getPrerequisites("deps", Mode.TARGET))
-            .addVariableExtension(variablesExtension(ruleContext));
+            .addVariableExtension(
+                new ObjcVariablesExtension(ruleContext, common.getObjcProvider()));
+
+    if (ObjcCommon.shouldUseObjcModules(ruleContext)) {
+      helper.setCppModuleMap(ObjcRuleClasses.intermediateArtifacts(ruleContext).moduleMap());
+    }
 
     CcLibraryHelper.Info info = helper.build();
 
@@ -106,7 +149,43 @@ public class ExperimentalObjcLibrary implements RuleConfiguredTargetFactory {
         .build();
   }
 
-  private ObjcCommon common(
+  private FeatureConfiguration getFeatureConfiguration(RuleContext ruleContext) {
+    CcToolchainProvider toolchain =
+        ruleContext
+            .getPrerequisite(":cc_toolchain", Mode.TARGET)
+            .getProvider(CcToolchainProvider.class);
+
+    ImmutableList.Builder<String> activatedCrosstoolSelectables =
+        ImmutableList.<String>builder().addAll(ACTIVATED_ACTIONS);
+
+    if (ruleContext.getPrerequisiteArtifact("pch", Mode.TARGET) != null) {
+      activatedCrosstoolSelectables.add("pch");
+    }
+
+    if (ObjcCommon.shouldUseObjcModules(ruleContext)) {
+      activatedCrosstoolSelectables.add(OBJC_MODULE_FEATURE_NAME);
+    }
+    
+    // We create a module map by default to allow for swift interop.
+    activatedCrosstoolSelectables.add(CppRuleClasses.MODULE_MAPS);
+    activatedCrosstoolSelectables.add(CppRuleClasses.COMPILE_ACTION_FLAGS_IN_FLAG_SET);
+    activatedCrosstoolSelectables.add(CppRuleClasses.DEPENDENCY_FILE);
+
+    return toolchain.getFeatures().getFeatureConfiguration(activatedCrosstoolSelectables.build());
+  }
+
+  /**
+   * Throws errors or warnings for bad attribute state.
+   */
+  private void validateAttributes(RuleContext ruleContext) {
+    for (String copt : ObjcCommon.getNonCrosstoolCopts(ruleContext)) {
+      if (copt.contains("-fmodules-cache-path")) {
+        ruleContext.ruleWarning(CompilationSupport.MODULES_CACHE_PATH_WARNING);
+      }
+    }
+  }
+
+  private static ObjcCommon common(
       RuleContext ruleContext,
       CompilationAttributes compilationAttributes,
       CompilationArtifacts compilationArtifacts) {

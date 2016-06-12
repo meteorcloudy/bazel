@@ -20,15 +20,19 @@ import static org.mockito.Mockito.when;
 import com.google.common.collect.ImmutableSet;
 import com.google.devtools.build.lib.actions.Action;
 import com.google.devtools.build.lib.actions.ActionCompletionEvent;
+import com.google.devtools.build.lib.actions.ActionOwner;
 import com.google.devtools.build.lib.actions.ActionStartedEvent;
 import com.google.devtools.build.lib.actions.Artifact;
 import com.google.devtools.build.lib.actions.Root;
 import com.google.devtools.build.lib.analysis.ConfiguredTarget;
 import com.google.devtools.build.lib.buildtool.buildevent.TestFilteringCompleteEvent;
 import com.google.devtools.build.lib.cmdline.Label;
+import com.google.devtools.build.lib.skyframe.LoadingPhaseStartedEvent;
+import com.google.devtools.build.lib.skyframe.PackageProgressReceiver;
 import com.google.devtools.build.lib.testutil.FoundationTestCase;
 import com.google.devtools.build.lib.testutil.LoggingTerminalWriter;
 import com.google.devtools.build.lib.testutil.ManualClock;
+import com.google.devtools.build.lib.util.Pair;
 import com.google.devtools.build.lib.vfs.Path;
 import com.google.devtools.build.lib.vfs.PathFragment;
 import com.google.devtools.build.lib.view.test.TestStatus.BlazeTestStatus;
@@ -63,6 +67,35 @@ public class ExperimentalStateTrackerTest extends FoundationTestCase {
       maxLength = Math.max(maxLength, line.length());
     }
     return maxLength;
+  }
+
+  @Test
+  public void testLoadingActivity() throws IOException {
+    // During loading phase, state and activity, as reported by the PackageProgressReceiver,
+    // should be visible in the progress bar.
+    String state = "42 packages loaded";
+    String activity = "currently loading //src/foo/bar and 17 more";
+    PackageProgressReceiver progress = Mockito.mock(PackageProgressReceiver.class);
+    when(progress.progressState()).thenReturn(new Pair<String, String>(state, activity));
+
+    ManualClock clock = new ManualClock();
+    ExperimentalStateTracker stateTracker = new ExperimentalStateTracker(clock);
+
+    stateTracker.loadingStarted(new LoadingPhaseStartedEvent(progress));
+
+    LoggingTerminalWriter terminalWriter = new LoggingTerminalWriter(/*discardHighlight=*/ true);
+    stateTracker.writeProgressBar(terminalWriter);
+    String output = terminalWriter.getTranscript();
+
+    assertTrue(
+        "Output should indicate that we are in the loading phase, but was:\n" + output,
+        output.contains("Loading"));
+    assertTrue(
+        "Output should contain loading state '" + state + "', but was:\n" + output,
+        output.contains(state));
+    assertTrue(
+        "Output should contain loading state '" + activity + "', but was:\n" + output,
+        output.contains(activity));
   }
 
   @Test
@@ -254,7 +287,7 @@ public class ExperimentalStateTrackerTest extends FoundationTestCase {
 
   @Test
   public void testPassedVisible() throws Exception {
-    // The last test that passed should still be visible in the long status bar.
+    // The last test should still be visible in the long status bar, and colored as ok if it passed.
     ManualClock clock = new ManualClock();
     ExperimentalStateTracker stateTracker = new ExperimentalStateTracker(clock);
     TestFilteringCompleteEvent filteringComplete = Mockito.mock(TestFilteringCompleteEvent.class);
@@ -270,13 +303,74 @@ public class ExperimentalStateTrackerTest extends FoundationTestCase {
     stateTracker.testFilteringComplete(filteringComplete);
     stateTracker.testSummary(testSummary);
 
+    LoggingTerminalWriter terminalWriter = new LoggingTerminalWriter();
+    stateTracker.writeProgressBar(terminalWriter);
+    String output = terminalWriter.getTranscript();
+
+    String expected = LoggingTerminalWriter.OK + labelA;
+    assertTrue(
+        "Sequence '" + expected + "' should be present in colored progress bar: " + output,
+        output.contains(expected));
+  }
+
+  @Test
+  public void testFailedVisible() throws Exception {
+    // The last test should still be visible in the long status bar, and colored as fail if it
+    // did not pass.
+    ManualClock clock = new ManualClock();
+    ExperimentalStateTracker stateTracker = new ExperimentalStateTracker(clock);
+    TestFilteringCompleteEvent filteringComplete = Mockito.mock(TestFilteringCompleteEvent.class);
+    Label labelA = Label.parseAbsolute("//foo/bar:baz");
+    ConfiguredTarget targetA = Mockito.mock(ConfiguredTarget.class);
+    when(targetA.getLabel()).thenReturn(labelA);
+    ConfiguredTarget targetB = Mockito.mock(ConfiguredTarget.class);
+    when(filteringComplete.getTestTargets()).thenReturn(ImmutableSet.of(targetA, targetB));
+    TestSummary testSummary = Mockito.mock(TestSummary.class);
+    when(testSummary.getStatus()).thenReturn(BlazeTestStatus.FAILED);
+    when(testSummary.getTarget()).thenReturn(targetA);
+
+    stateTracker.testFilteringComplete(filteringComplete);
+    stateTracker.testSummary(testSummary);
+
+    LoggingTerminalWriter terminalWriter = new LoggingTerminalWriter();
+    stateTracker.writeProgressBar(terminalWriter);
+    String output = terminalWriter.getTranscript();
+
+    String expected = LoggingTerminalWriter.FAIL + labelA;
+    assertTrue(
+        "Sequence '" + expected + "' should be present in colored progress bar: " + output,
+        output.contains(expected));
+  }
+
+  @Test
+  public void testSensibleShortening() throws Exception {
+    // Verify that in the typical case, we shorten the progress message by shortening
+    // the path implicit in it, that can also be extracted from the label. In particular,
+    // the parts
+    ManualClock clock = new ManualClock();
+    ExperimentalStateTracker stateTracker = new ExperimentalStateTracker(clock, 70);
+    Action action = mockAction(
+        "Building some/very/very/long/path/for/some/library/directory/foo.jar (42 source files)",
+        "/home/user/bazel/out/abcdef/some/very/very/long/path/for/some/library/directory/foo.jar");
+    Label label =
+        Label.parseAbsolute("//some/very/very/long/path/for/some/library/directory:libfoo");
+    ActionOwner owner = new ActionOwner(label, null, null, null, "fedcba", null);
+    when(action.getOwner()).thenReturn(owner);
+
+    clock.advanceMillis(TimeUnit.SECONDS.toMillis(3));
+    stateTracker.actionStarted(new ActionStartedEvent(action, clock.nanoTime()));
+    clock.advanceMillis(TimeUnit.SECONDS.toMillis(5));
+
     LoggingTerminalWriter terminalWriter = new LoggingTerminalWriter(/*discardHighlight=*/ true);
     stateTracker.writeProgressBar(terminalWriter);
     String output = terminalWriter.getTranscript();
 
     assertTrue(
-        "Label " + labelA.toString() + " should be present in progress bar: " + output,
-        output.contains(labelA.toString()));
+        "Progress bar should contain 'Building ', but was:\n" + output,
+        output.contains("Building "));
+    assertTrue(
+        "Progress bar should contain 'foo.jar (42 source files)', but was:\n" + output,
+        output.contains("foo.jar (42 source files)"));
   }
 
   private void doTestOutputLength(boolean withTest, int actions) throws Exception {
@@ -346,5 +440,61 @@ public class ExperimentalStateTrackerTest extends FoundationTestCase {
       doTestOutputLength(true, i);
       doTestOutputLength(false, i);
     }
+  }
+
+  @Test
+  public void testAggregation() throws Exception {
+    // Assert that actions for the same test are aggregated so that an action afterwards
+    // is still shown.
+    ManualClock clock = new ManualClock();
+    clock.advanceMillis(TimeUnit.SECONDS.toMillis(1234));
+    ExperimentalStateTracker stateTracker = new ExperimentalStateTracker(clock, 80);
+
+    Label labelFooTest = Label.parseAbsolute("//foo/bar:footest");
+    ConfiguredTarget targetFooTest = Mockito.mock(ConfiguredTarget.class);
+    when(targetFooTest.getLabel()).thenReturn(labelFooTest);
+    ActionOwner fooOwner = new ActionOwner(labelFooTest, null, null, null, "abcdef", null);
+
+    Label labelBarTest = Label.parseAbsolute("//baz:bartest");
+    ConfiguredTarget targetBarTest = Mockito.mock(ConfiguredTarget.class);
+    when(targetBarTest.getLabel()).thenReturn(labelBarTest);
+    TestFilteringCompleteEvent filteringComplete = Mockito.mock(TestFilteringCompleteEvent.class);
+    when(filteringComplete.getTestTargets())
+        .thenReturn(ImmutableSet.of(targetFooTest, targetBarTest));
+    ActionOwner barOwner = new ActionOwner(labelBarTest, null, null, null, "fedcba", null);
+
+    stateTracker.testFilteringComplete(filteringComplete);
+
+    // First produce 10 actions for footest...
+    for (int i = 0; i < 10; i++) {
+      clock.advanceMillis(TimeUnit.SECONDS.toMillis(1));
+      Action action = mockAction("Testing foo, shard " + i, "testlog_foo_" + i);
+      when(action.getOwner()).thenReturn(fooOwner);
+      stateTracker.actionStarted(new ActionStartedEvent(action, clock.nanoTime()));
+    }
+    // ...then produce 10 actions for bartest...
+    for (int i = 0; i < 10; i++) {
+      clock.advanceMillis(TimeUnit.SECONDS.toMillis(1));
+      Action action = mockAction("Testing bar, shard " + i, "testlog_bar_" + i);
+      when(action.getOwner()).thenReturn(barOwner);
+      stateTracker.actionStarted(new ActionStartedEvent(action, clock.nanoTime()));
+    }
+    // ...and finally a completely unrelated action
+    clock.advanceMillis(TimeUnit.SECONDS.toMillis(1));
+    stateTracker.actionStarted(
+        new ActionStartedEvent(mockAction("Other action", "other/action"), clock.nanoTime()));
+    clock.advanceMillis(TimeUnit.SECONDS.toMillis(1));
+
+    LoggingTerminalWriter terminalWriter = new LoggingTerminalWriter(/*discardHighlight=*/ true);
+    stateTracker.writeProgressBar(terminalWriter);
+    String output = terminalWriter.getTranscript();
+
+    assertTrue(
+        "Progress bar should contain ':footest', but was:\n" + output, output.contains(":footest"));
+    assertTrue(
+        "Progress bar should contain ':bartest', but was:\n" + output, output.contains(":bartest"));
+    assertTrue(
+        "Progress bar should contain 'Other action', but was:\n" + output,
+        output.contains("Other action"));
   }
 }

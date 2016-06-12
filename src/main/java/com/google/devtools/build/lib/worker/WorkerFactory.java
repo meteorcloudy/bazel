@@ -25,11 +25,12 @@ import org.apache.commons.pool2.impl.DefaultPooledObject;
  * Factory used by the pool to create / destroy / validate worker processes.
  */
 final class WorkerFactory extends BaseKeyedPooledObjectFactory<WorkerKey, Worker> {
-  private Path logDir;
+  private final Path logDir;
   private Reporter reporter;
   private boolean verbose;
 
-  public void setLogDirectory(Path logDir) {
+  public WorkerFactory(Path logDir) {
+    super();
     this.logDir = logDir;
   }
 
@@ -78,6 +79,36 @@ final class WorkerFactory extends BaseKeyedPooledObjectFactory<WorkerKey, Worker
   @Override
   public boolean validateObject(WorkerKey key, PooledObject<Worker> p) {
     Worker worker = p.getObject();
-    return key.getWorkerFilesHash().equals(worker.getWorkerFilesHash()) && worker.isAlive();
+
+    boolean hashMatches = key.getWorkerFilesHash().equals(worker.getWorkerFilesHash());
+    boolean workerIsAlive = worker.isAlive();
+    boolean workerIsStillValid = hashMatches && workerIsAlive;
+
+    if (reporter != null && !workerIsStillValid) {
+      StringBuilder msg = new StringBuilder();
+      msg.append(key.getMnemonic());
+      msg.append(" worker (id ");
+      msg.append(p.getObject().getWorkerId());
+      msg.append(") can no longer be used, because");
+
+      if (!workerIsAlive) {
+        msg.append(" its process terminated itself or got killed");
+      }
+
+      if (!hashMatches) {
+        if (!workerIsAlive) {
+          msg.append(" and");
+        }
+        msg.append(" its files have changed on disk [");
+        msg.append(worker.getWorkerFilesHash());
+        msg.append(" -> ");
+        msg.append(key.getWorkerFilesHash());
+        msg.append("]");
+      }
+
+      reporter.handle(Event.warn(msg.toString()));
+    }
+
+    return workerIsStillValid;
   }
 }

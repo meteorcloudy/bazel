@@ -34,8 +34,8 @@ import com.google.devtools.build.lib.packages.Globber.BadGlobException;
 import com.google.devtools.build.lib.packages.License.DistributionType;
 import com.google.devtools.build.lib.packages.Preprocessor.AstAfterPreprocessing;
 import com.google.devtools.build.lib.packages.RuleFactory.BuildLangTypedAttributeValuesMap;
+import com.google.devtools.build.lib.skylarkinterface.Param;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkSignature;
-import com.google.devtools.build.lib.skylarkinterface.SkylarkSignature.Param;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkValue;
 import com.google.devtools.build.lib.syntax.AssignmentStatement;
 import com.google.devtools.build.lib.syntax.BaseFunction;
@@ -64,6 +64,7 @@ import com.google.devtools.build.lib.syntax.Statement;
 import com.google.devtools.build.lib.syntax.Type;
 import com.google.devtools.build.lib.syntax.Type.ConversionException;
 import com.google.devtools.build.lib.util.Preconditions;
+import com.google.devtools.build.lib.vfs.FileSystem;
 import com.google.devtools.build.lib.vfs.FileSystemUtils;
 import com.google.devtools.build.lib.vfs.Path;
 import com.google.devtools.build.lib.vfs.UnixGlob;
@@ -108,7 +109,7 @@ public final class PackageFactory {
     }
 
     private void convertAndProcess(
-        Package.LegacyBuilder pkgBuilder, Location location, Object value)
+        Package.Builder pkgBuilder, Location location, Object value)
         throws EvalException {
       T typedValue = type.convert(value, "'package' argument", pkgBuilder.getBuildFileLabel());
       process(pkgBuilder, location, typedValue);
@@ -122,7 +123,7 @@ public final class PackageFactory {
      * @param value the value of the argument. Typically passed to {@link Type#convert}
      */
     protected abstract void process(
-        Package.LegacyBuilder pkgBuilder, Location location, T value)
+        Package.Builder pkgBuilder, Location location, T value)
         throws EvalException;
   }
 
@@ -160,9 +161,13 @@ public final class PackageFactory {
     }
 
     @Override
-    protected void process(Package.LegacyBuilder pkgBuilder, Location location,
-        List<Label> value) {
-      pkgBuilder.setDefaultVisibility(getVisibility(pkgBuilder.getBuildFileLabel(), value));
+    protected void process(Package.Builder pkgBuilder, Location location,
+        List<Label> value) throws EvalException{
+      try {
+        pkgBuilder.setDefaultVisibility(getVisibility(pkgBuilder.getBuildFileLabel(), value));
+      } catch (EvalException e) {
+        throw new EvalException(location, e.getMessage());
+      }
     }
   }
 
@@ -172,7 +177,7 @@ public final class PackageFactory {
     }
 
     @Override
-    protected void process(Package.LegacyBuilder pkgBuilder, Location location,
+    protected void process(Package.Builder pkgBuilder, Location location,
         Boolean value) {
       pkgBuilder.setDefaultTestonly(value);
     }
@@ -184,7 +189,7 @@ public final class PackageFactory {
     }
 
     @Override
-    protected void process(Package.LegacyBuilder pkgBuilder, Location location,
+    protected void process(Package.Builder pkgBuilder, Location location,
         String value) {
       pkgBuilder.setDefaultDeprecation(value);
     }
@@ -196,7 +201,7 @@ public final class PackageFactory {
     }
 
     @Override
-    protected void process(Package.LegacyBuilder pkgBuilder, Location location,
+    protected void process(Package.Builder pkgBuilder, Location location,
         List<String> value) {
       pkgBuilder.addFeatures(value);
     }
@@ -208,7 +213,7 @@ public final class PackageFactory {
     }
 
     @Override
-    protected void process(Package.LegacyBuilder pkgBuilder, Location location,
+    protected void process(Package.Builder pkgBuilder, Location location,
         License value) {
       pkgBuilder.setDefaultLicense(value);
     }
@@ -220,7 +225,7 @@ public final class PackageFactory {
     }
 
     @Override
-    protected void process(Package.LegacyBuilder pkgBuilder, Location location,
+    protected void process(Package.Builder pkgBuilder, Location location,
         Set<DistributionType> value) {
       pkgBuilder.setDefaultDistribs(value);
     }
@@ -236,7 +241,7 @@ public final class PackageFactory {
     }
 
     @Override
-    protected void process(Package.LegacyBuilder pkgBuilder, Location location,
+    protected void process(Package.Builder pkgBuilder, Location location,
         List<Label> value) {
       pkgBuilder.setDefaultCompatibleWith(value, Package.DEFAULT_COMPATIBLE_WITH_ATTRIBUTE,
           location);
@@ -253,7 +258,7 @@ public final class PackageFactory {
     }
 
     @Override
-    protected void process(Package.LegacyBuilder pkgBuilder, Location location,
+    protected void process(Package.Builder pkgBuilder, Location location,
         List<Label> value) {
       pkgBuilder.setDefaultRestrictedTo(value, Package.DEFAULT_RESTRICTED_TO_ATTRIBUTE, location);
     }
@@ -270,7 +275,7 @@ public final class PackageFactory {
       this.globCache = globCache;
     }
 
-    private class Token extends Globber.Token {
+    private static class Token extends Globber.Token {
       public final List<String> includes;
       public final List<String> excludes;
       public final boolean excludeDirs;
@@ -327,51 +332,60 @@ public final class PackageFactory {
   private final ImmutableList<EnvironmentExtension> environmentExtensions;
   private final ImmutableMap<String, PackageArgument<?>> packageArguments;
 
-  /**
-   * Constructs a {@code PackageFactory} instance with the given rule factory.
-   */
-  @VisibleForTesting
-  public PackageFactory(RuleClassProvider ruleClassProvider) {
-    this(
-        ruleClassProvider,
-        null,
-        AttributeContainer.ATTRIBUTE_CONTAINER_FACTORY,
-        ImmutableList.<EnvironmentExtension>of(),
-        "test");
-  }
+  private final Package.Builder.Helper packageBuilderHelper;
 
+  /** Factory for {@link PackageFactory} instances. Intended to only be used by unit tests. */
   @VisibleForTesting
-  public PackageFactory(RuleClassProvider ruleClassProvider,
-      EnvironmentExtension environmentExtension) {
-    this(
-        ruleClassProvider,
-        null,
-        AttributeContainer.ATTRIBUTE_CONTAINER_FACTORY,
-        ImmutableList.of(environmentExtension),
-        "test");
-  }
-
-  @VisibleForTesting
-  public PackageFactory(RuleClassProvider ruleClassProvider,
-      Iterable<EnvironmentExtension> environmentExtensions) {
-    this(
-        ruleClassProvider,
-        null,
-        AttributeContainer.ATTRIBUTE_CONTAINER_FACTORY,
-        environmentExtensions,
-        "test");
+  public abstract static class FactoryForTesting {
+    public final PackageFactory create(RuleClassProvider ruleClassProvider, FileSystem fs) {
+      return create(ruleClassProvider, ImmutableList.<EnvironmentExtension>of(), fs);
+    }
+    
+    public final PackageFactory create(
+        RuleClassProvider ruleClassProvider,
+        EnvironmentExtension environmentExtension,
+        FileSystem fs) {
+      return create(ruleClassProvider, ImmutableList.of(environmentExtension), fs);
+    }
+  
+    public final PackageFactory create(
+        RuleClassProvider ruleClassProvider,
+        Iterable<EnvironmentExtension> environmentExtensions,
+        FileSystem fs) {
+      return create(
+          ruleClassProvider,
+          null,
+          AttributeContainer.ATTRIBUTE_CONTAINER_FACTORY,
+          environmentExtensions,
+          "test",
+          fs);
+    }
+      
+    protected abstract PackageFactory create(
+        RuleClassProvider ruleClassProvider,
+        Map<String, String> platformSetRegexps,
+        Function<RuleClass, AttributeContainer> attributeContainerFactory,
+        Iterable<EnvironmentExtension> environmentExtensions,
+        String version,
+        FileSystem fs);
   }
 
   /**
    * Constructs a {@code PackageFactory} instance with a specific glob path translator
    * and rule factory.
+   *
+   * <p>Only intended to be called by BlazeRuntime or {@link FactoryForTesting#create}.
+   *
+   * <p>Do not call this constructor directly in tests; please use
+   * TestConstants#PACKAGE_FACTORY_FACTORY_FOR_TESTING instead.
    */
   public PackageFactory(
       RuleClassProvider ruleClassProvider,
       Map<String, String> platformSetRegexps,
       Function<RuleClass, AttributeContainer> attributeContainerFactory,
       Iterable<EnvironmentExtension> environmentExtensions,
-      String version) {
+      String version,
+      Package.Builder.Helper packageBuilderHelper) {
     this.platformSetRegexps = platformSetRegexps;
     this.ruleFactory = new RuleFactory(ruleClassProvider, attributeContainerFactory);
     this.ruleClassProvider = ruleClassProvider;
@@ -384,6 +398,7 @@ public final class PackageFactory {
     this.packageArguments = createPackageArguments();
     this.nativeModule = newNativeModule();
     this.workspaceNativeModule = WorkspaceFactory.newNativeModule(ruleClassProvider, version);
+    this.packageBuilderHelper = packageBuilderHelper;
   }
 
   /**
@@ -687,15 +702,20 @@ public final class PackageFactory {
 
   static Runtime.NoneType callExportsFiles(Object srcs, Object visibilityO, Object licensesO,
       FuncallExpression ast, Environment env) throws EvalException, ConversionException {
-    Package.LegacyBuilder pkgBuilder = getContext(env, ast).pkgBuilder;
+    Package.Builder pkgBuilder = getContext(env, ast).pkgBuilder;
     List<String> files = Type.STRING_LIST.convert(srcs, "'exports_files' operand");
 
-    RuleVisibility visibility = EvalUtils.isNullOrNone(visibilityO)
-        ? ConstantRuleVisibility.PUBLIC
-        : getVisibility(pkgBuilder.getBuildFileLabel(), BuildType.LABEL_LIST.convert(
+    RuleVisibility visibility;
+    try {
+      visibility = EvalUtils.isNullOrNone(visibilityO)
+          ? ConstantRuleVisibility.PUBLIC
+          : getVisibility(pkgBuilder.getBuildFileLabel(), BuildType.LABEL_LIST.convert(
               visibilityO,
               "'exports_files' operand",
               pkgBuilder.getBuildFileLabel()));
+    } catch (EvalException e) {
+      throw new EvalException(ast.getLocation(), e.getMessage());
+    }
     // TODO(bazel-team): is licenses plural or singular?
     License license = BuildType.LICENSE.convertOptional(licensesO, "'exports_files' operand");
 
@@ -919,11 +939,11 @@ public final class PackageFactory {
     if (val instanceof TriState) {
       switch ((TriState) val) {
         case AUTO:
-          return new Integer(-1);
+          return Integer.valueOf(-1);
         case YES:
-          return new Integer(1);
+          return Integer.valueOf(1);
         case NO:
-          return new Integer(0);
+          return Integer.valueOf(0);
       }
     }
 
@@ -1044,7 +1064,8 @@ public final class PackageFactory {
     }
   }
 
-  public static RuleVisibility getVisibility(Label ruleLabel, List<Label> original) {
+  public static RuleVisibility getVisibility(Label ruleLabel, List<Label> original)
+      throws EvalException {
     RuleVisibility result;
 
     result = ConstantRuleVisibility.tryParse(original);
@@ -1080,7 +1101,7 @@ public final class PackageFactory {
       public Object call(Object[] arguments, FuncallExpression ast, Environment env)
           throws EvalException {
 
-        Package.LegacyBuilder pkgBuilder = getContext(env, ast).pkgBuilder;
+        Package.Builder pkgBuilder = getContext(env, ast).pkgBuilder;
 
         // Validate parameter list
         if (pkgBuilder.isPackageFunctionUsed()) {
@@ -1158,7 +1179,7 @@ public final class PackageFactory {
       public Runtime.NoneType invoke(Map<String, Object> kwargs,
           FuncallExpression ast, Environment env)
           throws EvalException, InterruptedException {
-        env.checkLoadingPhase(ruleClass, ast.getLocation());
+        env.checkLoadingOrWorkspacePhase(ruleClass, ast.getLocation());
         try {
           addRule(ruleFactory, ruleClass, getContext(env, ast), kwargs, ast, env);
         } catch (RuleFactory.InvalidRuleException | Package.NameConflictException e) {
@@ -1189,7 +1210,7 @@ public final class PackageFactory {
    * {@code globber.onInterrupt()} on an {@link InterruptedException}.
    */
   // Used outside of bazel!
-  public Package.LegacyBuilder createPackageFromPreprocessingResult(
+  public Package.Builder createPackageFromPreprocessingResult(
       Package externalPkg,
       PackageIdentifier packageId,
       Path buildFile,
@@ -1227,7 +1248,7 @@ public final class PackageFactory {
     return buildFileAST;
   }
 
-  public Package.LegacyBuilder createPackageFromPreprocessingAst(
+  public Package.Builder createPackageFromPreprocessingAst(
       Package externalPkg,
       PackageIdentifier packageId,
       Path buildFile,
@@ -1266,14 +1287,24 @@ public final class PackageFactory {
   }
 
   @VisibleForTesting
+  public Package.Builder newExternalPackageBuilder(Path workspacePath, String runfilesPrefix) {
+    return Package.newExternalPackageBuilder(packageBuilderHelper, workspacePath, runfilesPrefix);
+  }
+
+  @VisibleForTesting
+  public Package.Builder newPackageBuilder(PackageIdentifier packageId, String runfilesPrefix) {
+    return new Package.Builder(packageBuilderHelper, packageId, runfilesPrefix);
+  }
+
+  @VisibleForTesting
   public Package createPackageForTesting(
       PackageIdentifier packageId,
       Path buildFile,
       CachingPackageLocator locator,
       EventHandler eventHandler)
       throws NoSuchPackageException, InterruptedException {
-    Package externalPkg =
-        Package.newExternalPackageBuilder(buildFile.getRelative("WORKSPACE"), "TESTING").build();
+    Package externalPkg = newExternalPackageBuilder(
+        buildFile.getRelative("WORKSPACE"), "TESTING").build();
     return createPackageForTesting(packageId, externalPkg, buildFile, locator, eventHandler);
   }
 
@@ -1393,14 +1424,14 @@ public final class PackageFactory {
    * footprint when making changes here!
    */
   public static class PackageContext {
-    final Package.LegacyBuilder pkgBuilder;
+    final Package.Builder pkgBuilder;
     final Globber globber;
     final EventHandler eventHandler;
     private final Function<RuleClass, AttributeContainer> attributeContainerFactory;
 
     @VisibleForTesting
     public PackageContext(
-        Package.LegacyBuilder pkgBuilder,
+        Package.Builder pkgBuilder,
         Globber globber,
         EventHandler eventHandler,
         Function<RuleClass, AttributeContainer> attributeContainerFactory) {
@@ -1492,6 +1523,14 @@ public final class PackageFactory {
   }
 
   /**
+   * Called by a caller of {@link #createPackageFromPreprocessingAst} after this caller has fully
+   * loaded the package.
+   */
+  public void afterDoneLoadingPackage(Package pkg) {
+    packageBuilderHelper.onLoadingComplete(pkg);
+  }
+
+  /**
    * Constructs a Package instance, evaluates the BUILD-file AST inside the
    * build environment, and populates the package with Rule instances as it
    * goes.  As with most programming languages, evaluation stops when an
@@ -1510,7 +1549,7 @@ public final class PackageFactory {
    * @see PackageFactory#PackageFactory
    */
   @VisibleForTesting // used by PackageFactoryApparatus
-  public Package.LegacyBuilder evaluateBuildFile(
+  public Package.Builder evaluateBuildFile(
       Package externalPkg,
       PackageIdentifier packageId,
       BuildFileAST buildFileAST,
@@ -1523,8 +1562,8 @@ public final class PackageFactory {
       Map<String, Extension> imports,
       ImmutableList<Label> skylarkFileDependencies)
       throws InterruptedException {
-    Package.LegacyBuilder pkgBuilder = new Package.LegacyBuilder(
-        packageId, ruleClassProvider.getRunfilesPrefix());
+    Package.Builder pkgBuilder = new Package.Builder(packageBuilderHelper.createFreshPackage(
+        packageId, ruleClassProvider.getRunfilesPrefix()));
     StoredEventHandler eventHandler = new StoredEventHandler();
 
     try (Mutability mutability = Mutability.create("package %s", packageId)) {
@@ -1611,8 +1650,8 @@ public final class PackageFactory {
           .setPhase(Phase.LOADING)
           .build();
 
-      Package.LegacyBuilder pkgBuilder = new Package.LegacyBuilder(packageId,
-          ruleClassProvider.getRunfilesPrefix());
+      Package.Builder pkgBuilder = new Package.Builder(packageBuilderHelper.createFreshPackage(
+          packageId, ruleClassProvider.getRunfilesPrefix()));
 
       pkgBuilder.setFilename(buildFilePath)
           .setMakeEnv(pkgMakeEnv)

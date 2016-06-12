@@ -509,8 +509,8 @@ public final class AndroidRuleClasses {
               .value(JavaSemantics.JAVA_PLUGINS))
           /* <!-- #BLAZE_RULE($android_base).ATTRIBUTE(javacopts) -->
           Extra compiler options for this target.
-          Subject to <a href="make-variables.html">"Make variable"</a> substitution and
-          <a href="common-definitions.html#sh-tokenization">Bourne shell tokenization</a>.
+          Subject to <a href="${link make-variables}">"Make variable"</a> substitution and
+          <a href="${link common-definitions#sh-tokenization}">Bourne shell tokenization</a>.
           <p>
           These compiler options are passed to javac after the global compiler options.</p>
           <!-- #END_BLAZE_RULE.ATTRIBUTE --> */
@@ -584,7 +584,7 @@ public final class AndroidRuleClasses {
               .allowedRuleClasses(ALLOWED_DEPENDENCIES)
               .allowedFileTypes()
               .aspect(androidNeverlinkAspect)
-              .aspect(dexArchiveAspect)
+              .aspect(dexArchiveAspect, DexArchiveAspect.PARAM_EXTRACTOR)
               .aspect(jackAspect))
           // Proguard rule specifying master list of classes to keep during legacy multidexing.
           .add(attr("$build_incremental_dexmanifest", LABEL).cfg(HOST).exec()
@@ -611,8 +611,8 @@ public final class AndroidRuleClasses {
               .value(env.getToolsLabel(DEFAULT_INCREMENTAL_SPLIT_STUB_APPLICATION)))
           /* <!-- #BLAZE_RULE($android_binary_base).ATTRIBUTE(dexopts) -->
           Additional command-line flags for the dx tool when generating classes.dex.
-          Subject to <a href="make-variables.html">"Make variable"</a> substitution and
-          <a href="common-definitions.html#sh-tokenization">Bourne shell tokenization</a>.
+          Subject to <a href="${link make-variables}">"Make variable"</a> substitution and
+          <a href="${link common-definitions#sh-tokenization}">Bourne shell tokenization</a>.
           <!-- #END_BLAZE_RULE.ATTRIBUTE --> */
           .add(attr("dexopts", STRING_LIST))
           /* <!-- #BLAZE_RULE($android_binary_base).ATTRIBUTE(dex_shards) -->
@@ -625,6 +625,18 @@ public final class AndroidRuleClasses {
           setting this to more than 1 is not recommended for release binaries.
           <!-- #END_BLAZE_RULE.ATTRIBUTE --> */
           .add(attr("dex_shards", INTEGER).value(1))
+          /* <!-- #BLAZE_RULE($android_binary_base).ATTRIBUTE(incremental_dexing) -->
+          Force the target to be built with or without incremental dexing, overriding defaults and
+          --incremental_dexing flag. Users should set this attribute to 0 for release binaries
+          (e.g., to avoid accidental usage of --incremental_dexing), since incremental dexing can
+          produce slightly larger artifacts than dx. It is an error to set this attribute to 1 for
+          android_binary and android_test rules that have Proguard enabled, as well as for
+          android_test rules with binary_under_test set. We are working on addressing these
+          shortcomings so please check with us if you run into these limitations.
+          <!-- #END_BLAZE_RULE.ATTRIBUTE --> */
+          .add(attr("incremental_dexing", TRISTATE)
+              // Read by DexArchiveAspect's attribute extractor
+              .nonconfigurable("AspectParameters don't support configurations."))
           /* <!-- #BLAZE_RULE($android_binary_base).ATTRIBUTE(main_dex_list_opts) -->
           Command line options to pass to the main dex list builder.
           Use this option to affect the classes included in the main dex list.
@@ -658,9 +670,9 @@ com/google/common/base/Objects.class
           The mapping file will be generated only if <code>proguard_specs</code> is
           specified. This file will list the mapping between the original and
           obfuscated class, method, and field names.
-          <p><em class="harmful">WARNING: If you use this attribute, your Proguard specification
-          should contain neither <code>-dontobfuscate</code> nor <code>-printmapping</code>.
-          </em>.</p>
+          <p><em class="harmful">WARNING: If this attribute is used, the Proguard
+          specification should contain neither <code>-dontobfuscate</code> nor
+          <code>-printmapping</code>.</em></p>
           <!-- #END_BLAZE_RULE.ATTRIBUTE --> */
           .add(attr("proguard_generate_mapping", BOOLEAN).value(false)
               .nonconfigurable("value is referenced in an ImplicitOutputsFunction"))

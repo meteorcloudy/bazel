@@ -24,6 +24,7 @@ filegroup(
             "//src/tools/xcode/actoolwrapper",
             "//src/tools/xcode/environment:environment_plist",
             "//src/tools/xcode/ibtoolwrapper",
+            "//src/tools/xcode/libtool",
             "//src/tools/xcode/momcwrapper",
             "//src/tools/xcode/realpath",
             "//src/tools/xcode/stdredirect:StdRedirect.dylib",
@@ -94,7 +95,9 @@ sh_test(
         ":objc-deps",
         ":test-deps",
         "//:workspace-file",
+        "//tools/build_defs/apple/test:srcs",
     ],
+    shard_count = 3,
 )
 
 sh_test(
@@ -150,7 +153,7 @@ genrule(
         "//third_party:srcs",
     ],
     outs = ["doc-srcs.zip"],
-    cmd = "zip -q $@ $(SRCS)",
+    cmd = "echo $(SRCS) | tr ' ' '\n' | zip -q@ $@",
 )
 
 sh_test(
@@ -194,7 +197,7 @@ sh_test(
 
 sh_test(
     name = "local_repository_test_jdk8",
-    size = "small",
+    size = "medium",
     srcs = ["local_repository_test_jdk8.sh"],
     data = [":test-deps"],
     tags = ["jdk8"],
@@ -323,6 +326,16 @@ sh_test(
         ":objc-deps",
         ":test-deps",
         "//:workspace-file",
+    ],
+)
+
+sh_test(
+    name = "remote_execution_test",
+    size = "large",
+    srcs = ["remote_execution_test.sh"],
+    data = [
+        ":test-deps",
+        "//src/tools/remote_worker",
     ],
 )
 

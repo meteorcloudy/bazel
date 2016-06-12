@@ -14,9 +14,11 @@
 
 package com.google.devtools.build.lib.bazel.repository;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Optional;
 import com.google.devtools.build.lib.bazel.repository.DecompressorValue.Decompressor;
 import com.google.devtools.build.lib.rules.repository.RepositoryFunction.RepositoryFunctionException;
+import com.google.devtools.build.lib.util.Preconditions;
 import com.google.devtools.build.lib.vfs.FileSystemUtils;
 import com.google.devtools.build.lib.vfs.Path;
 import com.google.devtools.build.lib.vfs.PathFragment;
@@ -27,6 +29,7 @@ import com.google.devtools.build.zip.ZipReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.Collection;
@@ -36,14 +39,21 @@ import javax.annotation.Nullable;
 /**
  * Creates a repository by decompressing a zip file.
  */
-public class ZipFunction implements Decompressor {
-  public static final Decompressor INSTANCE = new ZipFunction();
+public class ZipDecompressor implements Decompressor {
+  public static final Decompressor INSTANCE = new ZipDecompressor();
+  private static final long MAX_PATH_LENGTH = 256;
 
-  private ZipFunction() {
+  private ZipDecompressor() {
   }
 
-  private static final int WINDOWS_DIRECTORY = 0x10;
-  private static final int WINDOWS_FILE = 0x20;
+  private static final int S_IFDIR = 040000;
+  private static final int S_IFREG = 0100000;
+  private static final int S_IFLNK = 0120000;
+  private static final int EXECUTABLE_MASK = 0755;
+  @VisibleForTesting
+  static final int WINDOWS_DIRECTORY = 0x10;
+  @VisibleForTesting
+  static final int WINDOWS_FILE = 0x20;
 
   /**
    * This unzips the zip file to a sibling directory of {@link DecompressorDescriptor#archivePath}.
@@ -60,6 +70,7 @@ public class ZipFunction implements Decompressor {
    *      ...
    * </pre>
    */
+  @Override
   @Nullable
   public Path decompress(DecompressorDescriptor descriptor) throws RepositoryFunctionException {
     Path destinationDirectory = descriptor.archivePath().getParentDirectory();
@@ -105,9 +116,27 @@ public class ZipFunction implements Decompressor {
     Path outputPath = destinationDirectory.getRelative(strippedRelativePath);
     int permissions = getPermissions(entry.getExternalAttributes(), entry.getName());
     FileSystemUtils.createDirectoryAndParents(outputPath.getParentDirectory());
-    boolean isDirectory = (permissions & 040000) == 040000;
+    boolean isDirectory = (permissions & S_IFDIR) == S_IFDIR;
+    boolean isSymlink = (permissions & S_IFLNK) == S_IFLNK;
     if (isDirectory) {
       FileSystemUtils.createDirectoryAndParents(outputPath);
+    } else if (isSymlink) {
+      Preconditions.checkState(entry.getSize() < MAX_PATH_LENGTH);
+      byte buffer[] = new byte[(int) entry.getSize()];
+      // For symlinks, the "compressed data" is actually the target name.
+      int read = reader.getInputStream(entry).read(buffer);
+      Preconditions.checkState(read == buffer.length);
+      PathFragment target = new PathFragment(new String(buffer, Charset.defaultCharset()))
+          .normalize();
+      if (!target.isNormalized()) {
+        throw new IOException("Zip entries cannot refer to files outside of their directory: "
+            + reader.getFilename() + " has a symlink to " + target);
+      }
+      if (target.isAbsolute()) {
+        throw new IOException("Zip entries cannot be symlinks to absolute paths: "
+            + reader.getFilename() + " has a symlink to " + target);
+      }
+      outputPath.createSymbolicLink(target);
     } else {
       // TODO(kchodorow): should be able to be removed when issue #236 is resolved, but for now
       // this delete+rewrite is required or the build will error out if outputPath exists here.
@@ -121,7 +150,14 @@ public class ZipFunction implements Decompressor {
     }
   }
 
-  private int getPermissions(int permissions, String path) throws IOException {
+  @VisibleForTesting
+  static int getPermissions(int permissions, String path) throws IOException {
+    // Sometimes zip files list directories as being "regular" executable files (i.e., 0100755).
+    // I'm looking at you, Go AppEngine SDK 1.9.37 (see #1263 for details).
+    if (path.endsWith("/")) {
+      return S_IFDIR | EXECUTABLE_MASK;
+    }
+
     // Posix permissions are in the high-order 2 bytes of the external attributes. After this
     // operation, permissions holds 0100755 (or 040755 for directories).
     int shiftedPermissions = permissions >>> 16;
@@ -130,16 +166,16 @@ public class ZipFunction implements Decompressor {
     }
 
     // If this was zipped up on FAT, it won't have posix permissions set. Instead, this
-    // checks if the filename ends with / (for directories) and extra attributes set to 0 for
-    // files. From  https://github.com/miloyip/rapidjson/archive/v1.0.2.zip, it looks like
-    // executables end up with "normal" (posix) permissions (oddly), so they'll be handled above.
+    // checks if extra attributes is set to 0 for files. From
+    // https://github.com/miloyip/rapidjson/archive/v1.0.2.zip, it looks like executables end up
+    // with "normal" (posix) permissions (oddly), so they'll be handled above.
     int windowsPermission = permissions & 0xff;
-    if (path.endsWith("/") || (windowsPermission & WINDOWS_DIRECTORY) == WINDOWS_DIRECTORY) {
+    if ((windowsPermission & WINDOWS_DIRECTORY) == WINDOWS_DIRECTORY) {
       // Directory.
-      return 040755;
+      return S_IFDIR | EXECUTABLE_MASK;
     } else if (permissions == 0 || (windowsPermission & WINDOWS_FILE) == WINDOWS_FILE) {
       // File.
-      return 010644;
+      return S_IFREG | EXECUTABLE_MASK;
     }
 
     // No idea.

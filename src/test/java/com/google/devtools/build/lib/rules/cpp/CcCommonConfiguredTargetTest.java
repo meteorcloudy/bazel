@@ -397,6 +397,18 @@ public class CcCommonConfiguredTargetTest extends BuildViewTestCase {
     assertThat(getCppCompileAction("//a:nopiclib").getArgv()).doesNotContain("-fPIC");
   }
 
+  @Test
+  public void testPicModeAssembly() throws Exception {
+    CrosstoolConfigurationHelper.overwriteCrosstoolWithToolchain(
+        directories.getWorkspace(),
+        CrosstoolConfig.CToolchain.newBuilder().setNeedsPic(true).buildPartial());
+
+    scratch.file("a/BUILD",
+        "cc_library(name='preprocess', srcs=['preprocess.S'])");
+
+    assertThat(getCppCompileAction("//a:preprocess").getArgv()).contains("-fPIC");
+  }
+
   private CppCompileAction getCppCompileAction(String label) throws Exception {
     ConfiguredTarget target = getConfiguredTarget(label);
     List<CppCompileAction> compilationSteps =
@@ -411,8 +423,6 @@ public class CcCommonConfiguredTargetTest extends BuildViewTestCase {
     // Tests the (immediate) effect of declaring the includes attribute on a
     // cc_library.
 
-    useConfiguration("--use_isystem_for_includes=false");
-
     scratch.file(
         "bang/BUILD",
         "cc_library(name = 'bang',",
@@ -422,11 +432,9 @@ public class CcCommonConfiguredTargetTest extends BuildViewTestCase {
     ConfiguredTarget foo = getConfiguredTarget("//bang:bang");
 
     String includesRoot = "bang/bang_includes";
-    List<PathFragment> expected =
-        ImmutableList.of(
-            new PathFragment(includesRoot),
-            targetConfig.getGenfilesFragment().getRelative(includesRoot));
-    assertEquals(expected, foo.getProvider(CppCompilationContext.class).getIncludeDirs());
+    assertThat(foo.getProvider(CppCompilationContext.class).getSystemIncludeDirs()).containsAllOf(
+        new PathFragment(includesRoot),
+        targetConfig.getGenfilesFragment().getRelative(includesRoot));
   }
 
   @Test

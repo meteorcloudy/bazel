@@ -16,6 +16,7 @@ package com.google.devtools.build.lib.rules.apple;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Optional;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -220,38 +221,120 @@ public class AppleConfiguration extends BuildConfiguration.Fragment {
   }
 
   /**
+   * Gets the single "effective" architecture for this configuration's {@link PlatformType} (for
+   * example, "i386" or "arm64"). Prefer this over {@link #getMultiArchitectures(PlatformType)}
+   * only if in the context of rule logic which is only concerned with a single architecture (such
+   * as in {@code objc_library}, which registers single-architecture compile actions).
+   *
+   * <p>Single effective architecture is determined using the following rules:
+   * <ol>
+   * <li>If {@code --apple_split_cpu} is set (done via prior configuration transition), then
+   *     that is the effective architecture.</li>
+   * <li>If the multi cpus flag (e.g. {@code --ios_multi_cpus}) is set and non-empty, then the first
+   *     such architecture is returned.</li>
+   * <li>In the case of iOS, use {@code --ios_cpu} for backwards compatibility.</li>
+   * <li>Use the default.</li></ol>
+   */
+  public String getSingleArchitecture() {
+    if (!Strings.isNullOrEmpty(appleSplitCpu)) {
+      return appleSplitCpu;
+    }
+    switch (applePlatformType) {
+      case IOS:
+        if (!getIosMultiCpus().isEmpty()) {
+          return getIosMultiCpus().get(0);
+        } else {
+          return getIosCpu();
+        }
+      // TODO(cparsons): Support platform types other than iOS.
+      default: 
+        throw new IllegalArgumentException("Unhandled platform type " + applePlatformType);
+    }
+  }
+ 
+  /**
+   * Gets the "effective" architecture(s) for the given {@link PlatformType}. For example,
+   * "i386" or "arm64". At least one architecture is always returned. Prefer this over
+   * {@link #getSingleArchitecture} in rule logic which may support multiple architectures, such
+   * as bundling rules.
+   * 
+   * <p>Effective architecture(s) is determined using the following rules:
+   * <ol>
+   * <li>If {@code --apple_split_cpu} is set (done via prior configuration transition), then
+   * that is the effective architecture.</li>
+   * <li>If the multi-cpu flag (for example, {@code --ios_multi_cpus}) is non-empty, then, return
+   * all architectures from that flag.</li>
+   * <li>In the case of iOS, use {@code --ios_cpu} for backwards compatibility.</li>
+   * <li>Use the default.</li></ol>
+   * 
+   * @throws IllegalArgumentException if {@code --apple_platform_type} is set (via prior
+   *     configuration transition) yet does not match {@code platformType}
+   */
+  public List<String> getMultiArchitectures(PlatformType platformType) {
+    if (!Strings.isNullOrEmpty(appleSplitCpu)) {
+      if (applePlatformType != platformType) {
+        throw new IllegalArgumentException(
+            String.format("Expected post-split-transition platform type %s to match input %s ",
+                applePlatformType, platformType));
+      }
+      return ImmutableList.of(appleSplitCpu);
+    }
+    switch (platformType) {
+      case IOS:
+        if (getIosMultiCpus().isEmpty()) {
+          return ImmutableList.of(getIosCpu());
+        } else {
+          return getIosMultiCpus();
+        }
+      // TODO(cparsons): Support other platform types.
+      default: 
+        throw new IllegalArgumentException("Unhandled platform type " + platformType);
+    }
+  }
+
+  /**
+   * Gets the single "effective" platform for this configuration's {@link PlatformType} and
+   * architecture. Prefer this over {@link #getMultiArchPlatform(PlatformType)}
+   * only in cases if in the context of rule logic which is only concerned with a single
+   * architecture (such as in {@code objc_library}, which registers single-architecture compile
+   * actions).
+   */
+  public Platform getSingleArchPlatform() {
+    return Platform.forTarget(applePlatformType, getSingleArchitecture());
+  }
+  
+  /**
+   * Gets the current configuration {@link Platform} for the given {@link PlatformType}. Platform
+   * is determined via a combination between the given platform type and the "effective"
+   * architectures of this configuration, as returned by {@link #getMultiArchitectures}; if any
+   * of the supported architectures are of device type, this will return a device platform.
+   * Otherwise, this will return a simulator platform.
+   */
+  // TODO(bazel-team): This should support returning multiple platforms.
+  public Platform getMultiArchPlatform(PlatformType platformType) {
+    List<String> architectures = getMultiArchitectures(platformType);
+    for (String arch : architectures) {
+      if (Platform.forTarget(PlatformType.IOS, arch) == Platform.IOS_DEVICE) {
+        return Platform.IOS_DEVICE;
+      }
+    }
+    return Platform.IOS_SIMULATOR;
+  }
+
+  /**
    * Returns the {@link Platform} represented by {@code ios_cpu} (see {@link #getIosCpu}.
    * (For example, {@code i386} maps to {@link Platform#IOS_SIMULATOR}.) Note that this is not
    * necessarily the effective platform for all ios actions in the current context: This is
    * typically the correct platform for implicityly-ios compile and link actions in the current
-   * context. For effective platform for bundling actions, see {@link #getBundlingPlatform}.
+   * context. For effective platform for bundling actions, see
+   * {@link #getMultiArchPlatform(PlatformType)}.
    */
+  // TODO(b/28754442): Deprecate for more general skylark-exposed platform retrieval.
   @SkylarkCallable(name = "ios_cpu_platform", doc = "The platform given by the ios_cpu flag.")
   public Platform getIosCpuPlatform() {
-    return Platform.forIosArch(getIosCpu());
+    return Platform.forTarget(PlatformType.IOS, iosCpu);
   }
-  
-  /**
-   * Returns the platform of the configuration for the current bundle, based on configured
-   * architectures (for example, {@code i386} maps to {@link Platform#IOS_SIMULATOR}).
-   *
-   * <p>If {@link #getIosMultiCpus()} is set, returns {@link Platform#IOS_DEVICE} if any of the
-   * architectures matches it, otherwise returns the mapping for {@link #getIosCpu()}.
-   *
-   * <p>Note that this method should not be used to determine the platform for code compilation.
-   * Derive the platform from {@link #getIosCpu()} instead.
-   */
-  // TODO(bazel-team): This method should be enabled to return multiple values once all call sites
-  // (in particular actool, bundlemerge, momc) have been upgraded to support multiple values.
-  public Platform getBundlingPlatform() {
-    for (String architecture : getIosMultiCpus()) {
-      if (Platform.forIosArch(architecture) == Platform.IOS_DEVICE) {
-        return Platform.IOS_DEVICE;
-      }
-    }
-    return Platform.forIosArch(getIosCpu());
-  }
-  
+
   /**
    * Returns the architecture for which we keep dependencies that should be present only once (in a
    * single architecture).

@@ -261,7 +261,7 @@ public final class ReleaseBundlingSupport {
 
     AppleConfiguration appleConfiguration = ruleContext.getFragment(AppleConfiguration.class);
     if (releaseBundling.getProvisioningProfile() == null
-        && appleConfiguration.getBundlingPlatform() != Platform.IOS_SIMULATOR) {
+        && appleConfiguration.getMultiArchPlatform(PlatformType.IOS) != Platform.IOS_SIMULATOR) {
       ruleContext.attributeError(releaseBundling.getProvisioningProfileAttrName(),
           DEVICE_NO_PROVISIONING_PROFILE);
     }
@@ -373,7 +373,7 @@ public final class ReleaseBundlingSupport {
     String platformWithVersion =
         String.format(
             "%s%s",
-            configuration.getBundlingPlatform().getLowerCaseNameInPlist(),
+            configuration.getMultiArchPlatform(PlatformType.IOS).getLowerCaseNameInPlist(),
             configuration.getIosSdkVersion());
     ruleContext.registerAction(
         ObjcRuleClasses.spawnAppleEnvActionBuilder(ruleContext)
@@ -402,7 +402,7 @@ public final class ReleaseBundlingSupport {
     List<Integer> uiDeviceFamily =
         TargetDeviceFamily.UI_DEVICE_FAMILY_VALUES.get(bundleSupport.targetDeviceFamilies());
     AppleConfiguration appleConfiguration = ruleContext.getFragment(AppleConfiguration.class);
-    Platform platform = appleConfiguration.getBundlingPlatform();
+    Platform platform = appleConfiguration.getMultiArchPlatform(PlatformType.IOS);
 
     NSDictionary result = new NSDictionary();
 
@@ -457,7 +457,7 @@ public final class ReleaseBundlingSupport {
     }
 
     AppleConfiguration appleConfiguration = ruleContext.getFragment(AppleConfiguration.class);
-    if (appleConfiguration.getBundlingPlatform() == Platform.IOS_DEVICE) {
+    if (appleConfiguration.getMultiArchPlatform(PlatformType.IOS) == Platform.IOS_DEVICE) {
       processingNeeded = true;
       registerEntitlementsActions();
       actionCommandLine += signingCommandLine();
@@ -488,13 +488,14 @@ public final class ReleaseBundlingSupport {
   }
 
   private String signingCommandLine() {
-    ImmutableList.Builder<String> dirsToSign = new ImmutableList.Builder<>();
-
-    // Explicitly sign Swift dylibs. Unfortunately --deep option on codesign doesn't do this
-    // automatically.
     // The order here is important. The innermost code must singed first.
+    ImmutableList.Builder<String> dirsToSign = new ImmutableList.Builder<>();
     String bundleDir = ShellUtils.shellEscape(bundling.getBundleDir());
-    if (objcProvider.is(USES_SWIFT)) {
+
+    // Explicitly sign the frameworks (raw .dylib files and .framework directories in Frameworks/).
+    // Unfortunately the --deep option on codesign doesn't do this automatically.
+    if (objcProvider.is(USES_SWIFT)
+        || !objcProvider.get(ObjcProvider.DYNAMIC_FRAMEWORK_FILE).isEmpty()) {
       dirsToSign.add(bundleDir + "/Frameworks/*");
     }
     dirsToSign.add(bundleDir);
@@ -686,21 +687,27 @@ public final class ReleaseBundlingSupport {
     // We want access to #import-able things from our test rig's dependency graph, but we don't
     // want to link anything since that stuff is shared automatically by way of the
     // -bundle_loader linker flag.
-    ObjcProvider partialObjcProvider = new ObjcProvider.Builder()
-        .addTransitiveAndPropagate(ObjcProvider.HEADER, objcProvider)
-        .addTransitiveAndPropagate(ObjcProvider.INCLUDE, objcProvider)
-        .addTransitiveAndPropagate(ObjcProvider.DEFINE, objcProvider)
-        .addTransitiveAndPropagate(ObjcProvider.SDK_DYLIB, objcProvider)
-        .addTransitiveAndPropagate(ObjcProvider.SDK_FRAMEWORK, objcProvider)
-        .addTransitiveAndPropagate(ObjcProvider.SOURCE, objcProvider)
-        .addTransitiveAndPropagate(ObjcProvider.WEAK_SDK_FRAMEWORK, objcProvider)
-        .addTransitiveAndPropagate(ObjcProvider.FRAMEWORK_DIR, objcProvider)
-        .addTransitiveAndPropagate(ObjcProvider.FRAMEWORK_FILE, objcProvider)
-        .build();
     // TODO(bazel-team): Handle the FRAMEWORK_DIR key properly. We probably want to add it to
     // framework search paths, but not actually link it with the -framework flag.
-    return new XcTestAppProvider(intermediateArtifacts
-        .combinedArchitectureBinary(), releaseBundling.getIpaArtifact(), partialObjcProvider);
+    ObjcProvider partialObjcProvider =
+        new ObjcProvider.Builder()
+            .addTransitiveAndPropagate(ObjcProvider.HEADER, objcProvider)
+            .addTransitiveAndPropagate(ObjcProvider.INCLUDE, objcProvider)
+            .addTransitiveAndPropagate(ObjcProvider.DEFINE, objcProvider)
+            .addTransitiveAndPropagate(ObjcProvider.SDK_DYLIB, objcProvider)
+            .addTransitiveAndPropagate(ObjcProvider.SDK_FRAMEWORK, objcProvider)
+            .addTransitiveAndPropagate(ObjcProvider.SOURCE, objcProvider)
+            .addTransitiveAndPropagate(ObjcProvider.WEAK_SDK_FRAMEWORK, objcProvider)
+            .addTransitiveAndPropagate(ObjcProvider.STATIC_FRAMEWORK_FILE, objcProvider)
+            .addTransitiveAndPropagate(ObjcProvider.DYNAMIC_FRAMEWORK_FILE, objcProvider)
+            .addTransitiveAndPropagate(
+                ObjcProvider.FRAMEWORK_SEARCH_PATH_ONLY,
+                objcProvider.get(ObjcProvider.FRAMEWORK_DIR))
+            .build();
+    return new XcTestAppProvider(
+        intermediateArtifacts.combinedArchitectureBinary(),
+        releaseBundling.getIpaArtifact(),
+        partialObjcProvider);
   }
 
   /**
@@ -714,12 +721,12 @@ public final class ReleaseBundlingSupport {
         ShellUtils.shellEscape(objcConfiguration.getIosSimulatorVersion().toString());
     ImmutableList<Substitution> substitutions = ImmutableList.of(
         Substitution.of("%app_name%", ruleContext.getLabel().getName()),
-        Substitution.of("%ipa_file%", ipaInput.getRootRelativePath().getPathString()),
+        Substitution.of("%ipa_file%", ipaInput.getRunfilesPathString()),
         Substitution.of("%sim_device%", escapedSimDevice),
         Substitution.of("%sdk_version%", escapedSdkVersion),
-        Substitution.of("%iossim%", attributes.iossim().getRootRelativePath().getPathString()),
+        Substitution.of("%iossim%", attributes.iossim().getRunfilesPathString()),
         Substitution.of("%std_redirect_dylib_path%",
-            attributes.stdRedirectDylib().getRootRelativePath().getPathString()));
+            attributes.stdRedirectDylib().getRunfilesPathString()));
 
     ruleContext.registerAction(
         new TemplateExpansionAction(ruleContext.getActionOwner(), attributes.runnerScriptTemplate(),
@@ -759,7 +766,7 @@ public final class ReleaseBundlingSupport {
       DottedVersion minimumOsVersion) {
     ImmutableList<BundleableFile> extraBundleFiles;
     AppleConfiguration appleConfiguration = ruleContext.getFragment(AppleConfiguration.class);
-    if (appleConfiguration.getBundlingPlatform() == Platform.IOS_DEVICE) {
+    if (appleConfiguration.getMultiArchPlatform(PlatformType.IOS) == Platform.IOS_DEVICE) {
       extraBundleFiles = ImmutableList.of(new BundleableFile(
           releaseBundling.getProvisioningProfile(), PROVISIONING_PROFILE_BUNDLE_FILE));
     } else {
@@ -813,7 +820,7 @@ public final class ReleaseBundlingSupport {
     AppleConfiguration appleConfiguration = ruleContext.getFragment(AppleConfiguration.class);
 
     new LipoSupport(ruleContext).registerCombineArchitecturesAction(linkedBinaries(),
-        resultingLinkedBinary, appleConfiguration.getIosCpuPlatform());
+        resultingLinkedBinary, appleConfiguration.getMultiArchPlatform(PlatformType.IOS));
   }
 
   private NestedSet<Artifact> linkedBinaries() {

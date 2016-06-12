@@ -191,9 +191,12 @@ def _crosstool_content(repository_ctx, cc, cpu_value, darwin):
           "-lstdc++",
           "-lm",  # Some systems expect -lm in addition to -lstdc++
           # Anticipated future default.
-      ] + _add_option_if_supported(repository_ctx, cc, "-no-canonical-prefixes") +
-      _add_option_if_supported(repository_ctx, cc, "-Wl,-no-as-needed") + (
-          ["-undefined", "dynamic_lookup"] if darwin else [
+      ] + _add_option_if_supported(repository_ctx, cc, "-Wl,-no-as-needed") + (
+          [
+              "-undefined",
+              "dynamic_lookup",
+              "-headerpad_max_install_names",
+          ] if darwin else [
               "-B" + str(repository_ctx.path(cc).dirname),
               # Always have -B/usr/bin, see https://github.com/bazelbuild/bazel/issues/760.
               "-B/usr/bin",
@@ -210,8 +213,6 @@ def _crosstool_content(repository_ctx, cc, cpu_value, darwin):
       "cxx_builtin_include_directory": _get_cxx_inc_directories(repository_ctx, cc),
       "objcopy_embed_flag": ["-I", "binary"],
       "unfiltered_cxx_flag":
-          # Anticipated future default.
-          _add_option_if_supported(repository_ctx, cc, "-no-canonical-prefixes") +
           _add_option_if_supported(repository_ctx, cc, "-fno-canonical-system-headers") + [
               # Make C++ compilation deterministic. Use linkstamping instead of these
               # compiler symbols.
