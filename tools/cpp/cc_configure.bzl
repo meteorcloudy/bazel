@@ -141,17 +141,6 @@ def _get_cxx_inc_directories(repository_ctx, cc):
   return [repository_ctx.path(_cxx_inc_convert(p))
           for p in inc_dirs.split("\n")]
 
-def _get_cc_compiler_type(repository_ctx, cc):
-  """Return what kind of cc compiler we are using"""
-  result = repository_ctx.execute([cc, "--version"])
-  index_gcc = result.stdout.find("gcc")
-  if index_gcc != -1:
-    return "gcc"
-  index_clang = result.stdout.find("clang")
-  if index_clang != -1:
-    return "clang"
-  return "unknown"
-
 def _add_option_if_supported(repository_ctx, cc, option):
   """Checks that `option` is supported by the C compiler."""
   result = repository_ctx.execute([
@@ -282,27 +271,6 @@ def _dbg_content():
   # Enable debug symbols
   return {"compiler_flag": "-g"}
 
-def _fdo_instrument_flag_content(cc_type):
-  """Return the content of fdo_instrument specific flag of the CROSSTOOL file."""
-  if cc_type == "gcc":
-    return {"flag": "-fprofile-generate=%{fdo_instrument_path}"}
-  if cc_type == "clang":
-    return {"flag": "-fprofile-instr-generate=%{fdo_instrument_path}"}
-  return ""
-
-def _fdo_optimize_flag_content(cc_type):
-  """Return the content of fdo_optimize specific flag of the CROSSTOOL file."""
-  if cc_type == "gcc":
-    return {"flag": "-fprofile-use=%{fdo_profile_path}"}
-  if cc_type == "clang":
-    return {
-      "flag": [
-              "-fprofile-instr-use=%{fdo_profile_path}",
-              "-Wno-profile-instr-unprofiled",
-              "-Wno-profile-instr-out-of-date",
-          ]
-    }
-  return ""
 
 def _find_cc(repository_ctx):
   """Find the C++ compiler."""
@@ -358,14 +326,11 @@ def _impl(repository_ctx):
   else:
     darwin = cpu_value == "darwin"
     cc = _find_cc(repository_ctx)
-    cc_type = _get_cc_compiler_type(repository_ctx, cc)
     tool_paths = _get_tool_paths(repository_ctx, darwin,
                                  "cc_wrapper.sh" if darwin else str(cc))
     crosstool_content = _crosstool_content(repository_ctx, cc, cpu_value, darwin)
     opt_content = _opt_content(darwin)
     dbg_content = _dbg_content()
-    fdo_instrument_flag_content = _fdo_instrument_flag_content(cc_type)
-    fdo_optimize_flag_content = _fdo_optimize_flag_content(cc_type)
     _tpl(repository_ctx, "BUILD", {
         "%{name}": cpu_value,
         "%{supports_param_files}": "0" if darwin else "1",
@@ -381,8 +346,6 @@ def _impl(repository_ctx):
                       _build_tool_path(tool_paths),
         "%{opt_content}": _build_crosstool(opt_content, "    "),
         "%{dbg_content}": _build_crosstool(dbg_content, "    "),
-        "%{fdo_instrument_flag_content}": _build_crosstool(fdo_instrument_flag_content, "        "),
-        "%{fdo_optimize_flag_content}": _build_crosstool(fdo_optimize_flag_content, "        "),
     })
 
 
