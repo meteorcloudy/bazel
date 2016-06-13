@@ -20,6 +20,6 @@ set SWIG=swig
 set SWIG_PATH=tensorflow\tools\swig\swig_path
 
 if EXIST "%SWIG_PATH%" (for /f %%i in ('type %SWIG_PATH%') do set SWIG=%%i)
-set SWIG=C:\tools\msys64\home\pcloudy\swigwin\swig.exe
+set SWIG=C:\tools\swig\swig.exe
 :: If this line fails, rerun configure to set the path to swig correctly
 %SWIG% %*
