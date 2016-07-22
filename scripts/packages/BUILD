@@ -142,3 +142,41 @@ pkg_deb(
     package = "bazel",
     version_file = ":version.txt",
 )
+
+filegroup(
+    name = "debian-files",
+    srcs = [
+        "debian/compat",
+        "debian/copyright",
+        "debian/rules",
+        "debian/control",
+    ],
+)
+
+genrule(
+    name = "generate-changelog-file",
+    srcs = [
+        "convert_changelog.py",
+        "//:changelog-file",
+    ],
+    outs = ["changelog"],
+    cmd = "python $(location convert_changelog.py) $(location //:changelog-file) $(location changelog)",
+)
+
+genrule(
+    name = "bazel-debian-src",
+    cmd = """
+        mkdir -p bazel/debian
+        tar -xf $(location //:bazel-srcs) -C ./bazel
+        for f in $(locations :debian-files); do
+          cp $$f ./bazel/debian/
+        done
+        cp $(location :changelog) ./bazel/debian
+        dpkg-source -b ./bazel
+        cp ./bazel_*.dsc $(location bazel.dsc)
+        sed -i 's/bazel_.*.tar.gz/bazel.tar.gz/g' $(location bazel.dsc)
+        cp ./bazel_*.tar.gz $(location bazel.tar.gz)
+        """,
+    outs = [ "bazel.dsc", "bazel.tar.gz" ],
+    srcs = [ "//:bazel-srcs", ":debian-files", ":changelog"],
+)
