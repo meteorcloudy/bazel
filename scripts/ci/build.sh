@@ -148,6 +148,8 @@ function bazel_build() {
     cp bazel-bin/scripts/packages/install.sh $1/bazel-${release_label}-installer.sh
     if [ "$PLATFORM" = "linux" ]; then
       cp bazel-bin/scripts/packages/bazel-debian.deb $1/bazel_${release_label}.deb
+      cp -f bazel-genfiles/scripts/packages/bazel.dsc $1/bazel.dsc
+      cp -f bazel-genfiles/scripts/packages/bazel.tar.gz $1/bazel.tar.gz
     fi
     cp bazel-genfiles/site/jekyll-tree.tar $1/www.bazel.io.tar
     cp bazel-genfiles/scripts/packages/README.md $1/README.md
@@ -343,8 +345,14 @@ EOF
   local distribution="$1"
   local deb_pkg_name_jdk8="$2"
   local deb_pkg_name_jdk7="$3"
+  local deb_dsc_name="$4"
+
+  debsign -k ${APT_GPG_KEY_ID} "${deb_dsc_name}"
+
   reprepro -C jdk1.8 includedeb "${distribution}" "${deb_pkg_name_jdk8}"
+  reprepro -C jdk1.8 includedsc "${distribution}" "${deb_dsc_name}"
   reprepro -C jdk1.7 includedeb "${distribution}" "${deb_pkg_name_jdk7}"
+  reprepro -C jdk1.7 includedsc "${distribution}" "${deb_dsc_name}"
 
   "${gs}" -m cp -a public-read -r dists "gs://${GCS_APT_BUCKET}/"
   "${gs}" cp -a public-read -r pool "gs://${GCS_APT_BUCKET}/"
@@ -371,13 +379,17 @@ function release_to_apt() {
     local release_label="$(get_full_release_name)"
     local deb_pkg_name_jdk8="${release_name}/bazel_${release_label}-linux-x86_64.deb"
     local deb_pkg_name_jdk7="${release_name}/bazel_${release_label}-jdk7-linux-x86_64.deb"
+    local deb_dsc_name="${release_name}/bazel.dsc"
+    local deb_tar_name="${release_name}/bazel.tar.gz"
     cp "${tmpdir}/bazel_${release_label}-linux-x86_64.deb" "${dir}/${deb_pkg_name_jdk8}"
     cp "${tmpdir}/bazel_${release_label}-jdk7-linux-x86_64.deb" "${dir}/${deb_pkg_name_jdk7}"
+    cp "${tmpdir}/bazel-linux-x86_64.dsc" "${dir}/${deb_dsc_name}"
+    cp "${tmpdir}/bazel-linux-x86_64.tar.gz" "${dir}/${deb_tar_name}"
     cd "${dir}"
     if [ -n "${rc}" ]; then
-      create_apt_repository testing "${deb_pkg_name_jdk8}" "${deb_pkg_name_jdk7}"
+      create_apt_repository testing "${deb_pkg_name_jdk8}" "${deb_pkg_name_jdk7}" "${deb_dsc_name}"
     else
-      create_apt_repository stable "${deb_pkg_name_jdk8}" "${deb_pkg_name_jdk7}"
+      create_apt_repository stable "${deb_pkg_name_jdk8}" "${deb_pkg_name_jdk7}" "${deb_dsc_name"
     fi
     cd "${prev_dir}"
     rm -fr "${dir}"
