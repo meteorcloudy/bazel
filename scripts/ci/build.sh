@@ -389,7 +389,7 @@ function release_to_apt() {
     if [ -n "${rc}" ]; then
       create_apt_repository testing "${deb_pkg_name_jdk8}" "${deb_pkg_name_jdk7}" "${deb_dsc_name}"
     else
-      create_apt_repository stable "${deb_pkg_name_jdk8}" "${deb_pkg_name_jdk7}" "${deb_dsc_name"
+      create_apt_repository stable "${deb_pkg_name_jdk8}" "${deb_pkg_name_jdk7}" "${deb_dsc_name}"
     fi
     cd "${prev_dir}"
     rm -fr "${dir}"
@@ -406,8 +406,8 @@ function deploy_release() {
       github_args+=("$i")
     fi
   done
-  release_to_github "${github_args[@]}"
-  release_to_gcs "$@"
+#  release_to_github "${github_args[@]}"
+#  release_to_gcs "$@"
   release_to_apt
 }
 
