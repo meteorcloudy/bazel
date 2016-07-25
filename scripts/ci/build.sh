@@ -312,7 +312,7 @@ function create_apt_repository() {
 Origin: Bazel Authors
 Label: Bazel
 Codename: stable
-Architectures: amd64
+Architectures: amd64 source
 Components: jdk1.7 jdk1.8
 Description: Bazel APT Repository
 DebOverride: override.stable
@@ -322,7 +322,7 @@ SignWith: ${APT_GPG_KEY_ID}
 Origin: Bazel Authors
 Label: Bazel
 Codename: testing
-Architectures: amd64
+Architectures: amd64 source
 Components: jdk1.7 jdk1.8
 Description: Bazel APT Repository
 DebOverride: override.testing
