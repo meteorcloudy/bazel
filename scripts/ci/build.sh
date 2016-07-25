@@ -443,6 +443,7 @@ function bazel_release() {
       fi
     done
   done
+  ls -l ${tmpdir}
   deploy_release $README $(find ${tmpdir} -type f)
 
   export RELEASE_EMAIL="$(generate_email)"
