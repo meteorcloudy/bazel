@@ -26,6 +26,7 @@ import com.google.devtools.build.lib.analysis.RuleDefinitionEnvironment;
 import com.google.devtools.build.lib.packages.Attribute.AllowedValueSet;
 import com.google.devtools.build.lib.packages.RuleClass;
 import com.google.devtools.build.lib.packages.RuleClass.Builder.RuleClassType;
+import com.google.devtools.build.lib.rules.android.AndroidConfiguration.AndroidManifestMerger;
 import com.google.devtools.build.lib.rules.android.AndroidRuleClasses.MultidexMode;
 
 /**
@@ -35,49 +36,40 @@ public final class AndroidBinaryOnlyRule implements RuleDefinition {
   @Override
   public RuleClass build(RuleClass.Builder builder, final RuleDefinitionEnvironment env) {
     return builder
-//       /* <!-- #BLAZE_RULE(android_binary).ATTRIBUTE(application_id) -->
-//       A full Java-language-style package name for the application. The name should be unique.
-//       The name may contain uppercase or lowercase letters ('A' through 'Z'), numbers, and
-//       underscores ('_'). However, individual package name parts may only start with letters.
-//       The package name serves as a unique identifier for the application. It's also the default
-//       name for the application process (see the &lt;application&gt; element's process attribute)
-//       and the default task affinity of an activity.
-//
-//       This overrides the value declared in the manifest.
-//       <!-- #END_BLAZE_RULE.ATTRIBUTE --> */
-        .add(attr("application_id", STRING).undocumented("not ready for production use"))
-//       /* <!-- #BLAZE_RULE(android_binary).ATTRIBUTE(version_code) -->
-//       An internal version number. This number is used only to determine whether one version is
-//       more recent than another, with higher numbers indicating more recent versions. This is not
-//       the version number shown to users; that number is set by the version_name attribute.
-//       The value must be set as an integer, such as "100". Each successive version must have a
-//       higher number.
-//       This overrides the value declared in the manifest.
-//
-//       Subject to <a href="${link make-variables}">"Make" variable</a> substitution.
-//       Suggested practice is to declare a varrdef and reference it here so that a particular build
-//       invocation will be used to generate apks for release.
-//       <!-- #END_BLAZE_RULE.ATTRIBUTE --> */
-        .add(attr("version_code", STRING).undocumented("not ready for production use"))
-//       /* <!-- #BLAZE_RULE(android_binary).ATTRIBUTE(version_name) -->
-//       The version number shown to users. The string has no other purpose than to be displayed to
-//       users. The version_code attribute holds the significant version number used internally.
-//       This overrides the value declared in the manifest.
-//
-//       Subject to <a href="${link make-variables}">"Make" variable</a> substitution.
-//       Suggested practice is to declare a varrdef and reference it here so that a particular build
-//       invocation will be used to generate apks for release.
-//       <!-- #END_BLAZE_RULE.ATTRIBUTE --> */
-        .add(attr("version_name", STRING).undocumented("not ready for production use"))
-//        /* <!-- #BLAZE_RULE(android_binary).ATTRIBUTE(manifest_values) -->
-//        A dictionary of values to be overridden in the manifest. Any instance of ${name} in the
-//        manifest will be replaced with the value corresponding to name in this dictionary.
-//        applicationId, versionCode, versionName, minSdkVersion, targetSdkVersion and
-//        maxSdkVersion will also override the corresponding attributes of the manifest and
-//        uses-sdk tags. packageName will be ignored and will be set from either applicationId if
-//        specified or the package in manifest.
-//        <!-- #END_BLAZE_RULE.ATTRIBUTE --> */
-        .add(attr("manifest_values", STRING_DICT).undocumented("not ready for production use"))
+        /* <!-- #BLAZE_RULE(android_binary).ATTRIBUTE(manifest_merger) -->
+        Select the manifest merger to use for this rule.<br/>
+        Possible values:
+        <ul>
+            <li><code>manifest_merger = "legacy"</code>: Use the legacy manifest merger. Does not
+              allow features of the android merger like placeholder substitution and tools
+              attributes for defining merge behavior. Removes all
+              <code>&lt;uses-permission&gt;</code> and <code>&lt;uses-permission-sdk-23&gt;</code>
+              tags. Performs a tag-level merge.</li>
+            <li><code>manifest_merger = "android"</code>: Use the android manifest merger. Allows
+              features like placeholder substitution and tools attributes for defining merge
+              behavior. Follows the semantics from
+              <a href="http://tools.android.com/tech-docs/new-build-system/user-guide/manifest-merger">
+              the documentation</a> except it has been modified to also remove all
+              <code>&lt;uses-permission&gt;</code> and <code>&lt;uses-permission-sdk-23&gt;</code>
+              tags. Performs an attribute-level merge.</li>
+            <li><code>manifest_merger = "auto"</code>: Merger is controlled by the
+              <a href="../blaze-user-manual.html#flag--android_manifest_merger">
+              --android_manifest_merger</a> flag.</li>
+        </ul>
+        <!-- #END_BLAZE_RULE.ATTRIBUTE --> */
+        .add(attr("manifest_merger", STRING)
+            .allowedValues(new AllowedValueSet(AndroidManifestMerger.getAttributeValues()))
+            .value(AndroidManifestMerger.getRuleAttributeDefault()))
+        /* <!-- #BLAZE_RULE(android_binary).ATTRIBUTE(manifest_values) -->
+        A dictionary of values to be overridden in the manifest. Any instance of ${name} in the
+        manifest will be replaced with the value corresponding to name in this dictionary.
+        applicationId, versionCode, versionName, minSdkVersion, targetSdkVersion and
+        maxSdkVersion will also override the corresponding attributes of the manifest and
+        uses-sdk tags. packageName will be ignored and will be set from either applicationId if
+        specified or the package in manifest. When manifest_merger is set to legacy, only
+        applicationId, versionCode and versionName will have any effect.
+        <!-- #END_BLAZE_RULE.ATTRIBUTE --> */
+        .add(attr("manifest_values", STRING_DICT))
         /* <!-- #BLAZE_RULE(android_binary).ATTRIBUTE(nocompress_extensions) -->
         A list of file extension to leave uncompressed in apk.
         <!-- #END_BLAZE_RULE.ATTRIBUTE --> */
@@ -106,23 +98,21 @@ public final class AndroidBinaryOnlyRule implements RuleDefinition {
             .value(env.getToolsLabel(AndroidRuleClasses.MANIFEST_MERGE_TOOL_LABEL)))
 
         /* <!-- #BLAZE_RULE(android_binary).ATTRIBUTE(multidex) -->
-        Whether to split code into multiple dex files.
+        Whether to split code into multiple dex files.<br/>
         Possible values:
         <ul>
-          <li><code>native</code>: Split code into multiple dex files when the
-            dex 64K index limit is exceeded.
-            Assumes native platform support for loading multidex classes at
-            runtime. <em class="harmful">This only works with Android L and
-            newer</em>.</li>
-          <li><code>legacy</code>: Split code into multiple dex files when the
-            dex 64K index limit is exceeded. Assumes multidex classes are
-            loaded through application code (i.e. no platform support).</li>
-          <li><code>manual_main_dex</code>: Split code into multiple dex files when the
-            dex 64K index limit is exceeded. The content of the main dex file
-            needs to be specified by providing a list of classes in a text file
-            using the <a href="${link android_binary.main_dex_list}">main_dex_list</a>.</li>
-          <li><code>off</code>: Compile all code to a single dex file, even if
-            if exceeds the index limit.</li>
+          <li><code>native</code>: Split code into multiple dex files when the dex 64K index limit
+            is exceeded. Assumes native platform support for loading multidex classes at runtime.
+            <em class="harmful">This works with only Android L and newer</em>.</li>
+          <li><code>legacy</code>: Split code into multiple dex files when the dex 64K index limit
+            is exceeded. Assumes multidex classes are loaded through application code (i.e. no
+            native platform support).</li>
+          <li><code>manual_main_dex</code>: Split code into multiple dex files when the dex 64K
+            index limit is exceeded. The content of the main dex file needs to be specified by
+            providing a list of classes in a text file using the
+            <a href="${link android_binary.main_dex_list}">main_dex_list</a> attribute.</li>
+          <li><code>off</code>: Compile all code to a single dex file, even if it exceeds the index
+            limit.</li>
         </ul>
         <!-- #END_BLAZE_RULE.ATTRIBUTE --> */
         .add(attr("multidex", STRING)

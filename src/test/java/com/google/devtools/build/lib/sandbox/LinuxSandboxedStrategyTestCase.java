@@ -28,7 +28,6 @@ import com.google.devtools.build.lib.events.PrintingEventHandler;
 import com.google.devtools.build.lib.events.Reporter;
 import com.google.devtools.build.lib.exec.ExecutionOptions;
 import com.google.devtools.build.lib.testutil.BlazeTestUtils;
-import com.google.devtools.build.lib.testutil.TestConstants;
 import com.google.devtools.build.lib.testutil.TestFileOutErr;
 import com.google.devtools.build.lib.testutil.TestUtils;
 import com.google.devtools.build.lib.util.BlazeClock;
@@ -79,13 +78,11 @@ public class LinuxSandboxedStrategyTestCase {
     fakeSandboxDir = testRoot.getRelative("sandbox");
     fakeSandboxDir.createDirectory();
 
-    blazeDirs = new BlazeDirectories(outputBase, outputBase, workspaceDir,
-        TestConstants.PRODUCT_NAME);
+    blazeDirs = new BlazeDirectories(outputBase, outputBase, workspaceDir, "mock-product-name");
     BlazeTestUtils.getIntegrationBinTools(blazeDirs);
 
     OptionsParser optionsParser =
         OptionsParser.newOptionsParser(ExecutionOptions.class, SandboxOptions.class);
-    optionsParser.parse("--verbose_failures", "--sandbox_debug");
 
     EventBus bus = new EventBus();
 
@@ -103,14 +100,13 @@ public class LinuxSandboxedStrategyTestCase {
             ImmutableMap.<String, SpawnActionContext>of(
                 "",
                 new LinuxSandboxedStrategy(
+                    optionsParser.getOptions(SandboxOptions.class),
                     ImmutableMap.<String, String>of(),
                     blazeDirs,
                     MoreExecutors.newDirectExecutorService(),
                     true,
                     false,
-                    ImmutableList.<String>of(),
-                    false,
-                    TestConstants.PRODUCT_NAME)),
+                    "mock-product-name")),
             ImmutableList.<ActionContextProvider>of());
   }
 
@@ -121,7 +117,7 @@ public class LinuxSandboxedStrategyTestCase {
   }
 
   private Path createTestRoot() throws IOException {
-    fileSystem = FileSystems.initDefaultAsNative();
+    fileSystem = FileSystems.getNativeFileSystem();
     Path testRoot = fileSystem.getPath(TestUtils.tmpDir());
     try {
       FileSystemUtils.deleteTreesBelow(testRoot);

@@ -84,6 +84,12 @@ string RunProgram(const string& exe, const std::vector<string>& args_vector);
 // is Windows path.
 std::string ConvertPath(const std::string& path);
 
+// Convert a path list from Bazel internal form to underlying OS form.
+// On Unixes this is an identity operation.
+// On Windows, Bazel internal form is cygwin path list, and underlying OS form
+// is Windows path list.
+std::string ConvertPathList(const std::string& path_list);
+
 // Return a string used to separate paths in a list.
 std::string ListSeparator();
 
@@ -117,9 +123,14 @@ uint64_t AcquireLock(const string& output_base, bool batch_mode,
 // usual.
 void ReleaseLock(BlazeLock* blaze_lock);
 
-// Kills a server process based on its output base and PID.
-void KillServerProcess(
+// Kills a server process based on its output base and PID. Returns true if the
+// server process was found and killed.
+// This function can be called from a signal handler!
+bool KillServerProcess(
     int pid, const string& output_base, const string& install_base);
+
+// Mark path as being excluded from backups (if supported by operating system).
+void ExcludePathFromBackup(const string &path);
 
 }  // namespace blaze
 

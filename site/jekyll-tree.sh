@@ -24,6 +24,8 @@ shift
 readonly BE_ZIP=${PWD}/$1
 shift
 readonly SL_ZIP=${PWD}/$1
+shift
+readonly CLR_HTML=${PWD}/$1
 
 # Create temporary directory that is removed when this script exits.
 readonly TMP=$(mktemp -d "${TMPDIR:-/tmp}/tmp.XXXXXXXX")
@@ -56,7 +58,6 @@ function copy_skylark_rule_doc {
   local rule_family=$1
   local rule_family_name=$2
   local be_dir="$OUT_DIR/docs/be"
-  local tempf=$(mktemp -t bazel-skylark-XXXXXX)
 
   ( cat <<EOF
 ---
@@ -104,6 +105,7 @@ function main {
   unpack_build_encyclopedia
   unpack_skylark_library
   unpack_skylark_rule_docs
+  cp ${CLR_HTML} ${OUT_DIR}/docs
   process_docs
   package_output
 }

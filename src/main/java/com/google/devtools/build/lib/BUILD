@@ -19,6 +19,7 @@ filegroup(
         "//src/main/java/com/google/devtools/build/lib/actions:srcs",
         "//src/main/java/com/google/devtools/build/lib/bazel/dash:srcs",
         "//src/main/java/com/google/devtools/build/lib/bazel/repository/downloader:srcs",
+        "//src/main/java/com/google/devtools/build/lib/cmdline:srcs",
         "//src/main/java/com/google/devtools/build/lib/query2:srcs",
         "//src/main/java/com/google/devtools/build/lib/remote:srcs",
         "//src/main/java/com/google/devtools/build/lib/rules/apple:srcs",
@@ -63,6 +64,16 @@ java_library(
         "//src:windows": [],
         "//conditions:default": ["//src/main/native:libunix.so"],
     }),
+    deps = [
+        ":os_util",
+        ":shell",
+        "//third_party:guava",
+    ],
+)
+
+java_library(
+    name = "windows",
+    srcs = glob(["windows/*.java"]),
     deps = [
         ":shell",
         "//third_party:guava",
@@ -250,6 +261,7 @@ java_library(
         ":shell",
         ":unix",
         ":vfs",
+        ":windows",
         "//src/main/java/com/google/devtools/common/options",
         "//third_party:guava",
         "//third_party:jsr305",
@@ -301,6 +313,22 @@ java_library(
     ],
 )
 
+# Skylark language for configuration files.
+#
+# IMPORTANT:  NOT A PUBLIC INTERFACE. TARGETS SHOULDN'T DEPEND ON THIS.
+#
+java_library(
+    name = "skylark-lang",
+    visibility = ["//visibility:public"],
+    exports = [
+        ":events",
+        ":inmemoryfs",
+        ":skylarkinterface",
+        ":syntax",
+        ":vfs",
+    ],
+)
+
 java_library(
     name = "skylarkinterface",
     srcs = glob([
@@ -311,43 +339,19 @@ java_library(
     ],
 )
 
-########################################################################
-#
-# The "cmdline" library: Label validation and target pattern
-# parsing. Both the label syntax and the target pattern syntax are a
-# public interface, and all changes have to be made in a
-# backwards-compatible manner. This library is intentionally
-# standalone so it can be used outside without pulling in any internal
-# code.
-#
-
-java_library(
-    name = "cmdline",
-    srcs = glob(["cmdline/*.java"]),
-    deps = [
-        ":base-util",
-        ":concurrent",
-        ":skylarkinterface",
-        ":util",
-        ":vfs",
-        "//third_party:guava",
-        "//third_party:jsr305",
-    ],
-)
-
 java_library(
     name = "syntax",
     srcs = glob([
         "syntax/**/*.java",
     ]),
     deps = [
-        ":cmdline",
         ":collect",
         ":concurrent",
         ":events",
         ":skylarkinterface",
         ":util",
         ":vfs",
+        "//src/main/java/com/google/devtools/build/lib/cmdline",
         "//third_party:asm",
         "//third_party:asm-commons",
         "//third_party:asm-util",
@@ -384,11 +388,10 @@ java_library(
         "pkgcache/*.java",
     ]),
     exports = [
-        ":cmdline",
         ":syntax",
+        "//src/main/java/com/google/devtools/build/lib/cmdline",
     ],
     deps = [
-        ":cmdline",
         ":collect",
         ":concurrent",
         ":events",
@@ -397,6 +400,7 @@ java_library(
         ":transitive-info-provider",
         ":util",
         ":vfs",
+        "//src/main/java/com/google/devtools/build/lib/cmdline",
         "//src/main/java/com/google/devtools/common/options",
         "//src/main/protobuf:build_java_proto",
         "//third_party:guava",
@@ -473,7 +477,6 @@ java_library(
     ],
     deps = [
         ":base-util",
-        ":cmdline",
         ":collect",
         ":concurrent",
         ":events",
@@ -490,6 +493,7 @@ java_library(
         ":util",
         ":vfs",
         "//src/main/java/com/google/devtools/build/lib/actions",
+        "//src/main/java/com/google/devtools/build/lib/cmdline",
         "//src/main/java/com/google/devtools/build/skyframe",
         "//src/main/java/com/google/devtools/common/options",
         "//src/main/protobuf:extra_actions_base_java_proto",
@@ -706,7 +710,7 @@ java_library(
 java_library(
     name = "java-rules",
     srcs = glob(
-        ["rules/java/*.java"],
+        ["rules/java/**/*.java"],
         exclude = [
             "rules/java/JavaImplicitAttributes.java",
             "rules/java/JavaToolchainDataParser.java",
@@ -719,6 +723,7 @@ java_library(
         ":events",
         ":java-implicit-attributes",
         ":packages-internal",
+        ":proto-rules",
         ":shell",
         ":skylarkinterface",
         ":util",
@@ -839,7 +844,6 @@ java_library(
     deps = [
         ":build-base",
         ":clock",
-        ":cmdline",
         ":collect",
         ":concurrent",
         ":events",
@@ -853,8 +857,10 @@ java_library(
         ":unix",
         ":util",
         ":vfs",
+        ":windows",
         "//src/main/java/com/google/devtools/build/docgen:docgen_javalib",
         "//src/main/java/com/google/devtools/build/lib/actions",
+        "//src/main/java/com/google/devtools/build/lib/cmdline",
         "//src/main/java/com/google/devtools/build/lib/query2",
         "//src/main/java/com/google/devtools/build/lib/query2:query-engine",
         "//src/main/java/com/google/devtools/build/lib/query2:query-output",
@@ -964,6 +970,31 @@ genrule(
     visibility = [
         "//site:__pkg__",
         "//src/test/shell/bazel:__pkg__",
+    ],
+)
+
+genrule(
+    name = "gen_command-line-reference",
+    srcs = [
+        "//site:command-line-reference-prefix.html",
+        "//site:command-line-reference-suffix.html",
+    ],
+    outs = ["command-line-reference.html"],
+    cmd = (
+        "cat $(location //site:command-line-reference-prefix.html) > $@ && " +
+        "TMP=`mktemp -d /tmp/tmp.XXXXXXXXXX` && " +
+        "mkdir $${TMP}/_embedded_binaries/ && " +
+        "$(location :bazel/BazelServer) " +
+        "--jvm_flag=-Dio.bazel.EnableJni=0 --batch " +
+        "--install_base=$${TMP} --output_base=$${TMP}/output/ " +
+        "help everything-as-html >> $@ 2>/dev/null && " +
+        "cat $(location //site:command-line-reference-suffix.html) >> $@"
+    ),
+    tools = [
+        ":bazel/BazelServer",
+    ],
+    visibility = [
+        "//site:__pkg__",
     ],
 )
 

@@ -22,6 +22,18 @@ sh_binary(
 )
 
 sh_binary(
+    name = "manifest_merger",
+    srcs = ["manifest_merger.sh"],
+    data = ["//src/tools/android/java/com/google/devtools/build/android:ManifestMergerAction"],
+)
+
+sh_binary(
+    name = "rclass_generator",
+    srcs = ["rclass_generator.sh"],
+    data = ["//src/tools/android/java/com/google/devtools/build/android:RClassGeneratorAction"],
+)
+
+sh_binary(
     name = "resources_processor",
     srcs = ["resources_processor.sh"],
     data = ["//src/tools/android/java/com/google/devtools/build/android:AndroidResourceProcessingAction"],

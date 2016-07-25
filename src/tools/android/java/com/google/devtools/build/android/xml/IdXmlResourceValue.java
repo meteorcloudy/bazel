@@ -14,19 +14,21 @@
 package com.google.devtools.build.android.xml;
 
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.ImmutableList;
 import com.google.devtools.build.android.AndroidDataWritingVisitor;
+import com.google.devtools.build.android.AndroidDataWritingVisitor.StartTag;
+import com.google.devtools.build.android.AndroidResourceClassWriter;
 import com.google.devtools.build.android.FullyQualifiedName;
 import com.google.devtools.build.android.XmlResourceValue;
 import com.google.devtools.build.android.XmlResourceValues;
 import com.google.devtools.build.android.proto.SerializeFormat;
+import com.google.devtools.build.android.proto.SerializeFormat.DataValueXml.Builder;
 import com.google.devtools.build.android.proto.SerializeFormat.DataValueXml.XmlType;
 import com.google.protobuf.CodedOutputStream;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Path;
-
+import java.util.Objects;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 /**
@@ -42,43 +44,98 @@ import javax.annotation.concurrent.Immutable;
 @Immutable
 public class IdXmlResourceValue implements XmlResourceValue {
 
-  static final IdXmlResourceValue SINGLETON = new IdXmlResourceValue();
+  static final IdXmlResourceValue SINGLETON = new IdXmlResourceValue(null);
+  private String value;
 
   public static XmlResourceValue of() {
     return SINGLETON;
+  }
+  
+  public static XmlResourceValue of(@Nullable String value) {
+    if (value == null) {
+      return of();
+    }
+    return new IdXmlResourceValue(value);
+  }
+
+  private IdXmlResourceValue(String value) {
+    this.value = value;
   }
 
   @Override
   public void write(
       FullyQualifiedName key, Path source, AndroidDataWritingVisitor mergedDataWriter) {
-    mergedDataWriter.writeToValuesXml(
-        key,
-        ImmutableList.of(
-            String.format("<!-- %s -->", source),
-            String.format("<item type='id' name='%s'/>", key.name())));
+    StartTag startTag =
+        mergedDataWriter
+            .define(key)
+            .derivedFrom(source)
+            .startItemTag()
+            .named(key)
+            .attribute("type")
+            .setTo("id");
+    if (value == null) {
+      startTag.closeUnaryTag().save();
+    } else {
+      startTag.closeTag().addCharactersOf(value).endTag().save();
+    }
   }
 
   @Override
-  public int serializeTo(Path source, OutputStream output) throws IOException {
-    SerializeFormat.DataValue value =
-        XmlResourceValues.newSerializableDataValueBuilder(source)
-            .setXmlValue(SerializeFormat.DataValueXml.newBuilder().setType(XmlType.ID))
-            .build();
-    value.writeDelimitedTo(output);
-    return CodedOutputStream.computeUInt32SizeNoTag(value.getSerializedSize())
-        + value.getSerializedSize();
+  public void writeResourceToClass(FullyQualifiedName key,
+      AndroidResourceClassWriter resourceClassWriter) {
+    resourceClassWriter.writeSimpleResource(key.type(), key.name());
+  }
+
+  @Override
+  public int serializeTo(Path source, Namespaces namespaces, OutputStream output)
+      throws IOException {
+    Builder xmlValue =
+        SerializeFormat.DataValueXml.newBuilder()
+            .setType(XmlType.ID)
+            .putAllNamespace(namespaces.asMap());
+    if (value != null) {
+      xmlValue.setValue(value);
+    }
+    SerializeFormat.DataValue dataValue =
+        XmlResourceValues.newSerializableDataValueBuilder(source).setXmlValue(xmlValue).build();
+    dataValue.writeDelimitedTo(output);
+    return CodedOutputStream.computeUInt32SizeNoTag(dataValue.getSerializedSize())
+        + dataValue.getSerializedSize();
+  }
+
+  @Override
+  public int hashCode() {
+    return value != null ? value.hashCode() : super.hashCode();
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    if (!(obj instanceof IdXmlResourceValue)) {
+      return false;
+    }
+    IdXmlResourceValue other = (IdXmlResourceValue) obj;
+    return Objects.equals(value, other.value);
   }
 
   @Override
   public String toString() {
-    return MoreObjects.toStringHelper(getClass()).toString();
+    return MoreObjects.toStringHelper(getClass()).add("value", value).toString();
   }
 
   @Override
-  public XmlResourceValue combineWith(XmlResourceValue value) {
-    if (value != SINGLETON) {
-      throw new IllegalArgumentException(value + "is not combinable with " + this);
+  public XmlResourceValue combineWith(XmlResourceValue resourceValue) {
+    if (equals(resourceValue)) {
+      return this;
     }
-    return this;
+    if (resourceValue instanceof IdXmlResourceValue) {
+      IdXmlResourceValue otherId = (IdXmlResourceValue) resourceValue;
+      if (value == null && otherId.value != null) {
+        return otherId;
+      }
+      if (value != null && otherId.value == null) {
+        return this;
+      }
+    }
+    throw new IllegalArgumentException(resourceValue + "is not combinable with " + this);
   }
 }

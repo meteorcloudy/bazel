@@ -13,6 +13,9 @@
 // limitations under the License.
 package com.google.devtools.build.lib.buildtool;
 
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.NANOSECONDS;
+
 import com.google.common.base.Joiner;
 import com.google.common.base.Predicate;
 import com.google.common.base.Stopwatch;
@@ -48,16 +51,17 @@ import com.google.devtools.build.lib.actions.SimpleActionContextProvider;
 import com.google.devtools.build.lib.actions.SpawnActionContext;
 import com.google.devtools.build.lib.actions.TestExecException;
 import com.google.devtools.build.lib.actions.cache.ActionCache;
-import com.google.devtools.build.lib.analysis.BuildView;
 import com.google.devtools.build.lib.analysis.BuildView.AnalysisResult;
 import com.google.devtools.build.lib.analysis.ConfiguredTarget;
 import com.google.devtools.build.lib.analysis.SymlinkTreeActionContext;
+import com.google.devtools.build.lib.analysis.TopLevelArtifactContext;
 import com.google.devtools.build.lib.analysis.TopLevelArtifactHelper;
 import com.google.devtools.build.lib.analysis.WorkspaceStatusAction;
 import com.google.devtools.build.lib.analysis.config.BuildConfiguration;
 import com.google.devtools.build.lib.analysis.config.BuildConfigurationCollection;
 import com.google.devtools.build.lib.buildtool.buildevent.ExecutionPhaseCompleteEvent;
 import com.google.devtools.build.lib.buildtool.buildevent.ExecutionStartingEvent;
+import com.google.devtools.build.lib.cmdline.PackageIdentifier;
 import com.google.devtools.build.lib.events.Event;
 import com.google.devtools.build.lib.events.EventHandler;
 import com.google.devtools.build.lib.events.EventKind;
@@ -89,7 +93,6 @@ import com.google.devtools.build.lib.vfs.FileSystemUtils;
 import com.google.devtools.build.lib.vfs.ModifiedFileSet;
 import com.google.devtools.build.lib.vfs.Path;
 import com.google.devtools.build.lib.vfs.PathFragment;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
@@ -103,7 +106,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -203,7 +205,7 @@ public class ExecutionTool {
             // that actually depends on them.
             new ActionContextConsumer() {
               @Override
-              public Map<String, String> getSpawnActionContexts() {
+              public ImmutableMap<String, String> getSpawnActionContexts() {
                 return ImmutableMap.of();
               }
 
@@ -247,17 +249,14 @@ public class ExecutionTool {
       }
     }
 
-    // If tests are to be run during build, too, we have to explicitly load the test action context.
-    if (request.shouldRunTests()) {
-      String testStrategyValue = request.getOptions(ExecutionOptions.class).testStrategy;
-      ActionContext context = strategyConverter.getStrategy(TestActionContext.class,
-          testStrategyValue);
-      if (context == null) {
-        throw makeExceptionForInvalidStrategyValue(testStrategyValue, "test",
-            strategyConverter.getValidValues(TestActionContext.class));
-      }
-      strategies.add(context);
+    String testStrategyValue = request.getOptions(ExecutionOptions.class).testStrategy;
+    ActionContext context = strategyConverter.getStrategy(TestActionContext.class,
+        testStrategyValue);
+    if (context == null) {
+      throw makeExceptionForInvalidStrategyValue(testStrategyValue, "test",
+          strategyConverter.getValidValues(TestActionContext.class));
     }
+    strategies.add(context);
   }
 
   private static ImmutableList<ActionContextConsumer> getActionContextConsumersFromModules(
@@ -336,10 +335,11 @@ public class ExecutionTool {
   void executeBuild(UUID buildId, AnalysisResult analysisResult,
       BuildResult buildResult,
       BuildConfigurationCollection configurations,
-      ImmutableMap<PathFragment, Path> packageRoots)
+      ImmutableMap<PackageIdentifier, Path> packageRoots,
+      TopLevelArtifactContext topLevelArtifactContext)
       throws BuildFailedException, InterruptedException, TestExecException, AbruptExitException {
     Stopwatch timer = Stopwatch.createStarted();
-    prepare(packageRoots);
+    prepare(packageRoots, analysisResult.getWorkspaceName());
 
     ActionGraph actionGraph = analysisResult.getActionGraph();
 
@@ -361,9 +361,10 @@ public class ExecutionTool {
     if (targetConfigurations.size() == 1) {
       String productName = runtime.getProductName();
       OutputDirectoryLinksUtils.createOutputDirectoryLinks(
-          env.getWorkspaceName(), env.getWorkspace(), getExecRoot(),
-          env.getOutputPath(), getReporter(), targetConfiguration,
-          request.getBuildOptions().getSymlinkPrefix(productName), productName);
+          env.getWorkspaceName(), env.getWorkspace(),
+          getExecRoot(), env.getOutputPath(), getReporter(),
+          targetConfiguration, request.getBuildOptions().getSymlinkPrefix(productName),
+          productName);
     }
 
     ActionCache actionCache = getActionCache();
@@ -438,7 +439,8 @@ public class ExecutionTool {
           executor,
           builtTargets,
           request.getBuildOptions().explanationPath != null,
-          env.getBlazeWorkspace().getLastExecutionTimeRange());
+          env.getBlazeWorkspace().getLastExecutionTimeRange(),
+          topLevelArtifactContext);
       buildCompleted = true;
     } catch (BuildFailedException | TestExecException e) {
       buildCompleted = true;
@@ -496,7 +498,7 @@ public class ExecutionTool {
     }
   }
 
-  private void prepare(ImmutableMap<PathFragment, Path> packageRoots)
+  private void prepare(ImmutableMap<PackageIdentifier, Path> packageRoots, String workspaceName)
       throws ExecutorInitException {
     // Prepare for build.
     Profiler.instance().markPhase(ProfilePhase.PREPARE);
@@ -505,7 +507,13 @@ public class ExecutionTool {
     createActionLogDirectory();
 
     // Plant the symlink forest.
-    plantSymlinkForest(packageRoots);
+    try {
+      new SymlinkForest(
+          packageRoots, getExecRoot(), runtime.getProductName(), workspaceName)
+          .plantSymlinkForest();
+    } catch (IOException e) {
+      throw new ExecutorInitException("Source forest creation failed", e);
+    }
   }
 
   private void createToolsSymlinks() throws ExecutorInitException {
@@ -513,17 +521,6 @@ public class ExecutionTool {
       env.getBlazeWorkspace().getBinTools().setupBuildTools();
     } catch (ExecException e) {
       throw new ExecutorInitException("Tools symlink creation failed", e);
-    }
-  }
-
-  private void plantSymlinkForest(ImmutableMap<PathFragment, Path> packageRoots)
-      throws ExecutorInitException {
-    try {
-      FileSystemUtils.deleteTreesBelowNotPrefixed(getExecRoot(),
-          new String[] { ".", "_", runtime.getProductName() + "-"});
-      FileSystemUtils.plantLinkForest(packageRoots, getExecRoot(), runtime.getProductName());
-    } catch (IOException e) {
-      throw new ExecutorInitException("Source forest creation failed", e);
     }
   }
 
@@ -641,7 +638,7 @@ public class ExecutionTool {
       }
     }
     env.getEventBus().post(
-        new ExecutionPhaseCompleteEvent(timer.stop().elapsed(TimeUnit.MILLISECONDS)));
+        new ExecutionPhaseCompleteEvent(timer.stop().elapsed(MILLISECONDS)));
     return successfulTargets;
   }
 
@@ -716,7 +713,7 @@ public class ExecutionTool {
    */
   private void saveCaches(ActionCache actionCache) {
     long actionCacheSizeInBytes = 0;
-    long actionCacheSaveTime;
+    long actionCacheSaveTimeInMs;
 
     AutoProfiler p = AutoProfiler.profiledAndLogged("Saving action cache", ProfilerTask.INFO, LOG);
     try {
@@ -724,10 +721,11 @@ public class ExecutionTool {
     } catch (IOException e) {
       getReporter().handle(Event.error("I/O error while writing action log: " + e.getMessage()));
     } finally {
-      actionCacheSaveTime = p.completeAndGetElapsedTimeNanos();
+      actionCacheSaveTimeInMs =
+          MILLISECONDS.convert(p.completeAndGetElapsedTimeNanos(), NANOSECONDS);
     }
     env.getEventBus().post(new CachesSavedEvent(
-        actionCacheSaveTime, actionCacheSizeInBytes));
+        actionCacheSaveTimeInMs, actionCacheSizeInBytes));
   }
 
   private ActionInputFileCache createBuildSingleFileCache(Path execRoot) {

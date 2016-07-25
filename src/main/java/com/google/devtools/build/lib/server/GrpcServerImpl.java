@@ -25,6 +25,7 @@ import com.google.devtools.build.lib.server.CommandProtos.PingRequest;
 import com.google.devtools.build.lib.server.CommandProtos.PingResponse;
 import com.google.devtools.build.lib.server.CommandProtos.RunRequest;
 import com.google.devtools.build.lib.server.CommandProtos.RunResponse;
+import com.google.devtools.build.lib.util.BlazeClock;
 import com.google.devtools.build.lib.util.Clock;
 import com.google.devtools.build.lib.util.ExitCode;
 import com.google.devtools.build.lib.util.Preconditions;
@@ -33,10 +34,6 @@ import com.google.devtools.build.lib.util.io.OutErr;
 import com.google.devtools.build.lib.vfs.FileSystemUtils;
 import com.google.devtools.build.lib.vfs.Path;
 import com.google.protobuf.ByteString;
-
-import io.grpc.Server;
-import io.grpc.netty.NettyServerBuilder;
-import io.grpc.stub.StreamObserver;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -49,9 +46,14 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javax.annotation.concurrent.GuardedBy;
+
+import io.grpc.Server;
+import io.grpc.netty.NettyServerBuilder;
+import io.grpc.stub.StreamObserver;
 
 /**
  * gRPC server class.
@@ -59,11 +61,13 @@ import javax.annotation.concurrent.GuardedBy;
  * <p>Only this class should depend on gRPC so that we only need to exclude this during
  * bootstrapping.
  */
-public class GrpcServerImpl extends RPCServer implements CommandServerGrpc.CommandServer {
+public class GrpcServerImpl extends RPCServer {
   // UTF-8 won't do because we want to be able to pass arbitrary binary strings.
   // Not that the internals of Bazel handle that correctly, but why not make at least this little
   // part correct?
   private static final Charset CHARSET = Charset.forName("ISO-8859-1");
+
+  private static final long NANOSECONDS_IN_MS = TimeUnit.MILLISECONDS.toNanos(1);
 
   private class RunningCommand implements AutoCloseable {
     private final Thread thread;
@@ -223,15 +227,17 @@ public class GrpcServerImpl extends RPCServer implements CommandServerGrpc.Comma
 
       while (true) {
         if (!wasIdle && idle) {
-          shutdownTime = System.currentTimeMillis() + ((long) maxIdleSeconds) * 1000;
+          shutdownTime = BlazeClock.nanoTime()
+              + ((long) maxIdleSeconds) * 1000L * NANOSECONDS_IN_MS;
         }
 
         try {
           if (idle) {
             Verify.verify(shutdownTime > 0);
-            long waitTime = shutdownTime - System.currentTimeMillis();
+            long waitTime = shutdownTime - BlazeClock.nanoTime();
             if (waitTime > 0) {
-              runningCommands.wait(waitTime);
+              // Round upwards so that we don't busy-wait in the last millisecond
+              runningCommands.wait((waitTime + NANOSECONDS_IN_MS - 1) / NANOSECONDS_IN_MS);
             }
           } else {
             runningCommands.wait();
@@ -242,13 +248,13 @@ public class GrpcServerImpl extends RPCServer implements CommandServerGrpc.Comma
 
         wasIdle = idle;
         idle = runningCommands.isEmpty();
-        if (wasIdle && idle && System.currentTimeMillis() >= shutdownTime) {
+        if (wasIdle && idle && BlazeClock.nanoTime() >= shutdownTime) {
           break;
         }
       }
     }
 
-    server.shutdownNow();
+    server.shutdown();
   }
 
   @Override
@@ -265,9 +271,10 @@ public class GrpcServerImpl extends RPCServer implements CommandServerGrpc.Comma
   @Override
   public void serve() throws IOException {
     Preconditions.checkState(!serving);
-    server = NettyServerBuilder.forAddress(new InetSocketAddress("localhost", port))
-        .addService(CommandServerGrpc.bindService(this))
-        .build();
+    server =
+        NettyServerBuilder.forAddress(new InetSocketAddress("localhost", port))
+            .addService(commandServer)
+            .build();
 
     server.start();
     if (maxIdleSeconds > 0) {
@@ -277,7 +284,7 @@ public class GrpcServerImpl extends RPCServer implements CommandServerGrpc.Comma
           timeoutThread();
         }
       });
-      
+
       timeoutThread.setDaemon(true);
       timeoutThread.start();
     }
@@ -341,101 +348,114 @@ public class GrpcServerImpl extends RPCServer implements CommandServerGrpc.Comma
     return instance;
   }
 
-  @Override
-  public void run(
-      RunRequest request, StreamObserver<RunResponse> observer) {
-    if (!request.getCookie().equals(requestCookie)
-        || request.getClientDescription().isEmpty()) {
-      observer.onNext(RunResponse.newBuilder()
-          .setExitCode(ExitCode.LOCAL_ENVIRONMENTAL_ERROR.getNumericExitCode())
-          .build());
-      observer.onCompleted();
-      return;
-    }
+  private final CommandServerGrpc.CommandServerImplBase commandServer =
+      new CommandServerGrpc.CommandServerImplBase() {
+        @Override
+        public void run(RunRequest request, StreamObserver<RunResponse> observer) {
+          if (!request.getCookie().equals(requestCookie)
+              || request.getClientDescription().isEmpty()) {
+            observer.onNext(
+                RunResponse.newBuilder()
+                    .setExitCode(ExitCode.LOCAL_ENVIRONMENTAL_ERROR.getNumericExitCode())
+                    .build());
+            observer.onCompleted();
+            return;
+          }
 
-    ImmutableList.Builder<String> args = ImmutableList.builder();
-    for (ByteString requestArg : request.getArgList()) {
-      args.add(requestArg.toString(CHARSET));
-    }
+          ImmutableList.Builder<String> args = ImmutableList.builder();
+          for (ByteString requestArg : request.getArgList()) {
+            args.add(requestArg.toString(CHARSET));
+          }
 
-    String commandId;
-    int exitCode;
-    try (RunningCommand command = new RunningCommand()) {
-      commandId = command.id;
-      OutErr rpcOutErr = OutErr.create(
-          new RpcOutputStream(observer, command.id, StreamType.STDOUT),
-          new RpcOutputStream(observer, command.id, StreamType.STDERR));
+          String commandId;
+          int exitCode;
+          try (RunningCommand command = new RunningCommand()) {
+            commandId = command.id;
+            OutErr rpcOutErr =
+                OutErr.create(
+                    new RpcOutputStream(observer, command.id, StreamType.STDOUT),
+                    new RpcOutputStream(observer, command.id, StreamType.STDERR));
 
-      exitCode = commandExecutor.exec(
-          args.build(), rpcOutErr,
-          request.getBlockForLock() ? LockingMode.WAIT : LockingMode.ERROR_OUT,
-          request.getClientDescription(), clock.currentTimeMillis());
-    } catch (InterruptedException e) {
-      exitCode = ExitCode.INTERRUPTED.getNumericExitCode();
-      commandId = "";  // The default value, the client will ignore it
-    }
+            exitCode =
+                commandExecutor.exec(
+                    args.build(),
+                    rpcOutErr,
+                    request.getBlockForLock() ? LockingMode.WAIT : LockingMode.ERROR_OUT,
+                    request.getClientDescription(),
+                    clock.currentTimeMillis());
+          } catch (InterruptedException e) {
+            exitCode = ExitCode.INTERRUPTED.getNumericExitCode();
+            commandId = ""; // The default value, the client will ignore it
+          }
 
-    // There is a chance that a cancel request comes in after commandExecutor#exec() has finished
-    // and no one calls Thread.interrupted() to receive the interrupt. So we just reset the
-    // interruption state here to make these cancel requests not have any effect outside of command
-    // execution (after the try block above, the cancel request won't find the thread to interrupt)
-    Thread.interrupted();
+          // There is a chance that a cancel request comes in after commandExecutor#exec() has
+          // finished and no one calls Thread.interrupted() to receive the interrupt. So we just
+          // reset the interruption state here to make these cancel requests not have any effect
+          // outside of command execution (after the try block above, the cancel request won't find
+          // the thread to interrupt)
+          Thread.interrupted();
 
-    RunResponse response = RunResponse.newBuilder()
-        .setCookie(responseCookie)
-        .setCommandId(commandId)
-        .setFinished(true)
-        .setExitCode(exitCode)
-        .build();
+          RunResponse response =
+              RunResponse.newBuilder()
+                  .setCookie(responseCookie)
+                  .setCommandId(commandId)
+                  .setFinished(true)
+                  .setExitCode(exitCode)
+                  .build();
 
-    observer.onNext(response);
-    observer.onCompleted();
+          observer.onNext(response);
+          observer.onCompleted();
 
-    switch (commandExecutor.shutdown()) {
-      case NONE:
-        break;
+          switch (commandExecutor.shutdown()) {
+            case NONE:
+              break;
 
-      case CLEAN:
-        server.shutdownNow();
-        break;
+            case CLEAN:
+              server.shutdownNow();
+              break;
 
-      case EXPUNGE:
-        disableShutdownHooks();
-        server.shutdownNow();
-        break;
-    }
-  }
+            case EXPUNGE:
+              disableShutdownHooks();
+              server.shutdownNow();
+              break;
+          }
+        }
 
-  @Override
-  public void ping(PingRequest pingRequest, StreamObserver<PingResponse> streamObserver) {
-    Preconditions.checkState(serving);
+        @Override
+        public void ping(PingRequest pingRequest, StreamObserver<PingResponse> streamObserver) {
+          Preconditions.checkState(serving);
 
-    PingResponse.Builder response = PingResponse.newBuilder();
-    if (pingRequest.getCookie().equals(requestCookie)) {
-      response.setCookie(responseCookie);
-    }
+          try (RunningCommand command = new RunningCommand()) {
+            PingResponse.Builder response = PingResponse.newBuilder();
+            if (pingRequest.getCookie().equals(requestCookie)) {
+              response.setCookie(responseCookie);
+            }
 
-    streamObserver.onNext(response.build());
-    streamObserver.onCompleted();
-  }
+            streamObserver.onNext(response.build());
+            streamObserver.onCompleted();
+          }
+        }
 
-  @Override
-  public void cancel(CancelRequest request, StreamObserver<CancelResponse> streamObserver) {
-    if (!request.getCookie().equals(requestCookie)) {
-      streamObserver.onCompleted();
-      return;
-    }
+        @Override
+        public void cancel(CancelRequest request, StreamObserver<CancelResponse> streamObserver) {
+          if (!request.getCookie().equals(requestCookie)) {
+            streamObserver.onCompleted();
+            return;
+          }
 
-    synchronized (runningCommands) {
-      RunningCommand command = runningCommands.get(request.getCommandId());
-      if (command != null) {
-        command.thread.interrupt();
-      }
+          try (RunningCommand cancelCommand = new RunningCommand()) {
+            synchronized (runningCommands) {
+              RunningCommand pendingCommand = runningCommands.get(request.getCommandId());
+              if (pendingCommand != null) {
+                pendingCommand.thread.interrupt();
+              }
 
-      startSlowInterruptWatcher(ImmutableSet.of(request.getCommandId()));
-    }
+              startSlowInterruptWatcher(ImmutableSet.of(request.getCommandId()));
+            }
 
-    streamObserver.onNext(CancelResponse.newBuilder().setCookie(responseCookie).build());
-    streamObserver.onCompleted();
-  }
+            streamObserver.onNext(CancelResponse.newBuilder().setCookie(responseCookie).build());
+            streamObserver.onCompleted();
+          }
+        }
+      };
 }

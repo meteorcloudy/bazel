@@ -39,21 +39,24 @@ function usage() {
   echo "  Commands for developers:" >&2
   echo "     all         = compile,determinism,test" >&2
   echo "     determinism = test for stability of Bazel builds" >&2
+  echo "     srcs        = test that //:srcs contains all the sources" >&2
   echo "     test        = run the full test suite of Bazel" >&2
   exit 1
 }
 
 function parse_options() {
-  local keywords="(compile|all|determinism|bootstrap|test)"
+  local keywords="(compile|all|determinism|bootstrap|srcs|test)"
   COMMANDS="${1:-compile}"
   [[ "${COMMANDS}" =~ ^$keywords(,$keywords)*$ ]] || usage "$@"
   DO_COMPILE=
   DO_CHECKSUM=
   DO_FULL_CHECKSUM=1
   DO_TESTS=
+  DO_SRCS_TEST=
   [[ "${COMMANDS}" =~ (compile|all) ]] && DO_COMPILE=1
   [[ "${COMMANDS}" =~ (bootstrap|determinism|all) ]] && DO_CHECKSUM=1
   [[ "${COMMANDS}" =~ (bootstrap) ]] && DO_FULL_CHECKSUM=
+  [[ "${COMMANDS}" =~ (srcs|all) ]] && DO_SRCS_TEST=1
   [[ "${COMMANDS}" =~ (test|all) ]] && DO_TESTS=1
 
   BAZEL_BIN=${2:-"bazel-bin/src/bazel"}
@@ -128,6 +131,39 @@ if [ $DO_CHECKSUM ]; then
 fi
 
 #
+# Test that //:srcs contains all the sources
+#
+if [ $DO_SRCS_TEST ]; then
+  new_step "Checking that //:srcs contains all the sources"
+  log "Querying //:srcs"
+  ${BAZEL} query 'kind("source file", deps(//:srcs))' 2>/dev/null \
+    | grep -v '^@' \
+    | sed -e 's|^//||' | sed 's|^:||' | sed 's|:|/|' \
+    | sort -u >"${OUTPUT_DIR}/srcs-query"
+
+  log "Finding all files"
+  # SRCS_EXCLUDES can be overriden to adds some more exceptions for the find
+  # commands (for CI systems).
+  SRCS_EXCLUDES=${SRCS_EXCLUDES-XXXXXXXXXXXXXX1268778dfsdf4}
+  # See file BUILD for the list of grep -v exceptions.
+  # tools/defaults package is hidden by Bazel so cannot be put in the srcs.
+  find . -type f | sed 's|./||' \
+    | grep -v '^bazel-' | grep -v '^WORKSPACE.user.bzl' \
+    | grep -v '^\.' | grep -v '^out/' | grep -v '^output/' \
+    | grep -Ev "${SRCS_EXCLUDES}" \
+    | grep -v '^tools/defaults/BUILD' \
+    | sort -u >"${OUTPUT_DIR}/srcs-find"
+
+  log "Diffing"
+  res="$(diff -U 0 "${OUTPUT_DIR}/srcs-find" "${OUTPUT_DIR}/srcs-query" | sed 's|^-||' | grep -Ev '^(@@|\+\+|--)' || true)"
+
+  if [ -n "${res}" ]; then
+    fail "//:srcs filegroup do not contains all the sources, missing:
+${res}"
+  fi
+fi
+
+#
 # Tests
 #
 if [ $DO_TESTS ]; then
@@ -153,7 +189,9 @@ if [ $DO_TESTS ]; then
       fi
     fi
   fi
-  $BAZEL --bazelrc=${BAZELRC} --nomaster_bazelrc test \
+  $BAZEL --bazelrc=${BAZELRC} --nomaster_bazelrc \
+      ${BAZEL_DIR_STARTUP_OPTIONS} \
+      test \
       --test_tag_filters="${BAZEL_TEST_FILTERS-}" \
       --build_tests_only \
       --nolegacy_bazel_java_test \

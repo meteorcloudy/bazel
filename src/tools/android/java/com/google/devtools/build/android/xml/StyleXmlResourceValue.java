@@ -15,23 +15,21 @@ package com.google.devtools.build.android.xml;
 
 import com.google.common.base.Function;
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.FluentIterable;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.devtools.build.android.AndroidDataWritingVisitor;
+import com.google.devtools.build.android.AndroidDataWritingVisitor.ValuesResourceDefinition;
+import com.google.devtools.build.android.AndroidResourceClassWriter;
 import com.google.devtools.build.android.FullyQualifiedName;
 import com.google.devtools.build.android.XmlResourceValue;
 import com.google.devtools.build.android.XmlResourceValues;
 import com.google.devtools.build.android.proto.SerializeFormat;
 import com.google.devtools.build.android.proto.SerializeFormat.DataValueXml.XmlType;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
-
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
@@ -69,6 +67,7 @@ public class StyleXmlResourceValue implements XmlResourceValue {
     return new StyleXmlResourceValue(parent, ImmutableMap.copyOf(values));
   }
 
+  @SuppressWarnings("deprecation")
   public static XmlResourceValue from(SerializeFormat.DataValueXml proto) {
     return of(proto.hasValue() ? proto.getValue() : null, proto.getMappedStringValue());
   }
@@ -81,34 +80,44 @@ public class StyleXmlResourceValue implements XmlResourceValue {
   @Override
   public void write(
       FullyQualifiedName key, Path source, AndroidDataWritingVisitor mergedDataWriter) {
-    mergedDataWriter.writeToValuesXml(
-        key,
-        FluentIterable.from(
-                ImmutableList.of(
-                    String.format("<!-- %s -->", source),
-                    String.format("<style name='%s' %s>", key.name(), parentAsXmlAttribute())))
-            .append(FluentIterable.from(values.entrySet()).transform(ENTRY_TO_ITEM))
-            .append("</style>"));
-  }
 
-  private String parentAsXmlAttribute() {
-    if (parent == null) {
-      return "";
+    ValuesResourceDefinition definition =
+        mergedDataWriter
+            .define(key)
+            .derivedFrom(source)
+            .startTag("style")
+            .named(key)
+            .optional()
+            .attribute("parent")
+            .setTo(parent)
+            .closeTag()
+            .addCharactersOf("\n");
+    for (Entry<String, String> entry : values.entrySet()) {
+      definition =
+          definition
+              .startItemTag()
+              .named(entry.getKey())
+              .closeTag()
+              .addCharactersOf(entry.getValue())
+              .endTag()
+              .addCharactersOf("\n");
     }
-    if (parent.isEmpty()) {
-      return "parent=''";
-    }
-    if (parent.startsWith("style/")) {
-      return "parent='@" + parent + "'";
-    }
-    return "parent='@style/" + parent + "'";
+    definition.endTag().save();
   }
 
   @Override
-  public int serializeTo(Path source, OutputStream output) throws IOException {
+  public void writeResourceToClass(FullyQualifiedName key,
+      AndroidResourceClassWriter resourceClassWriter) {
+    resourceClassWriter.writeSimpleResource(key.type(), key.name());
+  }
+
+  @Override
+  public int serializeTo(Path source, Namespaces namespaces, OutputStream output)
+      throws IOException {
     SerializeFormat.DataValueXml.Builder xmlValueBuilder =
         SerializeFormat.DataValueXml.newBuilder()
             .setType(XmlType.STYLE)
+            .putAllNamespace(namespaces.asMap())
             .putAllMappedStringValue(values);
     if (parent != null) {
       xmlValueBuilder.setValue(parent);

@@ -201,8 +201,18 @@ public class ObjcRuleClasses {
   // retrieving it from the rule context.
   static SpawnAction.Builder spawnAppleEnvActionBuilder(RuleContext ruleContext,
       Platform targetPlatform) {
-    AppleConfiguration appleConfiguration = ruleContext.getFragment(AppleConfiguration.class);
-
+    return spawnAppleEnvActionBuilder(
+        ruleContext.getFragment(AppleConfiguration.class), targetPlatform);
+  }
+  
+  /**
+   * Creates a new spawn action builder with apple environment variables set that are typically
+   * needed by the apple toolchain. This should be used to start to build spawn actions that, in
+   * order to run, require both a darwin architecture and a collection of environment variables
+   * which contain information about the target and host architectures.
+   */
+  static SpawnAction.Builder spawnAppleEnvActionBuilder(AppleConfiguration appleConfiguration,
+      Platform targetPlatform) {
     ImmutableMap.Builder<String, String> envBuilder = ImmutableMap.<String, String>builder()
         .putAll(appleConfiguration.getTargetAppleEnvironment(targetPlatform))
         .putAll(appleConfiguration.getAppleHostSystemEnv());
@@ -714,6 +724,17 @@ public class ObjcRuleClasses {
                   .direct_compile_time_input()
                   .allowedRuleClasses(ALLOWED_DEPS_RULE_CLASSES)
                   .allowedFileTypes())
+          /* <!-- #BLAZE_RULE($objc_compiling_rule).ATTRIBUTE(runtime_deps) -->
+          The list of framework targets that are late loaded at runtime.  They are included in the
+          app bundle but not linked against at build time.
+          <!-- #END_BLAZE_RULE.ATTRIBUTE -->*/
+         .add(
+             attr("runtime_deps", LABEL_LIST)
+                 .direct_compile_time_input()
+                 .allowedRuleClasses("objc_framework")
+                 // TODO(b/28637288): ios_framework is experimental and not fully implemented.
+                 .allowedRuleClassesWithWarning("ios_framework")
+                 .allowedFileTypes())
           /* <!-- #BLAZE_RULE($objc_compiling_rule).ATTRIBUTE(non_propagated_deps) -->
            The list of targets that are required in order to build this target,
            but which are not included in the final bundle.
@@ -831,11 +852,6 @@ public class ObjcRuleClasses {
     public RuleClass build(Builder builder, RuleDefinitionEnvironment env) {
       return builder
           .add(
-              attr("$dumpsyms", LABEL)
-                  .cfg(HOST)
-                  .singleArtifact()
-                  .value(env.getToolsLabel("//tools/osx/crosstool:dump_syms")))
-          .add(
               attr("$j2objc_dead_code_pruner", LABEL)
                   .allowedFileTypes(FileType.of(".py"))
                   .cfg(HOST)
@@ -926,7 +942,7 @@ public class ObjcRuleClasses {
 
           <p>The key in <code>${}</code> may be suffixed with <code>:rfc1034identifier</code> (for
           example <code>${PRODUCT_NAME::rfc1034identifier}</code>) in which case Blaze will
-          replicate Xcode's behavior and replace non-RFC1034-compliant characters with 
+          replicate Xcode's behavior and replace non-RFC1034-compliant characters with
           <code>-</code>.</p>
           <!-- #END_BLAZE_RULE.ATTRIBUTE -->*/
           .add(attr("infoplists", BuildType.LABEL_LIST).allowedFileTypes(PLIST_TYPE))
@@ -996,9 +1012,33 @@ public class ObjcRuleClasses {
           for more information. If absent, the default entitlements from the
           provisioning profile will be used.
           <p>
-          The following variables are substituted as per
-          <a href="https://developer.apple.com/library/ios/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html">their definitions in Apple's documentation</a>:
-          $(AppIdentifierPrefix) and $(CFBundleIdentifier).
+          The following variables are substituted: <code>$(CFBundleIdentifier)</code> with the
+          bundle id and <code>$(AppIdentifierPrefix)</code> with the value of the
+          <code>ApplicationIdentifierPrefix</code> key from this target's provisioning profile (or
+          the default provisioning profile, if none is specified).
+          <p>
+          Bazel does not currently support adding entitlements to simulator builds. This
+          means that if you rely on behavior which must be specified in entitlements (like App
+          Groups) it will only work on a device. You can work around this by inlining the
+          entitlements into your binary. e.g.
+        <pre><code>
+          #if TARGET_OS_SIMULATOR
+          __asm(&quot;.section __TEXT,__entitlements&quot;);
+          __asm(&quot;.ascii \&quot;&quot;
+          &quot;&lt;?xml version=\\\&quot;1.0\\\&quot; encoding=\\\&quot;UTF-8\\\&quot;?&gt;\n&quot;
+          &quot;&lt;!DOCTYPE plist PUBLIC \\\&quot;-//Apple//DTD PLIST 1.0//EN\\\&quot; &quot;
+              &quot;\\\&quot;http://www.apple.com/DTDs/PropertyList-1.0.dtd\\\&quot;&gt;&quot;
+           &quot;&lt;plist version=\\\&quot;1.0\\\&quot;&gt;&quot;
+          &quot;&lt;dict&gt;&quot;
+          &quot;&lt;key&gt;com.apple.security.application-groups&lt;/key&gt;&quot;
+          &quot;&lt;array&gt;&quot;
+          &quot;&lt;string&gt;group.com.your.company&lt;/string&gt;&quot;
+          &quot;&lt;/array&gt;&quot;
+          &quot;&lt;/dict&gt;&quot;
+          &quot;&lt;/plist&gt;&quot;
+          &quot;\&quot;
+          #endif
+        </code></pre>
           <!-- #END_BLAZE_RULE.ATTRIBUTE -->*/
           .add(attr(ENTITLEMENTS_ATTR, LABEL).allowedFileTypes(ENTITLEMENTS_TYPE))
           .add(

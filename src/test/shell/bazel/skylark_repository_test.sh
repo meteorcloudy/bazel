@@ -326,7 +326,7 @@ def _impl(repository_ctx):
   bin = repository_ctx.which("bin.sh")
   if bin == None:
     fail("bin.sh not found!")
-  result = repository_ctx.execute([bash, "--version"])
+  result = repository_ctx.execute([bash, "--version"], 10, {"FOO": "BAR"})
   if result.return_code != 0:
     fail("Non-zero return code from bash: " + str(result.return_code))
   if result.stderr != "":
@@ -335,7 +335,8 @@ def _impl(repository_ctx):
 repo = repository_rule(implementation=_impl, local=True)
 EOF
 
-  PATH="${PATH}:${PWD}" bazel build @foo//:bar >& $TEST_log || fail "Failed to build"
+  FOO="BAZ" PATH="${PATH}:${PWD}" bazel build @foo//:bar >& $TEST_log \
+      || fail "Failed to build"
   expect_log "version"
 }
 
@@ -656,6 +657,22 @@ EOF
   bazel query //... >& $TEST_log || fail "Failed to build"
   expect_log "existing = True,True"
   expect_log "non_existing = False,False"
+}
+
+function test_build_a_repo() {
+  cat > WORKSPACE <<EOF
+load("//:repo.bzl", "my_repo")
+my_repo(name = "reg")
+EOF
+
+  cat > repo.bzl <<EOF
+def _impl(repository_ctx):
+  pass
+
+my_repo = repository_rule(_impl)
+EOF
+
+  bazel build //external:reg &> $TEST_log || fail "Couldn't build repo"
 }
 
 function tear_down() {

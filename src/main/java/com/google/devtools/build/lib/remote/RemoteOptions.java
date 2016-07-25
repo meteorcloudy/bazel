@@ -22,12 +22,30 @@ import com.google.devtools.common.options.OptionsBase;
  */
 public final class RemoteOptions extends OptionsBase {
   @Option(
+    name = "rest_cache_url",
+    defaultValue = "null",
+    category = "remote",
+    help =
+        "A base URL for a RESTful cache server for storing build artifacts."
+            + "It has to support PUT, GET, and HEAD requests."
+  )
+  public String restCacheUrl;
+
+  @Option(
     name = "hazelcast_node",
     defaultValue = "null",
     category = "remote",
     help = "A comma separated list of hostnames of hazelcast nodes. For client mode only."
   )
   public String hazelcastNode;
+
+  @Option(
+    name = "hazelcast_client_config",
+    defaultValue = "null",
+    category = "remote",
+    help = "A file path to a hazelcast client config XML file. For client mode only."
+  )
+  public String hazelcastClientConfig;
 
   @Option(
     name = "hazelcast_standalone_listen_port",

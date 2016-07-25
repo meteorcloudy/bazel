@@ -462,9 +462,21 @@ public class JavaCommon {
       javaExecutable = ruleContext.getFragment(Jvm.class).getRunfilesJavaExecutable();
     }
 
-    String pathPrefix = javaExecutable.isAbsolute() ? "" : "${JAVA_RUNFILES}/"
-        + ruleContext.getRule().getWorkspaceName() + "/";
-    return "JAVABIN=${JAVABIN:-" + pathPrefix + javaExecutable.getPathString() + "}";
+    if (!javaExecutable.isAbsolute()) {
+      javaExecutable =
+          new PathFragment(new PathFragment(ruleContext.getWorkspaceName()), javaExecutable);
+    }
+    javaExecutable = javaExecutable.normalize();
+
+    if (ruleContext.getConfiguration().runfilesEnabled()) {
+      String prefix = "";
+      if (!javaExecutable.isAbsolute()) {
+        prefix = "${JAVA_RUNFILES}/";
+      }
+      return "JAVABIN=${JAVABIN:-" + prefix + javaExecutable.getPathString() + "}";
+    } else {
+      return "JAVABIN=${JAVABIN:-$(rlocation " + javaExecutable.getPathString() + ")}";
+    }
   }
 
   /**
@@ -624,8 +636,12 @@ public class JavaCommon {
   private static InstrumentedFilesProvider getInstrumentationFilesProvider(RuleContext ruleContext,
       NestedSet<Artifact> filesToBuild, InstrumentationSpec instrumentationSpec) {
     return InstrumentedFilesCollector.collect(
-        ruleContext, instrumentationSpec, JAVA_METADATA_COLLECTOR,
-        filesToBuild, /*withBaselineCoverage*/!TargetUtils.isTestRule(ruleContext.getTarget()));
+        ruleContext,
+        instrumentationSpec,
+        JAVA_METADATA_COLLECTOR,
+        filesToBuild,
+        NestedSetBuilder.<Artifact>emptySet(Order.STABLE_ORDER),
+        /*withBaselineCoverage*/!TargetUtils.isTestRule(ruleContext.getTarget()));
   }
 
   public void addGenJarsProvider(RuleConfiguredTargetBuilder builder,
@@ -684,6 +700,12 @@ public class JavaCommon {
       }
       // Now get the plugin-libraries runtime classpath.
       attributes.addProcessorPath(plugin.getProcessorClasspath());
+
+      // Add api-generating plugins
+      for (String name : plugin.getApiGeneratingProcessorClasses()) {
+        attributes.addApiGeneratingProcessorName(name);
+      }
+      attributes.addApiGeneratingProcessorPath(plugin.getApiGeneratingProcessorClasspath());
     }
   }
 

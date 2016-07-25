@@ -15,11 +15,13 @@
 package com.google.devtools.build.lib.shell;
 
 
+import com.google.common.collect.ImmutableList;
+import com.google.devtools.build.lib.shell.SubprocessBuilder.StreamAction;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
@@ -124,8 +126,6 @@ public final class Command {
    */
   public static final byte[] NO_INPUT = new byte[0];
 
-  private static final String[] EMPTY_STRING_ARRAY = new String[0];
-
   /**
    * Pass this to {@link #execute(byte[], KillableObserver, boolean)} to
    * indicate that you do not wish to observe / kill the underlying
@@ -142,25 +142,11 @@ public final class Command {
     }
   };
 
-  private final ProcessBuilder processBuilder;
+  private final SubprocessBuilder subprocessBuilder;
 
   // Start of public API -----------------------------------------------------
 
   /**
-   * Creates a new {@link Command} that will execute a command line that
-   * is described by a {@link ProcessBuilder}. Command line elements,
-   * environment, and working directory are taken from this object. The
-   * command line is executed exactly as given, without a shell.
-   *
-   * @param processBuilder {@link ProcessBuilder} describing command line
-   *  to execute
-   */
-  public Command(final ProcessBuilder processBuilder) {
-    this(processBuilder.command().toArray(EMPTY_STRING_ARRAY),
-         processBuilder.environment(),
-         processBuilder.directory());
-  }
-
   /**
    * Creates a new {@link Command} for the given command line elements. The
    * command line is executed exactly as given, without a shell.
@@ -213,22 +199,17 @@ public final class Command {
       commandLineElements[0] = new File(workingDirectory, commandLineElements[0]).getAbsolutePath();
     }
 
-    this.processBuilder =
-      new ProcessBuilder(commandLineElements);
-    if (environmentVariables != null) {
-      // TODO(bazel-team) remove next line eventually; it is here to mimic old
-      // Runtime.exec() behavior
-      this.processBuilder.environment().clear();
-      this.processBuilder.environment().putAll(environmentVariables);
-    }
-    this.processBuilder.directory(workingDirectory);
+    this.subprocessBuilder = new SubprocessBuilder();
+    subprocessBuilder.setArgv(ImmutableList.copyOf(commandLineElements));
+    subprocessBuilder.setEnv(environmentVariables);
+    subprocessBuilder.setWorkingDirectory(workingDirectory);
   }
 
   /**
    * @return raw command line elements to be executed
    */
   public String[] getCommandLineElements() {
-    final List<String> elements = processBuilder.command();
+    final List<String> elements = subprocessBuilder.getArgv();
     return elements.toArray(new String[elements.size()]);
   }
 
@@ -236,7 +217,7 @@ public final class Command {
    * @return (unmodifiable) {@link Map} view of command's environment variables
    */
   public Map<String, String> getEnvironmentVariables() {
-    return Collections.unmodifiableMap(processBuilder.environment());
+    return subprocessBuilder.getEnv();
   }
 
   /**
@@ -244,7 +225,7 @@ public final class Command {
    *         working directory is used
    */
   public File getWorkingDirectory() {
-    return processBuilder.directory();
+    return subprocessBuilder.getWorkingDirectory();
   }
 
   /**
@@ -429,42 +410,72 @@ public final class Command {
   }
 
   /**
-   * <p>Execute this command with given input to stdin; this stream is closed
-   * when the process terminates, and exceptions raised when closing this
-   * stream are ignored. This call blocks
-   * until the process completes or an error occurs. The caller provides
-   * {@link OutputStream} instances into which the process writes its
-   * stdout/stderr output; these streams are <em>not</em> closed when the
-   * process terminates. The given {@link KillableObserver} may also
-   * terminate the process early while running.</p>
+   * Execute this command with given input to stdin; this stream is closed when the process
+   * terminates, and exceptions raised when closing this stream are ignored. This call blocks until
+   * the process completes or an error occurs. The caller provides {@link OutputStream} instances
+   * into which the process writes its stdout/stderr output; these streams are <em>not</em> closed
+   * when the process terminates. The given {@link KillableObserver} may also terminate the process
+   * early while running.
+   *
+   * <p>If stdOut or stdErr is {@code null}, it will be redirected to /dev/null.
+   */
+  public CommandResult execute(
+      final byte[] stdinInput,
+      final KillableObserver observer,
+      final File stdOut,
+      final File stdErr,
+      final boolean killSubprocessOnInterrupt)
+      throws CommandException {
+    nullCheck(stdinInput, "stdinInput");
+    nullCheck(observer, "observer");
+    if (stdOut == null) {
+      subprocessBuilder.setStdout(StreamAction.DISCARD);
+    } else {
+      subprocessBuilder.setStdout(stdOut);
+    }
+
+    if (stdErr == null) {
+      subprocessBuilder.setStderr(StreamAction.DISCARD);
+    } else {
+      subprocessBuilder.setStderr(stdErr);
+    }
+    return doExecute(
+            new ByteArrayInputSource(stdinInput), observer, null, killSubprocessOnInterrupt, false)
+        .get();
+  }
+
+  /**
+   * Execute this command with given input to stdin; this stream is closed when the process
+   * terminates, and exceptions raised when closing this stream are ignored. This call blocks until
+   * the process completes or an error occurs. The caller provides {@link OutputStream} instances
+   * into which the process writes its stdout/stderr output; these streams are <em>not</em> closed
+   * when the process terminates. The given {@link KillableObserver} may also terminate the process
+   * early while running.
    *
    * @param stdinInput The input to this process's stdin
-   * @param observer {@link KillableObserver} that should observe the running
-   *  process, or {@link #NO_OBSERVER} if caller does not wish to kill the
-   *  process
-   * @param stdOut the process will write its standard output into this stream.
-   *  E.g., you could pass {@link System#out} as <code>stdOut</code>.
-   * @param stdErr the process will write its standard error into this stream.
-   *  E.g., you could pass {@link System#err} as <code>stdErr</code>.
-   * @return {@link CommandResult} representing result of the execution. Note
-   *  that {@link CommandResult#getStdout()} and
-   *  {@link CommandResult#getStderr()} will yield {@link IllegalStateException}
-   *  in this case, as the output is written to <code>stdOut/stdErr</code>
-   *  instead.
-   * @throws ExecFailedException if {@link Runtime#exec(String[])} fails for any
-   *  reason
-   * @throws AbnormalTerminationException if the process is interrupted (or
-   *  killed) before completion, if an {@link IOException} is encountered while
-   *  reading from the process, or the process was terminated due to a signal.
-   * @throws BadExitStatusException if the process exits with a
-   *  non-zero status
+   * @param observer {@link KillableObserver} that should observe the running process, or {@link
+   *     #NO_OBSERVER} if caller does not wish to kill the process
+   * @param stdOut the process will write its standard output into this stream. E.g., you could pass
+   *     {@link System#out} as <code>stdOut</code>.
+   * @param stdErr the process will write its standard error into this stream. E.g., you could pass
+   *     {@link System#err} as <code>stdErr</code>.
+   * @return {@link CommandResult} representing result of the execution. Note that {@link
+   *     CommandResult#getStdout()} and {@link CommandResult#getStderr()} will yield {@link
+   *     IllegalStateException} in this case, as the output is written to <code>stdOut/stdErr</code>
+   *     instead.
+   * @throws ExecFailedException if {@link Runtime#exec(String[])} fails for any reason
+   * @throws AbnormalTerminationException if the process is interrupted (or killed) before
+   *     completion, if an {@link IOException} is encountered while reading from the process, or the
+   *     process was terminated due to a signal.
+   * @throws BadExitStatusException if the process exits with a non-zero status
    * @throws NullPointerException if any argument is null.
    */
-  public CommandResult execute(final InputStream stdinInput,
-                               final KillableObserver observer,
-                               final OutputStream stdOut,
-                               final OutputStream stdErr)
-    throws CommandException {
+  public CommandResult execute(
+      final InputStream stdinInput,
+      final KillableObserver observer,
+      final OutputStream stdOut,
+      final OutputStream stdErr)
+      throws CommandException {
     nullCheck(stdinInput, "stdinInput");
     nullCheck(observer, "observer");
     nullCheck(stdOut, "stdOut");
@@ -526,16 +537,15 @@ public final class Command {
   }
 
   /**
-   * <p>Executes this command with the given stdinInput, but does not
-   * wait for it to complete. The caller may choose to observe the status
-   * of the launched process by calling methods on the returned object.
+   * Executes this command with the given stdinInput, but does not wait for it to complete. The
+   * caller may choose to observe the status of the launched process by calling methods on the
+   * returned object.
    *
-   * @param stdinInput bytes to be written to process's stdin, or
-   * {@link #NO_INPUT} if no bytes should be written
-   * @return An object that can be used to check if the process terminated and
-   *  obtain the process results.
-   * @throws ExecFailedException if {@link Runtime#exec(String[])} fails for any
-   *  reason
+   * @param stdinInput bytes to be written to process's stdin, or {@link #NO_INPUT} if no bytes
+   *     should be written
+   * @return An object that can be used to check if the process terminated and obtain the process
+   *     results.
+   * @throws ExecFailedException if {@link Runtime#exec(String[])} fails for any reason
    * @throws NullPointerException if stdin is null
    */
   public FutureCommandResult executeAsynchronously(final byte[] stdinInput)
@@ -670,13 +680,12 @@ public final class Command {
 
     logCommand();
 
-    final Process process = startProcess();
+    final Subprocess process = startProcess();
 
     outErrConsumers.logConsumptionStrategy();
 
-    outErrConsumers.registerInputs(process.getInputStream(),
-                                   process.getErrorStream(),
-                                   closeOutputStreams);
+    outErrConsumers.registerInputs(
+        process.getInputStream(), process.getErrorStream(), closeOutputStreams);
 
     processInput(stdinInput, process);
 
@@ -696,22 +705,15 @@ public final class Command {
 
       @Override
       public boolean isDone() {
-        try {
-          // exitValue seems to be the only non-blocking call for
-          // checking process liveness.
-          process.exitValue();
-          return true;
-        } catch (IllegalThreadStateException e) {
-          return false;
-        }
+        return process.finished();
       }
     };
   }
 
-  private Process startProcess()
+  private Subprocess startProcess()
     throws ExecFailedException {
     try {
-      return processBuilder.start();
+      return subprocessBuilder.start();
     } catch (IOException ioe) {
       throw new ExecFailedException(this, ioe);
     }
@@ -772,8 +774,7 @@ public final class Command {
     }
   }
 
-  private static void processInput(final InputSource stdinInput,
-                                   final Process process) {
+  private static void processInput(InputSource stdinInput, Subprocess process) {
     if (log.isLoggable(Level.FINER)) {
       log.finer(stdinInput.toLogString("stdin"));
     }
@@ -799,15 +800,15 @@ public final class Command {
     }
   }
 
-  private static Killable observeProcess(final Process process,
-                                         final KillableObserver observer) {
+  private static Killable observeProcess(Subprocess process,
+      final KillableObserver observer) {
     final Killable processKillable = new ProcessKillable(process);
     observer.startObserving(processKillable);
     return processKillable;
   }
 
   private CommandResult waitForProcessToComplete(
-    final Process process,
+    final Subprocess process,
     final KillableObserver observer,
     final Killable processKillable,
     final Consumers.OutErrConsumers outErr,
@@ -816,15 +817,17 @@ public final class Command {
 
     log.finer("Waiting for process...");
 
-    TerminationStatus status =
-        waitForProcess(process, killSubprocessOnInterrupt);
-
+    TerminationStatus status = waitForProcess(process, killSubprocessOnInterrupt);
     observer.stopObserving(processKillable);
 
     log.finer(status.toString());
 
     try {
-      outErr.waitForCompletion();
+      if (Thread.currentThread().isInterrupted()) {
+        outErr.cancel();
+      } else {
+        outErr.waitForCompletion();
+      }
     } catch (IOException ioe) {
       CommandResult noOutputResult =
         new CommandResult(CommandResult.EMPTY_OUTPUT,
@@ -843,11 +846,15 @@ public final class Command {
           : new AbnormalTerminationException(this,
               noOutputResult, message, ioe);
       }
+    } finally {
+      // #close() must be called after the #stopObserving() so that a badly-timed timeout does not
+      // try to destroy a process that is already closed, and after outErr is completed,
+      // so that it has a chance to read the entire output is captured.
+      process.close();
     }
 
-    CommandResult result = new CommandResult(outErr.getAccumulatedOut(),
-                                             outErr.getAccumulatedErr(),
-                                             status);
+    CommandResult result =
+        new CommandResult(outErr.getAccumulatedOut(), outErr.getAccumulatedErr(), status);
     result.logThis();
     if (status.success()) {
       return result;
@@ -858,13 +865,14 @@ public final class Command {
     }
   }
 
-  private static TerminationStatus waitForProcess(Process process,
+  private static TerminationStatus waitForProcess(Subprocess process,
                                        boolean killSubprocessOnInterrupt) {
     boolean wasInterrupted = false;
     try {
       while (true) {
         try {
-          return new TerminationStatus(process.waitFor());
+          process.waitFor();
+          return new TerminationStatus(process.exitValue());
         } catch (InterruptedException ie) {
           wasInterrupted = true;
           if (killSubprocessOnInterrupt) {
@@ -896,15 +904,15 @@ public final class Command {
   public String toDebugString() {
     StringBuilder message = new StringBuilder(128);
     message.append("Executing (without brackets):");
-    for (final String arg : processBuilder.command()) {
+    for (String arg : subprocessBuilder.getArgv()) {
       message.append(" [");
       message.append(arg);
       message.append(']');
     }
     message.append("; environment: ");
-    message.append(processBuilder.environment());
-    final File workingDirectory = processBuilder.directory();
+    message.append(subprocessBuilder.getEnv());
     message.append("; working dir: ");
+    File workingDirectory = subprocessBuilder.getWorkingDirectory();
     message.append(workingDirectory == null ?
                    "(current)" :
                    workingDirectory.toString());

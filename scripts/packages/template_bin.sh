@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash
 
 # Copyright 2015 The Bazel Authors. All rights reserved.
 #
@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set -e
+
 # Bazel self-extractable installer
 
 # Installation and etc prefix can be overriden from command line
@@ -24,11 +26,16 @@ progname="$0"
 echo "Bazel installer"
 echo "---------------"
 echo
+echo "Bazel is bundled with software licensed under the GPLv2 with Classpath exception."
+echo "You can find the sources next to the installer on our release page:"
+echo "   https://github.com/bazelbuild/bazel/releases"
+echo
+
 cat <<'EOF'
 %release_info%
 EOF
 
-function usage() {
+usage() {
   echo "Usage: $progname [options]" >&2
   echo "Options are:" >&2
   echo "  --prefix=/some/path set the prefix path (default=/usr/local)." >&2
@@ -71,7 +78,7 @@ done
 bin="${bin//%prefix%/${prefix}}"
 base="${base//%prefix%/${prefix}}"
 
-function test_write() {
+test_write() {
   local file="$1"
   while [ "$file" != "/" ] && [ -n "${file}" ] && [ ! -e "$file" ]; do
     file="$(dirname "${file}")"
@@ -79,6 +86,7 @@ function test_write() {
   [ -w "${file}" ] || {
     echo >&2
     echo "The Bazel installer must have write access to $1!" >&2
+    echo "Consider using the --user flag to install Bazel under $HOME/bin instead." >&2
     echo >&2
     usage
   }

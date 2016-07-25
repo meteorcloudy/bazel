@@ -52,7 +52,7 @@ import com.google.devtools.build.lib.util.Preconditions;
 import com.google.devtools.build.lib.util.ShellEscaper;
 import com.google.devtools.build.lib.vfs.FileSystemUtils;
 import com.google.devtools.build.lib.vfs.PathFragment;
-
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -77,8 +77,8 @@ public class BazelJavaSemantics implements JavaSemantics {
   }
 
   @Override
-  public Label getJdkLauncherLabel() {
-    return JDK_LAUNCHER_LABEL;
+  public boolean isJdkLauncher(Label label) {
+    return JDK_LAUNCHER_LABEL.equals(label);
   }
 
   private boolean isJavaBinaryOrJavaTest(RuleContext ruleContext) {
@@ -89,6 +89,10 @@ public class BazelJavaSemantics implements JavaSemantics {
   @Override
   public void checkRule(RuleContext ruleContext, JavaCommon javaCommon) {
   }
+
+  @Override
+  public void checkForProtoLibraryAndJavaProtoLibraryOnSameProto(
+      RuleContext ruleContext, JavaCommon javaCommon) {}
 
   private String getMainClassInternal(RuleContext ruleContext, ImmutableList<Artifact> sources) {
     if (!ruleContext.attributes().get("create_executable", Type.BOOLEAN)) {
@@ -165,23 +169,28 @@ public class BazelJavaSemantics implements JavaSemantics {
     Preconditions.checkNotNull(javaExecutable);
 
     List<Substitution> arguments = new ArrayList<>();
-    String workspacePrefix = ruleContext.getWorkspaceName();
-    if (!workspacePrefix.isEmpty()) {
-      workspacePrefix += "/";
+    String workspaceName = ruleContext.getWorkspaceName();
+    final String workspacePrefix = workspaceName + (workspaceName.isEmpty() ? "" : "/");
+    final boolean isRunfilesEnabled = ruleContext.getConfiguration().runfilesEnabled();
+    if (!isRunfilesEnabled) {
+      arguments.add(Substitution.of("%runfiles_manifest_only%", "1"));
     }
     arguments.add(Substitution.of("%workspace_prefix%", workspacePrefix));
     arguments.add(Substitution.of("%javabin%", javaExecutable));
     arguments.add(Substitution.of("%needs_runfiles%",
         ruleContext.getFragment(Jvm.class).getJavaExecutable().isAbsolute() ? "0" : "1"));
-    arguments.add(new ComputedSubstitution("%classpath%") {
-      @Override
-      public String getValue() {
-        StringBuilder buffer = new StringBuilder();
-        Iterable<Artifact> jars = javaCommon.getRuntimeClasspath();
-        appendRunfilesRelativeEntries(buffer, jars, ':');
-        return buffer.toString();
-      }
-    });
+    arguments.add(
+        new ComputedSubstitution("%classpath%") {
+          @Override
+          public String getValue() {
+            StringBuilder buffer = new StringBuilder();
+            Iterable<Artifact> jars = javaCommon.getRuntimeClasspath();
+            char delimiter = File.pathSeparatorChar;
+            appendRunfilesRelativeEntries(
+                buffer, jars, workspacePrefix, delimiter, isRunfilesEnabled);
+            return buffer.toString();
+          }
+        });
 
     arguments.add(Substitution.of("%java_start_class%",
         ShellEscaper.escapeString(javaStartClass)));
@@ -194,22 +203,35 @@ public class BazelJavaSemantics implements JavaSemantics {
   /**
    * Builds a class path by concatenating the root relative paths of the artifacts separated by the
    * delimiter. Each relative path entry is prepended with "${RUNPATH}" which will be expanded by
-   * the stub script at runtime, to either "${JAVA_RUNFILES}/" or if we are lucky, the empty
-   * string.
+   * the stub script at runtime, to either "${JAVA_RUNFILES}/" or if we are lucky, the empty string.
    *
    * @param buffer the buffer to use for concatenating the entries
    * @param artifacts the entries to concatenate in the buffer
    * @param delimiter the delimiter character to separate the entries
    */
-  private static void appendRunfilesRelativeEntries(StringBuilder buffer,
-      Iterable<Artifact> artifacts, char delimiter) {
+  private static void appendRunfilesRelativeEntries(
+      StringBuilder buffer,
+      Iterable<Artifact> artifacts,
+      String workspacePrefix,
+      char delimiter,
+      boolean isRunfilesEnabled) {
+    buffer.append("\"");
     for (Artifact artifact : artifacts) {
-      if (buffer.length() > 0) {
+      if (buffer.length() > 1) {
         buffer.append(delimiter);
       }
-      buffer.append("${RUNPATH}");
-      buffer.append(artifact.getRunfilesPath().getPathString());
+      if (!isRunfilesEnabled) {
+        buffer.append("$(rlocation ");
+        PathFragment runfilePath =
+            new PathFragment(new PathFragment(workspacePrefix), artifact.getRunfilesPath());
+        buffer.append(runfilePath.normalize().getPathString());
+        buffer.append(")");
+      } else {
+        buffer.append("${RUNPATH}");
+        buffer.append(artifact.getRunfilesPath().getPathString());
+      }
     }
+    buffer.append("\"");
   }
 
   private TransitiveInfoCollection getTestSupport(RuleContext ruleContext) {
@@ -437,5 +459,10 @@ public class BazelJavaSemantics implements JavaSemantics {
   @Override
   public String getJavaBuilderMainClass() {
     return JAVABUILDER_CLASS_NAME;
+  }
+
+  @Override
+  public Artifact getProtoMapping(RuleContext ruleContext) throws InterruptedException {
+    return null;
   }
 }

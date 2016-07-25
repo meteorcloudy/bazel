@@ -24,15 +24,18 @@ import com.google.devtools.build.lib.concurrent.ThreadSafety.Immutable;
 import com.google.devtools.build.lib.rules.apple.DottedVersion;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkCallable;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkModule;
+import com.google.devtools.build.lib.skylarkinterface.SkylarkModuleCategory;
 import com.google.devtools.build.lib.util.Preconditions;
 import com.google.devtools.build.lib.vfs.Path;
 
 import javax.annotation.Nullable;
 
-/**
- * A compiler configuration containing flags required for Objective-C compilation.
- */
-@SkylarkModule(name = "objc", doc = "A configuration fragment for Objective-C")
+/** A compiler configuration containing flags required for Objective-C compilation. */
+@SkylarkModule(
+  name = "objc",
+  category = SkylarkModuleCategory.CONFIGURATION_FRAGMENT,
+  doc = "A configuration fragment for Objective-C"
+)
 @Immutable
 public class ObjcConfiguration extends BuildConfiguration.Fragment {
   @VisibleForTesting
@@ -43,7 +46,7 @@ public class ObjcConfiguration extends BuildConfiguration.Fragment {
   static final ImmutableList<String> GLIBCXX_DBG_COPTS =
       ImmutableList.of(
           "-D_GLIBCXX_DEBUG", "-D_GLIBCXX_DEBUG_PEDANTIC", "-D_GLIBCPP_CONCEPT_CHECKS");
-  
+
   @VisibleForTesting
   static final ImmutableList<String> OPT_COPTS =
       ImmutableList.of(
@@ -52,7 +55,6 @@ public class ObjcConfiguration extends BuildConfiguration.Fragment {
   private final DottedVersion iosMinimumOs;
   private final DottedVersion iosSimulatorVersion;
   private final String iosSimulatorDevice;
-  private final boolean generateDebugSymbols;
   private final boolean generateDsym;
   private final boolean generateLinkmap;
   private final boolean runMemleaks;
@@ -78,7 +80,6 @@ public class ObjcConfiguration extends BuildConfiguration.Fragment {
         Preconditions.checkNotNull(objcOptions.iosSimulatorDevice, "iosSimulatorDevice");
     this.iosSimulatorVersion =
         Preconditions.checkNotNull(objcOptions.iosSimulatorVersion, "iosSimulatorVersion");
-    this.generateDebugSymbols = objcOptions.generateDebugSymbols;
     this.generateDsym = objcOptions.appleGenerateDsym;
     this.generateLinkmap = objcOptions.generateLinkmap;
     this.runMemleaks = objcOptions.runMemleaks;
@@ -104,6 +105,8 @@ public class ObjcConfiguration extends BuildConfiguration.Fragment {
    * iOS version features or libraries will become weak dependencies which are only loaded if the
    * runtime OS supports them.
    */
+  @SkylarkCallable(name = "ios_minimum_os", structField = true,
+      doc = "The minimum compatible iOS version for target simulators and devices..")
   public DottedVersion getMinimumOs() {
     return iosMinimumOs;
   }
@@ -111,19 +114,16 @@ public class ObjcConfiguration extends BuildConfiguration.Fragment {
   /**
    * Returns the type of device (e.g. 'iPhone 6') to simulate when running on the simulator.
    */
+  @SkylarkCallable(name = "ios_simulator_device", structField = true,
+      doc = "The type of device (e.g. 'iPhone 6') to use when running on the simulator.")
   public String getIosSimulatorDevice() {
     return iosSimulatorDevice;
   }
 
+  @SkylarkCallable(name = "ios_simulator_version", structField = true,
+      doc = "The SDK version of the iOS simulator to use when running on the simulator.")
   public DottedVersion getIosSimulatorVersion() {
     return iosSimulatorVersion;
-  }
-
-  /**
-   * Returns whether dSYM + breakpad generation is enabled.
-   */
-  public boolean generateDebugSymbols() {
-    return generateDebugSymbols;
   }
 
   /**

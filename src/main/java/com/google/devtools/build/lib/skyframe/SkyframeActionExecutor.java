@@ -415,7 +415,16 @@ public final class SkyframeActionExecutor implements ActionExecutionContextFacto
       Preconditions.checkState(artifact.isMiddlemanArtifact() || artifact.isTreeArtifact(),
           artifact);
       Collection<Artifact> result = expandedInputs.get(artifact);
-      // Note that result may be null for non-aggregating middlemen.
+
+      // Note that the result can be empty but not null for TreeArtifacts. And it may be null for
+      // non-aggregating middlemen.
+      if (artifact.isTreeArtifact()) {
+        Preconditions.checkNotNull(
+            result,
+            "TreeArtifact %s cannot be expanded because it is not an input for the action",
+            artifact);
+      }
+
       if (result != null) {
         output.addAll(result);
       }
@@ -1033,10 +1042,10 @@ public final class SkyframeActionExecutor implements ActionExecutionContextFacto
     String stderr = null;
 
     if (outErr.hasRecordedStdout()) {
-      stdout = outErr.getOutputFile().toString();
+      stdout = outErr.getOutputPath().toString();
     }
     if (outErr.hasRecordedStderr()) {
-      stderr = outErr.getErrorFile().toString();
+      stderr = outErr.getErrorPath().toString();
     }
     postEvent(new ActionExecutedEvent(action, exception, stdout, stderr));
   }
@@ -1096,8 +1105,8 @@ public final class SkyframeActionExecutor implements ActionExecutionContextFacto
     }
 
     @Override
-    public ByteString getDigest(ActionInput actionInput) throws IOException {
-      ByteString digest = perActionCache.getDigest(actionInput);
+    public byte[] getDigest(ActionInput actionInput) throws IOException {
+      byte[] digest = perActionCache.getDigest(actionInput);
       return digest != null ? digest : perBuildFileCache.getDigest(actionInput);
     }
 
@@ -1121,7 +1130,7 @@ public final class SkyframeActionExecutor implements ActionExecutionContextFacto
 
     @Nullable
     @Override
-    public ActionInput getInputFromDigest(ByteString digest) throws IOException {
+    public ActionInput getInputFromDigest(ByteString digest) {
       ActionInput file = perActionCache.getInputFromDigest(digest);
       return file != null ? file : perBuildFileCache.getInputFromDigest(digest);
     }

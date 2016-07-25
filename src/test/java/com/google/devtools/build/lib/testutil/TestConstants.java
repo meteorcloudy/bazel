@@ -33,7 +33,7 @@ public class TestConstants {
   public static final ImmutableList<String> EMBEDDED_TOOLS = ImmutableList.of(
       "build_interface_so",
       "build-runfiles",
-      "namespace-sandbox",
+      "linux-sandbox",
       "process-wrapper",
       "xcode-locator");
 
@@ -64,8 +64,6 @@ public class TestConstants {
   public static final String TEST_RULE_MODULE =
         "com.google.devtools.build.lib.bazel.rules.BazelRulesModule";
   public static final ImmutableList<String> IGNORED_MESSAGE_PREFIXES = ImmutableList.<String>of();
-
-  public static final boolean THIS_IS_BAZEL = true;
 
   public static final String GCC_INCLUDE_PATH = "external/bazel_tools/tools/cpp/gcc3";
 

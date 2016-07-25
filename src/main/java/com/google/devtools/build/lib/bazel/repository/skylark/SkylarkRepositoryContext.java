@@ -32,6 +32,7 @@ import com.google.devtools.build.lib.skyframe.InconsistentFilesystemException;
 import com.google.devtools.build.lib.skyframe.PackageLookupValue;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkCallable;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkModule;
+import com.google.devtools.build.lib.skylarkinterface.SkylarkModuleCategory;
 import com.google.devtools.build.lib.syntax.ClassObject.SkylarkClassObject;
 import com.google.devtools.build.lib.syntax.EvalException;
 import com.google.devtools.build.lib.syntax.Runtime;
@@ -53,11 +54,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Skylark API for the repository_rule's context.
- */
+/** Skylark API for the repository_rule's context. */
 @SkylarkModule(
   name = "repository_ctx",
+  category = SkylarkModuleCategory.BUILTIN,
   doc =
       "The context of the repository rule containing"
           + " helper functions and information about attributes. You get a repository_ctx object"
@@ -189,8 +189,10 @@ public class SkylarkRepositoryContext {
   private void checkInOutputDirectory(SkylarkPath path) throws RepositoryFunctionException {
     if (!path.getPath().getPathString().startsWith(outputDirectory.getPathString())) {
       throw new RepositoryFunctionException(
-          new IOException("Cannot write outside of the output directory for path " + path),
-          Transience.TRANSIENT);
+          new EvalException(
+              Location.fromFile(path.getPath()),
+              "Cannot write outside of the output directory for path " + path),
+          Transience.PERSISTENT);
     }
   }
 
@@ -553,7 +555,7 @@ public class SkylarkRepositoryContext {
                   FileSymlinkException.class,
                   InconsistentFilesystemException.class);
     } catch (IOException | FileSymlinkException | InconsistentFilesystemException e) {
-      throw new EvalException(Location.BUILTIN, new IOException(e));
+      throw new EvalException(Location.BUILTIN, e);
     }
 
     if (fileValue == null) {

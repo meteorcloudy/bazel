@@ -16,6 +16,7 @@ package com.google.devtools.build.lib.analysis;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
+import com.google.common.base.Optional;
 import com.google.common.base.Predicate;
 import com.google.common.base.Predicates;
 import com.google.common.collect.ImmutableBiMap;
@@ -78,7 +79,6 @@ import com.google.devtools.build.lib.util.FileTypeSet;
 import com.google.devtools.build.lib.util.Preconditions;
 import com.google.devtools.build.lib.vfs.FileSystemUtils;
 import com.google.devtools.build.lib.vfs.PathFragment;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -86,7 +86,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
 import javax.annotation.Nullable;
 
 /**
@@ -156,7 +155,7 @@ public final class RuleContext extends TargetContext
   private final ErrorReporter reporter;
   private final ImmutableBiMap<String, Class<? extends TransitiveInfoProvider>>
       skylarkProviderRegistry;
-  
+
   private ActionOwner actionOwner;
 
   /* lazily computed cache for Make variables, computed from the above. See get... method */
@@ -243,7 +242,7 @@ public final class RuleContext extends TargetContext
    * Returns the workspace name for the rule.
    */
   public String getWorkspaceName() {
-    return rule.getWorkspaceName();
+    return rule.getPackage().getWorkspaceName();
   }
 
   /**
@@ -254,7 +253,7 @@ public final class RuleContext extends TargetContext
   }
 
   /**
-   * Returns the host configuration for this rule. 
+   * Returns the host configuration for this rule.
    */
   public BuildConfiguration getHostConfiguration() {
     return hostConfiguration;
@@ -282,7 +281,7 @@ public final class RuleContext extends TargetContext
       getSkylarkProviderRegistry() {
     return skylarkProviderRegistry;
   }
-  
+
   /**
    * Returns whether this instance is known to have errors at this point during analysis. Do not
    * call this method after the initializationHook has returned.
@@ -290,7 +289,7 @@ public final class RuleContext extends TargetContext
   public boolean hasErrors() {
     return getAnalysisEnvironment().hasErrors();
   }
-  
+
   /**
    * No-op if {@link #hasErrors} is false, throws {@link RuleErrorException} if it is true.
    * This provides a convenience to early-exit of configured target creation if there are errors.
@@ -390,7 +389,7 @@ public final class RuleContext extends TargetContext
   }
 
   public ImmutableList<Artifact> getBuildInfo(BuildInfoKey key) {
-    return getAnalysisEnvironment().getBuildInfo(this, key);
+    return getAnalysisEnvironment().getBuildInfo(this, key, getConfiguration());
   }
 
   @VisibleForTesting
@@ -417,7 +416,7 @@ public final class RuleContext extends TargetContext
   public void ruleError(String message) {
     reporter.ruleError(message);
   }
-  
+
   /**
    * Convenience function to report non-attribute-specific errors in the current rule and then
    * throw a {@link RuleErrorException}, immediately exiting the build invocation. Alternatively,
@@ -459,7 +458,8 @@ public final class RuleContext extends TargetContext
    * <p>If the name of the attribute starts with <code>$</code>
    * it is replaced with a string <code>(an implicit dependency)</code>.
    */
-  public void throwWithAttributeError(String attrName, String message) throws RuleErrorException {
+  public RuleErrorException throwWithAttributeError(String attrName, String message)
+      throws RuleErrorException {
     reporter.attributeError(attrName, message);
     throw new RuleErrorException();
   }
@@ -527,6 +527,24 @@ public final class RuleContext extends TargetContext
    */
   public Artifact getPackageRelativeArtifact(String relative, Root root) {
     return getPackageRelativeArtifact(new PathFragment(relative), root);
+  }
+
+  /**
+   * Creates an artifact in a directory that is unique to the package that contains the rule, thus
+   * guaranteeing that it never clashes with artifacts created by rules in other packages.
+   */
+  public Artifact getBinArtifact(String relative) {
+    return getPackageRelativeArtifact(
+        new PathFragment(relative), getConfiguration().getBinDirectory());
+  }
+
+  /**
+   * Creates an artifact in a directory that is unique to the package that contains the rule, thus
+   * guaranteeing that it never clashes with artifacts created by rules in other packages.
+   */
+  public Artifact getGenfilesArtifact(String relative) {
+    return getPackageRelativeArtifact(
+        new PathFragment(relative), getConfiguration().getGenfilesDirectory());
   }
 
   /**
@@ -628,6 +646,28 @@ public final class RuleContext extends TargetContext
   }
 
   /**
+   * Returns the dependencies through a {@code LABEL_DICT_UNARY} attribute as a map from
+   * a string to a {@link TransitiveInfoCollection}.
+   */
+  public Map<String, TransitiveInfoCollection> getPrerequisiteMap(String attributeName) {
+    Attribute attributeDefinition = getAttribute(attributeName);
+    Preconditions.checkState(attributeDefinition.getType() == BuildType.LABEL_DICT_UNARY);
+
+    ImmutableMap.Builder<String, TransitiveInfoCollection> result = ImmutableMap.builder();
+    Map<String, Label> dict = attributes().get(attributeName, BuildType.LABEL_DICT_UNARY);
+    Map<Label, ConfiguredTarget> labelToDep = new HashMap<>();
+    for (ConfiguredTarget dep : targetMap.get(attributeName)) {
+      labelToDep.put(dep.getLabel(), dep);
+    }
+
+    for (Map.Entry<String, Label> entry : dict.entrySet()) {
+      result.put(entry.getKey(), Preconditions.checkNotNull(labelToDep.get(entry.getValue())));
+    }
+
+    return result.build();
+  }
+
+  /**
    * Returns the list of transitive info collections that feed into this target through the
    * specified attribute. Note that you need to specify the correct mode for the attribute,
    * otherwise an assertion will be raised.
@@ -642,8 +682,8 @@ public final class RuleContext extends TargetContext
       // deeply nested and we can't easily inject the behavior we want. However, we should fix all
       // such call sites.
       checkAttribute(attributeName, Mode.SPLIT);
-      Map<String, ? extends List<? extends TransitiveInfoCollection>> map =
-          getSplitPrerequisites(attributeName, /*requireSplit=*/false);
+      Map<Optional<String>, ? extends List<? extends TransitiveInfoCollection>> map =
+          getSplitPrerequisites(attributeName);
       return map.isEmpty()
           ? ImmutableList.<TransitiveInfoCollection>of()
           : map.entrySet().iterator().next().getValue();
@@ -654,35 +694,21 @@ public final class RuleContext extends TargetContext
   }
 
   /**
-   * Returns the a prerequisites keyed by the CPU of their configurations; this method throws an
-   * exception if the split transition is not active.
+   * Returns the a prerequisites keyed by the CPU of their configurations.
+   * If the split transition is not active (e.g. split() returned an empty
+   * list), the key is an empty Optional.
    */
-  public Map<String, ? extends List<? extends TransitiveInfoCollection>>
+  public Map<Optional<String>, ? extends List<? extends TransitiveInfoCollection>>
       getSplitPrerequisites(String attributeName) {
-    return getSplitPrerequisites(attributeName, /*requireSplit*/true);
-  }
-
-  private Map<String, ? extends List<? extends TransitiveInfoCollection>>
-      getSplitPrerequisites(String attributeName, boolean requireSplit) {
     checkAttribute(attributeName, Mode.SPLIT);
 
     Attribute attributeDefinition = getAttribute(attributeName);
     SplitTransition<?> transition = attributeDefinition.getSplitTransition(rule);
     List<BuildConfiguration> configurations =
-        getConfiguration().getTransitions().getSplitConfigurations(transition);
-    if (configurations.size() == 1) {
-      // There are two cases here:
-      // 1. Splitting is enabled, but only one target cpu.
-      // 2. Splitting is disabled, and no --cpu value was provided on the command line.
-      // In the first case, the cpu value is non-null, but in the second case it is null. We only
-      // allow that to proceed if the caller specified that he is going to ignore the cpu value
-      // anyway.
-      String cpu = configurations.get(0).getCpu();
-      if (cpu == null) {
-        Preconditions.checkState(!requireSplit);
-        cpu = "DO_NOT_USE";
-      }
-      return ImmutableMap.of(cpu, targetMap.get(attributeName));
+        getConfiguration().getTransitions().getSplitConfigurationsNoSelf(transition);
+    if (configurations.isEmpty()) {
+      // The split transition is not active. Defer the decision on which CPU to use.
+      return ImmutableMap.of(Optional.<String>absent(), targetMap.get(attributeName));
     }
 
     Set<String> cpus = new HashSet<>();
@@ -694,15 +720,15 @@ public final class RuleContext extends TargetContext
     }
 
     // Use an ImmutableListMultimap.Builder here to preserve ordering.
-    ImmutableListMultimap.Builder<String, TransitiveInfoCollection> result =
+    ImmutableListMultimap.Builder<Optional<String>, TransitiveInfoCollection> result =
         ImmutableListMultimap.builder();
     for (TransitiveInfoCollection t : targetMap.get(attributeName)) {
       if (t.getConfiguration() != null) {
-        result.put(t.getConfiguration().getCpu(), t);
+        result.put(Optional.of(t.getConfiguration().getCpu()), t);
       } else {
         // Source files don't have a configuration, so we add them to all architecture entries.
         for (String cpu : cpus) {
-          result.put(cpu, t);
+          result.put(Optional.of(cpu), t);
         }
       }
     }
@@ -1284,6 +1310,13 @@ public final class RuleContext extends TargetContext
   }
 
   /**
+   * Returns true if the target for this context is a test target.
+   */
+  public boolean isTestTarget() {
+    return TargetUtils.isTestRule(getTarget());
+  }
+
+  /**
    * Returns true if runfiles support should create the runfiles tree, or
    * false if it should just create the manifest.
    */
@@ -1298,7 +1331,7 @@ public final class RuleContext extends TargetContext
     //  b. host tools could potentially use data files, but currently don't
     //     (they're run from the execution root, not a runfiles tree).
     //     Currently hostConfiguration.buildRunfiles() returns true.
-    if (TargetUtils.isTestRule(getTarget())) {
+    if (isTestTarget()) {
       // Tests are only executed during testing (duh),
       // and their runfiles are generated lazily on local
       // execution (see LocalTestStrategy). Therefore, it

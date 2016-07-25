@@ -16,6 +16,7 @@ package com.google.devtools.build.lib.packages;
 
 import com.google.devtools.build.lib.skylarkinterface.Param;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkModule;
+import com.google.devtools.build.lib.skylarkinterface.SkylarkModuleCategory;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkSignature;
 import com.google.devtools.build.lib.syntax.BuiltinFunction;
 import com.google.devtools.build.lib.syntax.Environment;
@@ -30,7 +31,10 @@ import com.google.devtools.build.lib.syntax.Type.ConversionException;
 /**
  * A class for the Skylark native module.
  */
-@SkylarkModule(name = "native", namespace = true, doc =
+@SkylarkModule(name = "native", namespace = true,
+    title = "Native Module",
+    category = SkylarkModuleCategory.TOP_LEVEL_TYPE,
+    doc =
     "A built-in module to support native rules and other package helper functions. "
     + "All native rules appear as functions in this module, e.g. <code>native.cc_library</code>. "
     + "Note that the native module is only available in the loading phase "
@@ -46,21 +50,19 @@ public class SkylarkNativeModule {
     returnType = SkylarkList.class,
     doc =
         "Glob returns a list of every file in the current package that:<ul>\n"
-            + "<li>Matches at least one pattern in <code>include</code>.</li>\n"
-            + "<li>Does not match any of the patterns in <code>exclude</code> "
-            + "(default <code>[]</code>).</li></ul>\n"
-            + "If the <code>exclude_directories</code> argument is enabled (set to <code>1</code>),"
-            + " files of type directory will be omitted from the results (default <code>1</code>).",
-    mandatoryPositionals = {
+        + "<li>Matches at least one pattern in <code>include</code>.</li>\n"
+        + "<li>Does not match any of the patterns in <code>exclude</code> "
+        + "(default <code>[]</code>).</li></ul>\n"
+        + "If the <code>exclude_directories</code> argument is enabled (set to <code>1</code>),"
+        + " files of type directory will be omitted from the results (default <code>1</code>).",
+    parameters = {
       @Param(
         name = "include",
         type = SkylarkList.class,
         generic1 = String.class,
         defaultValue = "[]",
         doc = "The list of glob patterns to include."
-      )
-    },
-    optionalPositionals = {
+      ),
       @Param(
         name = "exclude",
         type = SkylarkList.class,
@@ -101,7 +103,7 @@ public class SkylarkNativeModule {
     doc =
         "Returns a dictionary representing the attributes of a previously defined rule, "
             + "or None if the rule does not exist.",
-    mandatoryPositionals = {
+    parameters = {
       @Param(name = "name", type = String.class, doc = "The name of the rule.")
     },
     useAst = true,
@@ -133,7 +135,7 @@ public class SkylarkNativeModule {
         "Returns a dict containing all the rules instantiated so far. "
             + "The map key is the name of the rule. The map value is equivalent to the "
             + "existing_rule output for that rule.",
-    mandatoryPositionals = {},
+    parameters = {},
     useAst = true,
     useEnvironment = true
   )
@@ -151,15 +153,14 @@ public class SkylarkNativeModule {
       returnType = Runtime.NoneType.class,
       doc = "This function defines a set of packages and assigns a label to the group. "
           + "The label can be referenced in <code>visibility</code> attributes.",
-      mandatoryNamedOnly = {
-      @Param(name = "name", type = String.class,
-          doc = "The unique name for this rule.")},
-      optionalNamedOnly = {
+      parameters = {
+      @Param(name = "name", type = String.class, named = true, positional = false,
+          doc = "The unique name for this rule."),
       @Param(name = "packages", type = SkylarkList.class, generic1 = String.class,
-          defaultValue = "[]",
+          defaultValue = "[]", named = true, positional = false,
           doc = "A complete enumeration of packages in this group."),
       @Param(name = "includes", type = SkylarkList.class, generic1 = String.class,
-          defaultValue = "[]",
+          defaultValue = "[]", named = true, positional = false,
           doc = "Other package groups that are included in this one.")},
       useAst = true, useEnvironment = true)
   private static final BuiltinFunction packageGroup = new BuiltinFunction("package_group") {
@@ -174,18 +175,16 @@ public class SkylarkNativeModule {
       returnType = Runtime.NoneType.class,
       doc = "Specifies a list of files belonging to this package that are exported to other "
           + "packages but not otherwise mentioned.",
-      mandatoryPositionals = {
+      parameters = {
       @Param(name = "srcs", type = SkylarkList.class, generic1 = String.class,
-          doc = "The list of files to export.")},
-      optionalPositionals = {
+          doc = "The list of files to export."),
       // TODO(bazel-team): make it possible to express the precise type ListOf(LabelDesignator)
-      @Param(name = "visibility", type = SkylarkList.class,
-          noneable = true,
+      @Param(name = "visibility", type = SkylarkList.class, defaultValue = "None", noneable = true,
           doc = "A visibility declaration can to be specified. The files will be visible to the "
               + "targets specified. If no visibility is specified, the files will be visible to "
               + "every package."),
       @Param(name = "licenses", type = SkylarkList.class, generic1 = String.class, noneable = true,
-          doc = "Licenses to be specified.")},
+          defaultValue = "None", doc = "Licenses to be specified.")},
       useAst = true, useEnvironment = true)
   private static final BuiltinFunction exportsFiles = new BuiltinFunction("exports_files") {
       public Runtime.NoneType invoke(SkylarkList srcs, Object visibility, Object licenses,

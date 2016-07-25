@@ -23,14 +23,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.devtools.build.lib.ideinfo.androidstudio.PackageManifestOuterClass.ArtifactLocation;
 import com.google.protobuf.MessageLite;
-
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
-
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -42,8 +37,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
-
 import javax.annotation.Nonnull;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
 /**
  * Unit tests for {@link PackageParser}
@@ -131,21 +129,24 @@ public class PackageParserTest {
           "bin,java/com/google/Bla.java,/usr/local/_tmp/code/bin"
         )};
     PackageParser.PackageParserOptions options = PackageParser.parseArgs(args);
-    assertThat(options.outputManifest.toString()).isEqualTo("/tmp/out.manifest");
+    assertThat(options.outputManifest.toString())
+        .isEqualTo(Paths.get("/tmp/out.manifest").toString());
     assertThat(options.sources).hasSize(2);
-    assertThat(options.sources.get(0)).isEqualTo(
-        ArtifactLocation.newBuilder()
-            .setRootPath("/usr/local/google/code")
-            .setRelativePath("java/com/google/Foo.java")
-            .setIsSource(true)
-            .build());
-    assertThat(options.sources.get(1)).isEqualTo(
-        ArtifactLocation.newBuilder()
-            .setRootPath("/usr/local/_tmp/code/bin")
-            .setRootExecutionPathFragment("bin")
-            .setRelativePath("java/com/google/Bla.java")
-            .setIsSource(false)
-            .build());
+    assertThat(options.sources.get(0))
+        .isEqualTo(
+            ArtifactLocation.newBuilder()
+                .setRootPath(Paths.get("/usr/local/google/code").toString())
+                .setRelativePath(Paths.get("java/com/google/Foo.java").toString())
+                .setIsSource(true)
+                .build());
+    assertThat(options.sources.get(1))
+        .isEqualTo(
+            ArtifactLocation.newBuilder()
+                .setRootPath(Paths.get("/usr/local/_tmp/code/bin").toString())
+                .setRootExecutionPathFragment(Paths.get("bin").toString())
+                .setRelativePath(Paths.get("java/com/google/Bla.java").toString())
+                .setIsSource(false)
+                .build());
   }
 
   @Test
@@ -257,28 +258,33 @@ public class PackageParserTest {
 
   @Test
   public void testHandlesOldFormat() throws Exception {
-    String[] args = new String[] {
-        "--output_manifest",
-        "/tmp/out.manifest",
-        "--sources_absolute_paths",
-        "/usr/local/code/java/com/google/Foo.java:/usr/local/code/java/com/google/Bla.java",
-        "--sources_execution_paths",
-        "java/com/google/Foo.java:java/com/google/Bla.java"
-    };
+    String[] args =
+        new String[] {
+          "--output_manifest",
+          "/tmp/out.manifest",
+          "--sources_absolute_paths",
+          "/usr/local/code/java/com/google/Foo.java"
+              + File.pathSeparator
+              + "/usr/local/code/java/com/google/Bla.java",
+          "--sources_execution_paths",
+          "java/com/google/Foo.java" + File.pathSeparator + "java/com/google/Bla.java"
+        };
     PackageParser.PackageParserOptions options = PackageParser.parseArgs(args);
-    assertThat(options.outputManifest.toString()).isEqualTo("/tmp/out.manifest");
+    assertThat(options.outputManifest.toString())
+        .isEqualTo(Paths.get("/tmp/out.manifest").toString());
     assertThat(options.sourcesAbsolutePaths.get(0).toString())
-        .isEqualTo("/usr/local/code/java/com/google/Foo.java");
+        .isEqualTo(Paths.get("/usr/local/code/java/com/google/Foo.java").toString());
     assertThat(options.sourcesAbsolutePaths.get(1).toString())
-        .isEqualTo("/usr/local/code/java/com/google/Bla.java");
+        .isEqualTo(Paths.get("/usr/local/code/java/com/google/Bla.java").toString());
 
     PackageParser.convertFromOldFormat(options);
     assertThat(options.sources).hasSize(2);
-    assertThat(options.sources.get(0)).isEqualTo(
-        ArtifactLocation.newBuilder()
-            .setRootPath("/usr/local/code/")
-            .setRelativePath("java/com/google/Foo.java")
-            .build());
+    assertThat(options.sources.get(0))
+        .isEqualTo(
+            ArtifactLocation.newBuilder()
+                .setRootPath(Paths.get("/usr/local/code/").toString() + File.separator)
+                .setRelativePath(Paths.get("java/com/google/Foo.java").toString())
+                .build());
 
     mockIoProvider
         .addSource(options.sources.get(0),
@@ -295,10 +301,20 @@ public class PackageParserTest {
 
     String writtenString = mockIoProvider.writer.toString();
     assertThat(writtenString).doesNotContain("location");
-    assertThat(writtenString).contains(
-        "absolute_path: \"/usr/local/code/java/com/google/Foo.java\"");
-    assertThat(writtenString).contains(
-        "absolute_path: \"/usr/local/code/java/com/google/Bla.java\"");
+    assertThat(writtenString)
+        .contains(
+            "absolute_path: \""
+                + Paths.get("/usr/local/code/java/com/google/Foo.java")
+                    .toString()
+                    .replace("\\", "\\\\")
+                + "\"");
+    assertThat(writtenString)
+        .contains(
+            "absolute_path: \""
+                + Paths.get("/usr/local/code/java/com/google/Bla.java")
+                    .toString()
+                    .replace("\\", "\\\\")
+                + "\"");
   }
 
   @Test
@@ -311,19 +327,22 @@ public class PackageParserTest {
             + "bin/out,java/com/google/Bla.java",
     };
     PackageParser.PackageParserOptions options = PackageParser.parseArgs(args);
-    assertThat(options.outputManifest.toString()).isEqualTo("/tmp/out.manifest");
+    assertThat(options.outputManifest.toString())
+        .isEqualTo(Paths.get("/tmp/out.manifest").toString());
     assertThat(options.sources).hasSize(2);
-    assertThat(options.sources.get(0)).isEqualTo(
-        ArtifactLocation.newBuilder()
-            .setRelativePath("java/com/google/Foo.java")
-            .setIsSource(true)
-            .build());
-    assertThat(options.sources.get(1)).isEqualTo(
-        ArtifactLocation.newBuilder()
-            .setRootExecutionPathFragment("bin/out")
-            .setRelativePath("java/com/google/Bla.java")
-            .setIsSource(false)
-            .build());
+    assertThat(options.sources.get(0))
+        .isEqualTo(
+            ArtifactLocation.newBuilder()
+                .setRelativePath(Paths.get("java/com/google/Foo.java").toString())
+                .setIsSource(true)
+                .build());
+    assertThat(options.sources.get(1))
+        .isEqualTo(
+            ArtifactLocation.newBuilder()
+                .setRootExecutionPathFragment(Paths.get("bin/out").toString())
+                .setRelativePath(Paths.get("java/com/google/Bla.java").toString())
+                .setIsSource(false)
+                .build());
   }
 
 }

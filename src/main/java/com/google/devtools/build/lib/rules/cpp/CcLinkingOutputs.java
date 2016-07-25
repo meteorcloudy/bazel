@@ -15,6 +15,7 @@
 package com.google.devtools.build.lib.rules.cpp;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSetMultimap;
 import com.google.common.collect.Iterables;
 import com.google.devtools.build.lib.actions.Artifact;
 import com.google.devtools.build.lib.rules.cpp.Link.LinkStaticness;
@@ -66,6 +67,30 @@ public class CcLinkingOutputs {
 
   public ImmutableList<LibraryToLink> getExecutionDynamicLibraries() {
     return executionDynamicLibraries;
+  }
+
+  /**
+   * Returns a map from library identifiers to sets of LibraryToLink from this CcLinkingOutputs
+   * which share that library identifier.
+   */
+  public ImmutableSetMultimap<String, LibraryToLink> getLibrariesByIdentifier() {
+    return getLibrariesByIdentifier(
+        Iterables.concat(
+            staticLibraries, picStaticLibraries, dynamicLibraries, executionDynamicLibraries));
+  }
+
+  /**
+   * Gathers up a map from library identifiers to sets of LibraryToLink which share that library
+   * identifier.
+   */
+  public static ImmutableSetMultimap<String, LibraryToLink> getLibrariesByIdentifier(
+      Iterable<LibraryToLink> inputs) {
+    ImmutableSetMultimap.Builder<String, LibraryToLink> result =
+        new ImmutableSetMultimap.Builder<>();
+    for (LibraryToLink library : inputs) {
+      result.put(libraryIdentifierOf(library.getOriginalLibraryArtifact()), library);
+    }
+    return result.build();
   }
 
   /**

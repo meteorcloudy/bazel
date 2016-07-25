@@ -29,7 +29,9 @@ import com.google.devtools.build.lib.concurrent.ThreadSafety.Immutable;
 import com.google.devtools.build.lib.rules.cpp.CppModuleMap;
 import com.google.devtools.build.lib.rules.cpp.LinkerInputs;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkModule;
+import com.google.devtools.build.lib.skylarkinterface.SkylarkModuleCategory;
 import com.google.devtools.build.lib.syntax.ClassObject.SkylarkClassObject;
+import com.google.devtools.build.lib.syntax.EvalUtils;
 import com.google.devtools.build.lib.util.Preconditions;
 import com.google.devtools.build.lib.vfs.PathFragment;
 import com.google.devtools.build.xcode.xcodegen.proto.XcodeGenProtos.TargetControl;
@@ -42,7 +44,11 @@ import java.util.Map;
  * deps that are needed for building Objective-C rules.
  */
 @Immutable
-@SkylarkModule(name = "ObjcProvider", doc = "A provider for compilation and linking of objc.")
+@SkylarkModule(
+  name = "ObjcProvider",
+  category = SkylarkModuleCategory.PROVIDER,
+  doc = "A provider for compilation and linking of objc."
+)
 public final class ObjcProvider extends SkylarkClassObject implements TransitiveInfoProvider {
 
   /**
@@ -281,13 +287,6 @@ public final class ObjcProvider extends SkylarkClassObject implements Transitive
       new Key<>(STABLE_ORDER, "exported_debug_artifacts", Artifact.class);
 
   /**
-   * Generated breakpad file containing debug information used by the breakpad crash reporting
-   * system.
-   */
-  public static final Key<Artifact> BREAKPAD_FILE =
-      new Key<>(STABLE_ORDER, "breakpad_file", Artifact.class);
-
-  /**
    * Single-architecture link map for a binary.
    */
   public static final Key<Artifact> LINKMAP_FILE =
@@ -375,7 +374,6 @@ public final class ObjcProvider extends SkylarkClassObject implements Transitive
           DYNAMIC_FRAMEWORK_FILE,
           DEBUG_SYMBOLS,
           DEBUG_SYMBOLS_PLIST,
-          BREAKPAD_FILE,
           STORYBOARD,
           XIB,
           STRINGS,
@@ -385,6 +383,8 @@ public final class ObjcProvider extends SkylarkClassObject implements Transitive
           INCLUDE,
           INCLUDE_SYSTEM,
           GENERAL_RESOURCE_DIR,
+          GENERAL_RESOURCE_FILE,
+          BUNDLE_FILE,
           BUNDLE_IMPORT_DIR,
           XCASSETS_DIR,
           FRAMEWORK_DIR);
@@ -620,20 +620,23 @@ public final class ObjcProvider extends SkylarkClassObject implements Transitive
     }
 
     /**
-     * Adds the given providers from skylark.  An error is thrown if toAdd is not an iterable of
+     * Adds the given providers from skylark. An error is thrown if toAdd is not an iterable of
      * ObjcProvider instances.
      */
     @SuppressWarnings("unchecked")
     void addProvidersFromSkylark(Object toAdd) {
       if (!(toAdd instanceof Iterable)) {
         throw new IllegalArgumentException(
-            String.format(AppleSkylarkCommon.BAD_PROVIDERS_ITER_ERROR, toAdd.getClass()));
+            String.format(
+                AppleSkylarkCommon.BAD_PROVIDERS_ITER_ERROR, EvalUtils.getDataTypeName(toAdd)));
       } else {
         Iterable<Object> toAddIterable = (Iterable<Object>) toAdd;
         for (Object toAddObject : toAddIterable) {
           if (!(toAddObject instanceof ObjcProvider)) {
             throw new IllegalArgumentException(
-                String.format(AppleSkylarkCommon.BAD_PROVIDERS_ELEM_ERROR, toAddObject.getClass()));
+                String.format(
+                    AppleSkylarkCommon.BAD_PROVIDERS_ELEM_ERROR,
+                    EvalUtils.getDataTypeName(toAddObject)));
           } else {
             this.addTransitiveAndPropagate((ObjcProvider) toAddObject);
           }

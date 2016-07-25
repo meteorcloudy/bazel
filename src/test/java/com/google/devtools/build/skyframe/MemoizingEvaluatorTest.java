@@ -51,9 +51,9 @@ import com.google.devtools.build.skyframe.GraphTester.NotComparableStringValue;
 import com.google.devtools.build.skyframe.GraphTester.StringValue;
 import com.google.devtools.build.skyframe.GraphTester.TestFunction;
 import com.google.devtools.build.skyframe.GraphTester.ValueComputer;
-import com.google.devtools.build.skyframe.NotifyingGraph.EventType;
-import com.google.devtools.build.skyframe.NotifyingGraph.Listener;
-import com.google.devtools.build.skyframe.NotifyingGraph.Order;
+import com.google.devtools.build.skyframe.NotifyingHelper.EventType;
+import com.google.devtools.build.skyframe.NotifyingHelper.Listener;
+import com.google.devtools.build.skyframe.NotifyingHelper.Order;
 import com.google.devtools.build.skyframe.SkyFunction.Environment;
 import com.google.devtools.build.skyframe.SkyFunctionException.Transience;
 
@@ -978,6 +978,7 @@ public class MemoizingEvaluatorTest {
   /** @see ParallelEvaluatorTest#cycleAboveIndependentCycle() */
   @Test
   public void cycleAboveIndependentCycle() throws Exception {
+    makeGraphDeterministic();
     SkyKey aKey = GraphTester.toSkyKey("a");
     final SkyKey bKey = GraphTester.toSkyKey("b");
     SkyKey cKey = GraphTester.toSkyKey("c");
@@ -1037,8 +1038,11 @@ public class MemoizingEvaluatorTest {
   @Test
   public void cycleAndSelfEdgeWithDirtyValue() throws Exception {
     initializeTester();
-    SkyKey cycleKey1 = GraphTester.toSkyKey("cycleKey1");
-    SkyKey cycleKey2 = GraphTester.toSkyKey("cycleKey2");
+    // The cycle detection algorithm non-deterministically traverses into children nodes, so
+    // use explicit determinism.
+    makeGraphDeterministic();
+    SkyKey cycleKey1 = GraphTester.toSkyKey("ZcycleKey1");
+    SkyKey cycleKey2 = GraphTester.toSkyKey("AcycleKey2");
     tester.getOrCreate(cycleKey1).addDependency(cycleKey2).addDependency(cycleKey1)
     .setComputedValue(CONCATENATE);
     tester.getOrCreate(cycleKey2).addDependency(cycleKey1).setComputedValue(COPY);
@@ -1065,8 +1069,9 @@ public class MemoizingEvaluatorTest {
 
   @Test
   public void cycleAndSelfEdgeWithDirtyValueInSameGroup() throws Exception {
-    final SkyKey cycleKey1 = GraphTester.toSkyKey("cycleKey1");
-    final SkyKey cycleKey2 = GraphTester.toSkyKey("cycleKey2");
+    makeGraphDeterministic();
+    final SkyKey cycleKey1 = GraphTester.toSkyKey("ZcycleKey1");
+    final SkyKey cycleKey2 = GraphTester.toSkyKey("AcycleKey2");
     tester.getOrCreate(cycleKey2).addDependency(cycleKey2).setComputedValue(CONCATENATE);
     tester
         .getOrCreate(cycleKey1)
@@ -1243,7 +1248,7 @@ public class MemoizingEvaluatorTest {
     // Mark dep1 changed, so otherTop will be dirty and request re-evaluation of dep1.
     tester.getOrCreate(dep1, /*markAsModified=*/true);
     SkyKey topKey = GraphTester.toSkyKey("top");
-    // Note that since DeterministicGraph alphabetizes reverse deps, it is important that
+    // Note that since DeterministicHelper alphabetizes reverse deps, it is important that
     // "cycle2" comes before "top".
     final SkyKey cycle1Key = GraphTester.toSkyKey("cycle1");
     final SkyKey cycle2Key = GraphTester.toSkyKey("cycle2");
@@ -1317,6 +1322,58 @@ public class MemoizingEvaluatorTest {
     // Then evaluation is successful and the nodes have the expected values.
     assertThatEvaluationResult(result).hasEntryThat(aKey).isEqualTo(new StringValue("aValue"));
     assertThatEvaluationResult(result).hasEntryThat(bKey).isEqualTo(new StringValue("bValue"));
+  }
+
+  @Test
+  public void nodeInvalidatedThenDoubleCycle() throws InterruptedException {
+    makeGraphDeterministic();
+    // When topKey depends on depKey, and both are top-level nodes in the graph,
+    final SkyKey topKey = skyKey("bKey");
+    final SkyKey depKey = skyKey("aKey");
+    tester.getOrCreate(topKey).addDependency(depKey).setConstantValue(new StringValue("a"));
+    tester.getOrCreate(depKey).setConstantValue(new StringValue("b"));
+    // Then evaluation is as expected.
+    EvaluationResult<StringValue> result1 = tester.eval(/*keepGoing=*/ true, topKey, depKey);
+    assertThatEvaluationResult(result1).hasEntryThat(topKey).isEqualTo(new StringValue("a"));
+    assertThatEvaluationResult(result1).hasEntryThat(depKey).isEqualTo(new StringValue("b"));
+    assertThatEvaluationResult(result1).hasNoError();
+    // When both nodes acquire self-edges, with topKey still also depending on depKey, in the same
+    // group,
+    tester.getOrCreate(depKey, /*markAsModified=*/ true).addDependency(depKey);
+    tester
+        .getOrCreate(topKey, /*markAsModified=*/ true)
+        .setConstantValue(null)
+        .removeDependency(depKey)
+        .setBuilder(
+            new SkyFunction() {
+              @Nullable
+              @Override
+              public SkyValue compute(SkyKey skyKey, Environment env)
+                  throws SkyFunctionException, InterruptedException {
+                env.getValues(ImmutableList.of(topKey, depKey));
+                assertThat(env.valuesMissing()).isTrue();
+                return null;
+              }
+
+              @Nullable
+              @Override
+              public String extractTag(SkyKey skyKey) {
+                return null;
+              }
+            });
+    tester.invalidate();
+    // Then evaluation is as expected -- topKey has removed its dep on depKey (since depKey was not
+    // done when topKey found its cycle), and both topKey and depKey have cycles.
+    EvaluationResult<StringValue> result2 = tester.eval(/*keepGoing=*/ true, topKey, depKey);
+    assertThatEvaluationResult(result2)
+        .hasErrorEntryForKeyThat(topKey)
+        .hasCycleInfoThat()
+        .containsExactly(new CycleInfo(ImmutableList.of(topKey)));
+    assertThatEvaluationResult(result2).hasDirectDepsInGraphThat(topKey).containsExactly(topKey);
+    assertThatEvaluationResult(result2)
+        .hasErrorEntryForKeyThat(depKey)
+        .hasCycleInfoThat()
+        .containsExactly(new CycleInfo(ImmutableList.of(depKey)));
   }
 
   @Test
@@ -3956,11 +4013,11 @@ public class MemoizingEvaluatorTest {
 
   private void injectGraphListenerForTesting(Listener listener, boolean deterministic) {
     tester.evaluator.injectGraphTransformerForTesting(
-        DeterministicGraph.makeTransformer(listener, deterministic));
+        DeterministicHelper.makeTransformer(listener, deterministic));
   }
 
   private void makeGraphDeterministic() {
-    tester.evaluator.injectGraphTransformerForTesting(DeterministicGraph.MAKE_DETERMINISTIC);
+    tester.evaluator.injectGraphTransformerForTesting(DeterministicHelper.MAKE_DETERMINISTIC);
   }
 
   private static final class PassThroughSelected implements ValueComputer {

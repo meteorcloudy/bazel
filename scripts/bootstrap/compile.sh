@@ -17,8 +17,11 @@
 # Script for building bazel from scratch without bazel
 
 PROTO_FILES=$(ls src/main/protobuf/*.proto)
-LIBRARY_JARS=$(find third_party -name '*.jar' | grep -Fv /javac.jar | grep -Fv /javac7.jar | grep -Fv JavaBuilder | tr "\n" " ")
-DIRS=$(echo src/{java_tools/singlejar/java/com/google/devtools/build/zip,main/java,tools/xcode-common/java/com/google/devtools/build/xcode/{common,util}} ${OUTPUT_DIR}/src)
+LIBRARY_JARS=$(find third_party -name '*.jar' | grep -Fv /javac.jar | grep -Fv /javac7.jar | grep -Fv JavaBuilder | grep -ve third_party/grpc/grpc.*jar | tr "\n" " ")
+GRPC_JAVA_VERSION=0.15.0
+GRPC_LIBRARY_JARS=$(find third_party/grpc -name '*.jar' | grep -e .*${GRPC_JAVA_VERSION}.*jar | tr "\n" " ")
+LIBRARY_JARS="${LIBRARY_JARS} ${GRPC_LIBRARY_JARS}"
+DIRS=$(echo src/{java_tools/singlejar/java/com/google/devtools/build/zip,main/java,tools/xcode-common/java/com/google/devtools/build/xcode/{common,util}} third_party/java/dd_plist/java ${OUTPUT_DIR}/src)
 EXCLUDE_FILES=src/main/java/com/google/devtools/build/lib/server/GrpcServerImpl.java
 
 mkdir -p ${OUTPUT_DIR}/classes
@@ -41,13 +44,13 @@ linux)
   JAVA_HOME="${JAVA_HOME:-$(readlink -f $(which javac) | sed 's_/bin/javac__')}"
   if [ "${MACHINE_IS_64BIT}" = 'yes' ]; then
     PROTOC=${PROTOC:-third_party/protobuf/protoc-linux-x86_64.exe}
-    GRPC_JAVA_PLUGIN=${GRPC_JAVA_PLUGIN:-third_party/grpc/protoc-gen-grpc-java-0.13.2-linux-x86_64.exe}
+    GRPC_JAVA_PLUGIN=${GRPC_JAVA_PLUGIN:-third_party/grpc/protoc-gen-grpc-java-0.15.0-linux-x86_64.exe}
   else
     if [ "${MACHINE_IS_ARM}" = 'yes' ]; then
       PROTOC=${PROTOC:-third_party/protobuf/protoc-linux-arm32.exe}
     else
       PROTOC=${PROTOC:-third_party/protobuf/protoc-linux-x86_32.exe}
-      GRPC_JAVA_PLUGIN=${GRPC_JAVA_PLUGIN:-third_party/grpc/protoc-gen-grpc-java-0.13.2-linux-x86_32.exe}
+      GRPC_JAVA_PLUGIN=${GRPC_JAVA_PLUGIN:-third_party/grpc/protoc-gen-grpc-java-0.15.0-linux-x86_32.exe}
     fi
   fi
   ;;
@@ -59,7 +62,7 @@ freebsd)
   # We choose the 32-bit version for maximum compatiblity since 64-bit
   # linux binaries are only supported in FreeBSD-11.
   PROTOC=${PROTOC:-third_party/protobuf/protoc-linux-x86_32.exe}
-  GRPC_JAVA_PLUGIN=${GRPC_JAVA_PLUGIN:-third_party/grpc/protoc-gen-grpc-java-0.13.2-linux-x86_32.exe}
+  GRPC_JAVA_PLUGIN=${GRPC_JAVA_PLUGIN:-third_party/grpc/protoc-gen-grpc-java-0.15.0-linux-x86_32.exe}
   ;;
 
 darwin)
@@ -69,7 +72,7 @@ darwin)
   fi
   if [ "${MACHINE_IS_64BIT}" = 'yes' ]; then
     PROTOC=${PROTOC:-third_party/protobuf/protoc-osx-x86_64.exe}
-    GRPC_JAVA_PLUGIN=${GRPC_JAVA_PLUGIN:-third_party/grpc/protoc-gen-grpc-java-0.13.2-osx-x86_64.exe}
+    GRPC_JAVA_PLUGIN=${GRPC_JAVA_PLUGIN:-third_party/grpc/protoc-gen-grpc-java-0.15.0-osx-x86_64.exe}
   else
     PROTOC=${PROTOC:-third_party/protobuf/protoc-osx-x86_32.exe}
   fi
@@ -84,10 +87,10 @@ msys*|mingw*)
   # We do not use the JNI library on Windows.
   if [ "${MACHINE_IS_64BIT}" = 'yes' ]; then
     PROTOC=${PROTOC:-third_party/protobuf/protoc-windows-x86_64.exe}
-    GRPC_JAVA_PLUGIN=${GRPC_JAVA_PLUGIN:-third_party/grpc/protoc-gen-grpc-java-0.13.2-windows-x86_64.exe}
+    GRPC_JAVA_PLUGIN=${GRPC_JAVA_PLUGIN:-third_party/grpc/protoc-gen-grpc-java-0.15.0-windows-x86_64.exe}
   else
     PROTOC=${PROTOC:-third_party/protobuf/protoc-windows-x86_32.exe}
-    GRPC_JAVA_PLUGIN=${GRPC_JAVA_PLUGIN:-third_party/grpc/protoc-gen-grpc-java-0.13.2-windows-x86_32.exe}
+    GRPC_JAVA_PLUGIN=${GRPC_JAVA_PLUGIN:-third_party/grpc/protoc-gen-grpc-java-0.15.0-windows-x86_32.exe}
   fi
 esac
 
@@ -208,7 +211,12 @@ mkdir -p ${ARCHIVE_DIR}/_embedded_binaries
 cat <<'EOF' >${ARCHIVE_DIR}/_embedded_binaries/build-runfiles${EXE_EXT}
 #!/bin/sh
 win_arg='--windows_compatible'
-if [ $1 == $win_arg ];
+manifest_arg='--manifest_only'
+if [ "$1" == "$win_arg" ] || [ "$1" == "$manifest_arg" ];
+then
+     shift
+fi
+if [ "$1" == "$win_arg" ] || [ "$1" == "$manifest_arg" ];
 then
      shift
 fi
@@ -256,22 +264,23 @@ chmod 0755 ${ARCHIVE_DIR}/_embedded_binaries/process-wrapper${EXE_EXT}
 cp src/main/tools/build_interface_so ${ARCHIVE_DIR}/_embedded_binaries/build_interface_so
 cp src/main/tools/jdk.BUILD ${ARCHIVE_DIR}/_embedded_binaries/jdk.BUILD
 cp $OUTPUT_DIR/libblaze.jar ${ARCHIVE_DIR}
-cp src/tools/xcode/xcodelocator/xcode_locator_stub.sh ${ARCHIVE_DIR}/_embedded_binaries/xcode-locator
+cp tools/osx/xcode_locator_stub.sh ${ARCHIVE_DIR}/_embedded_binaries/xcode-locator
 
 # bazel build using bootstrap version
 function bootstrap_build() {
   "${JAVA_HOME}/bin/java" \
-      -client -Xms256m -XX:NewRatio=4 -XX:+HeapDumpOnOutOfMemoryError -Xverify:none -Dfile.encoding=ISO-8859-1 \
+      -XX:+HeapDumpOnOutOfMemoryError -Xverify:none -Dfile.encoding=ISO-8859-1 \
       -XX:HeapDumpPath=${OUTPUT_DIR} \
       -Djava.util.logging.config.file=${OUTPUT_DIR}/javalog.properties \
-      -Dio.bazel.UnixFileSystem=0 \
+      -Dio.bazel.EnableJni=0 \
       -jar ${ARCHIVE_DIR}/libblaze.jar \
       --batch \
       --install_base=${ARCHIVE_DIR} \
       --output_base=${OUTPUT_DIR}/out \
       --install_md5= \
       --workspace_directory=${PWD} \
-      --nodeep_execroot --nofatal_event_bus_exceptions \
+      --nofatal_event_bus_exceptions \
+      ${BAZEL_DIR_STARTUP_OPTIONS} \
       build \
       --ignore_unsupported_sandboxing \
       --startup_time=329 --extract_data_time=523 \

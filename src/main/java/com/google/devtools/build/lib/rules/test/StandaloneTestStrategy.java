@@ -42,7 +42,6 @@ import com.google.devtools.build.lib.view.test.TestStatus.BlazeTestStatus;
 import com.google.devtools.build.lib.view.test.TestStatus.TestCase;
 import com.google.devtools.build.lib.view.test.TestStatus.TestResultData;
 import com.google.devtools.common.options.OptionsClassProvider;
-
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.HashMap;
@@ -71,8 +70,14 @@ public class StandaloneTestStrategy extends TestStrategy {
       throws ExecException, InterruptedException {
     Path runfilesDir = null;
     try {
-      runfilesDir = TestStrategy.getLocalRunfilesDirectory(action, actionExecutionContext, binTools,
-          action.getShExecutable(), action.getLocalShellEnvironment());
+      runfilesDir =
+          TestStrategy.getLocalRunfilesDirectory(
+              action,
+              actionExecutionContext,
+              binTools,
+              action.getShExecutable(),
+              action.getLocalShellEnvironment(),
+              action.isEnableRunfiles());
     } catch (ExecException e) {
       throw new TestExecException(e.getMessage());
     }
@@ -84,7 +89,8 @@ public class StandaloneTestStrategy extends TestStrategy {
 
     Path execRoot = actionExecutionContext.getExecutor().getExecRoot();
     TestRunnerAction.ResolvedPaths resolvedPaths = action.resolve(execRoot);
-    Map<String, String> env = getEnv(action, runfilesDir, testTmpDir, resolvedPaths);
+    Map<String, String> env =
+        getEnv(action, execRoot, runfilesDir, testTmpDir, resolvedPaths.getXmlOutputPath());
 
     Map<String, String> info = new HashMap<>();
 
@@ -133,7 +139,7 @@ public class StandaloneTestStrategy extends TestStrategy {
           ResourceHandle handle = ResourceManager.instance().acquireResources(action, resources)) {
         TestResultData data =
             execute(actionExecutionContext.withFileOutErr(fileOutErr), spawn, action);
-        appendStderr(fileOutErr.getOutputFile(), fileOutErr.getErrorFile());
+        appendStderr(fileOutErr.getOutputPath(), fileOutErr.getErrorPath());
         finalizeTest(actionExecutionContext, action, data);
       }
     } catch (IOException e) {
@@ -143,24 +149,20 @@ public class StandaloneTestStrategy extends TestStrategy {
   }
 
   private Map<String, String> getEnv(
-      TestRunnerAction action,
-      Path runfilesDir,
-      Path tmpDir,
-      TestRunnerAction.ResolvedPaths resolvedPaths) {
+      TestRunnerAction action, Path execRoot, Path runfilesDir, Path tmpDir, Path xmlOutputPath) {
     Map<String, String> vars = getDefaultTestEnvironment(action);
     BuildConfiguration config = action.getConfiguration();
 
     vars.putAll(config.getLocalShellEnvironment());
     vars.putAll(action.getTestEnv());
 
-    /*
-     * TODO(bazel-team): the paths below are absolute,
-     * making test actions impossible to cache remotely.
-     */
-    vars.put("TEST_SRCDIR", runfilesDir.getPathString());
-    vars.put("TEST_TMPDIR", tmpDir.getPathString());
+    vars.put("TEST_SRCDIR", runfilesDir.relativeTo(execRoot).getPathString());
+    vars.put("TEST_TMPDIR", tmpDir.relativeTo(execRoot).getPathString());
     vars.put("TEST_WORKSPACE", action.getRunfilesPrefix());
-    vars.put("XML_OUTPUT_FILE", resolvedPaths.getXmlOutputPath().getPathString());
+    vars.put("XML_OUTPUT_FILE", xmlOutputPath.relativeTo(execRoot).getPathString());
+    if (!action.isEnableRunfiles()) {
+      vars.put("RUNFILES_MANIFEST_ONLY", "1");
+    }
 
     return vars;
   }

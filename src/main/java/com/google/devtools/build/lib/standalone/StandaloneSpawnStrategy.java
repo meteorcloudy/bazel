@@ -114,7 +114,7 @@ public class StandaloneSpawnStrategy implements SpawnActionContext {
     FileOutErr outErr = actionExecutionContext.getFileOutErr();
     try {
       cmd.execute(
-          /* stdin */ new byte[]{},
+          /* stdin */ new byte[] {},
           Command.NO_OBSERVER,
           outErr.getOutputStream(),
           outErr.getErrorStream(),

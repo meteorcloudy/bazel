@@ -63,25 +63,28 @@ abstract class SkylarkDoc {
     } else if (type.equals(Void.TYPE) || type.equals(NoneType.class)) {
       return "<a class=\"anchor\" href=\"" + TOP_LEVEL_ID + ".html#None\">None</a>";
     } else if (type.isAnnotationPresent(SkylarkModule.class)) {
-      // TODO(bazel-team): this can produce dead links for types don't show up in the doc.
-      // The correct fix is to generate those types (e.g. SkylarkFileType) too.
-      String module = type.getAnnotation(SkylarkModule.class).name();
-      return "<a class=\"anchor\" href=\"" + module + ".html\">" + module + "</a>";
-    } else {
-      return EvalUtils.getDataTypeNameFromClass(type);
+      SkylarkModule module = type.getAnnotation(SkylarkModule.class);
+      if (module.documented()) {
+        return String.format("<a class=\"anchor\" href=\"%1$s.html\">%1$s</a>",
+                             module.name());
+      }
     }
+    return EvalUtils.getDataTypeNameFromClass(type);
   }
 
-  // Elide self parameter from mandatoryPositionals in class methods.
-  protected static Param[] adjustedMandatoryPositionals(SkylarkSignature annotation) {
-    Param[] mandatoryPos = annotation.mandatoryPositionals();
-    if (mandatoryPos.length > 0
+  // Elide self parameter from parameters in class methods.
+  protected static Param[] adjustedParameters(SkylarkSignature annotation) {
+    Param[] params = annotation.parameters();
+    if (params.length > 0
+        && !params[0].named()
+        && (params[0].defaultValue() != null && params[0].defaultValue().isEmpty())
+        && params[0].positional()
         && annotation.objectType() != Object.class
         && !FuncallExpression.isNamespace(annotation.objectType())) {
       // Skip the self parameter, which is the first mandatory positional parameter.
-      return Arrays.copyOfRange(mandatoryPos, 1, mandatoryPos.length);
+      return Arrays.copyOfRange(params, 1, params.length);
     } else {
-      return mandatoryPos;
+      return params;
     }
   }
 }

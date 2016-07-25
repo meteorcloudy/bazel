@@ -87,9 +87,9 @@ public class BlazeServerStartupOptions extends OptionsBase {
    * any other embedded binaries - anything that ends up in the install_base).
    */
   @Option(name = "install_md5",
-                 defaultValue = "", // NOTE: purely decorative!  See class docstring.
-                 category = "hidden",
-                 help = "This launcher option is intended for use only by tests.")
+      defaultValue = "", // NOTE: purely decorative!  See class docstring.
+      category = "hidden",
+      help = "This launcher option is intended for use only by tests.")
   public String installMD5;
 
   /* Note: The help string in this option applies to the client code; not
@@ -101,12 +101,13 @@ public class BlazeServerStartupOptions extends OptionsBase {
       defaultValue = "null", // NOTE: purely decorative!  See class docstring.
       category = "server startup",
       converter = OptionsUtils.PathFragmentConverter.class,
+      valueHelp = "<path>",
       help = "If set, specifies the output location to which all build output will be written. "
           + "Otherwise, the location will be "
           + "${OUTPUT_ROOT}/_blaze_${USER}/${MD5_OF_WORKSPACE_ROOT}. Note: If you specify a "
           + "different option from one to the next Blaze invocation for this value, you'll likely "
           + "start up a new, additional Blaze server. Blaze starts exactly one server per "
-          + "specified output base. Typically there is one output base per workspace--however, "
+          + "specified output base. Typically there is one output base per workspace - however, "
           + "with this option you may have multiple output bases per workspace and thereby run "
           + "multiple builds for the same client on the same machine concurrently. See "
           + "'blaze help shutdown' on how to shutdown a Blaze server.")
@@ -120,6 +121,7 @@ public class BlazeServerStartupOptions extends OptionsBase {
       defaultValue = "null", // NOTE: purely decorative!  See class docstring.
       category = "server startup",
       converter = OptionsUtils.PathFragmentConverter.class,
+      valueHelp = "<path>",
       help = "The user-specific directory beneath which all build outputs are written; "
           + "by default, this is a function of $USER, but by specifying a constant, build outputs "
           + "can be shared between collaborating users.")
@@ -136,100 +138,89 @@ public class BlazeServerStartupOptions extends OptionsBase {
   @Option(name = "max_idle_secs",
       defaultValue = "" + (3 * 3600), // NOTE: purely decorative!  See class docstring.
       category = "server startup",
+      valueHelp = "<integer>",
       help = "The number of seconds the build server will wait idling before shutting down. Zero "
-             + "means that the server will never shutdown Note: Blaze will ignore this option "
-             + "unless you are starting a new instance. See also 'blaze help shutdown'.")
+          + "means that the server will never shutdown.")
   public int maxIdleSeconds;
 
   @Option(name = "batch",
       defaultValue = "false", // NOTE: purely decorative!  See class docstring.
       category = "server startup",
-      help = "If set, Blaze will be run in batch mode, instead of " +
-             "the standard client/server. Doing so may provide " +
-             "more predictable semantics with respect to signal handling and job control, " +
-             "Batch mode retains proper queueing semantics within the same output_base. " +
-             "That is, simultaneous invocations will be processed in order, without overlap. " +
-             "If a batch mode Blaze is run on a client with a running server, it first kills "  +
-             "the server before processing the command." +
-             "Blaze will run slower in batch mode, compared to client/server mode. " +
-             "Among other things, the build file cache is memory-resident, so it is not " +
-             "preserved between sequential batch invocations. Therefore, using batch mode " +
-             "often makes more sense in cases where performance is less critical, " +
-             "such as continuous builds.")
+      help = "If set, Blaze will be run in batch mode, instead of the standard client/server mode. "
+          + "Running in batch mode prevents Blaze from caching data in memory, which makes it a "
+          + "lot slower. We recommend against using this flag.")
   public boolean batch;
 
   @Option(name = "deep_execroot",
       defaultValue = "true", // NOTE: purely decorative!  See class docstring.
       category = "server startup",
       help = "If set, the execution root will be under $OUTPUT_BASE/execroot instead of "
-          + "$OUTPUT_BASE")
+          + "$OUTPUT_BASE.")
   public boolean deepExecRoot;
 
   @Option(
     name = "experimental_oom_more_eagerly",
     defaultValue = "false", // NOTE: purely decorative!  See class docstring.
     category = "server startup",
-    help =
-        "If set, attempt to detect Java heap OOM conditions and exit before thrashing.  Only "
-            + "honored when --batch is also passed. In some cases, builds that previously succeeded"
-            + " may OOM if they were close to OOMing before."
-  )
+    help = "If set, attempt to detect Java heap OOM conditions and exit before thrashing. Only "
+        + "honored when --batch is also passed. In some cases, builds that previously succeeded "
+        + "may OOM if they were close to OOMing before.")
   public boolean oomMoreEagerly;
 
   @Option(
     name = "experimental_oom_more_eagerly_threshold",
     defaultValue = "100", // NOTE: purely decorative!  See class docstring.
     category = "server startup",
-    help =
-        "If this flag is set, Blaze will OOM if, after two full GC's, more "
-            + "than this percentage of the (old gen) heap is still occupied."
-  )
+    help = "If this flag is set, Blaze will OOM if, after two full GC's, more than this "
+        + "percentage of the (old gen) heap is still occupied.")
   public int oomMoreEagerlyThreshold;
 
   @Option(name = "block_for_lock",
       defaultValue = "true", // NOTE: purely decorative!  See class docstring.
       category = "server startup",
-      help = "If unset with --noblock_for_lock, Blaze will exit immediately instead of "
-            + "waiting for other Blaze commands holding the server lock to complete.")
+      help = "When --noblock_for_lock is passed, Blaze does not wait for a running command to "
+          + "complete, but instead exits immediately.")
   public boolean blockForLock;
 
   @Option(name = "io_nice_level",
       defaultValue = "-1",  // NOTE: purely decorative!
       category = "server startup",
-      help = "Set a level from 0-7 for best-effort IO scheduling. 0 is highest priority, " +
-             "7 is lowest. The anticipatory scheduler may only honor up to priority 4. " +
-             "Negative values are ignored.")
+      valueHelp = "{-1,0,1,2,3,4,5,6,7}",
+      help = "Only on Linux; set a level from 0-7 for best-effort IO scheduling using the "
+          + "sys_ioprio_set system call. 0 is highest priority, 7 is lowest. The anticipatory "
+          + "scheduler may only honor up to priority 4. If set to a negative value, then Blaze "
+          + "does not perform a system call.")
   public int ioNiceLevel;
 
   @Option(name = "batch_cpu_scheduling",
       defaultValue = "false",  // NOTE: purely decorative!
       category = "server startup",
-      help = "Use 'batch' CPU scheduling for Blaze. This policy is useful for workloads that " +
-             "are non-interactive, but do not want to lower their nice value. " +
-             "See 'man 2 sched_setscheduler'.")
+      help = "Only on Linux; use 'batch' CPU scheduling for Blaze. This policy is useful for "
+          + "workloads that are non-interactive, but do not want to lower their nice value. "
+          + "See 'man 2 sched_setscheduler'. If false, then Blaze does not perform a system call.")
   public boolean batchCpuScheduling;
 
   @Option(name = "blazerc",
-      // NOTE: purely decorative!
-      defaultValue = "In the current directory, then in the user's home directory, the file named "
-         + ".$(basename $0)rc (i.e. .bazelrc for Bazel or .blazerc for Blaze)",
+      defaultValue = "null", // NOTE: purely decorative!
       category = "misc",
-      help = "The location of the .bazelrc/.blazerc file containing default values of "
-          + "Blaze command options.  Use /dev/null to disable the search for a "
-          + "blazerc file, e.g. in release builds.")
+      valueHelp = "<path>",
+      help = "The location of the .%{product}rc file containing default values of "
+          + "Blaze command options. By default, Blaze first checks the current directory, then "
+          + "the user's home directory, and then looks for a file named .$(basename $0)rc "
+          + "(i.e. .%{product}rc). Use /dev/null to disable the search for a %{product}rc file, "
+          + "e.g. in release builds.")
   public String blazerc;
 
   @Option(name = "master_blazerc",
       defaultValue = "true",  // NOTE: purely decorative!
       category = "misc",
-      help = "If this option is false, the master blazerc/bazelrc next to the binary "
-          + "is not read.")
+      help = "If this option is false, the master %{product}rc next to the binary is not read.")
   public boolean masterBlazerc;
 
   @Option(name = "fatal_event_bus_exceptions",
       defaultValue = "false",  // NOTE: purely decorative!
       category = "undocumented",
-      help = "Whether or not to allow EventBus exceptions to be fatal. Experimental.")
+      help = "Whether or not to exit if an exception is thrown by an internal EventBus handler.")
   public boolean fatalEventBusExceptions;
 
   @Option(name = "option_sources",
@@ -244,7 +235,7 @@ public class BlazeServerStartupOptions extends OptionsBase {
   @Option(name = "watchfs",
       defaultValue = "false",
       category = "undocumented",
-      help = "If true, Blaze tries to use the operating system's file watch service for local "
+      help = "If true, %{product} tries to use the operating system's file watch service for local "
           + "changes instead of scanning every file for a change.")
   public boolean watchFS;
 
@@ -265,7 +256,7 @@ public class BlazeServerStartupOptions extends OptionsBase {
 
   @Option(name = "product_name",
       defaultValue = "bazel", // NOTE: purely decorative!
-      category = "undocumented",
+      category = "hidden",
       help = "The name of the build system. It is used as part of the name of the generated "
           + "directories (e.g. productName-bin for binaries) as well as for printing error "
           + "messages and logging")

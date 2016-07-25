@@ -14,8 +14,8 @@
 """Rules for manipulation of various packaging."""
 
 # Filetype to restrict inputs
-tar_filetype = FileType([".tar", ".tar.gz", ".tgz", ".tar.xz", ".tar.bz2"])
-deb_filetype = FileType([".deb", ".udeb"])
+tar_filetype = [".tar", ".tar.gz", ".tgz", ".tar.xz", ".tar.bz2"]
+deb_filetype = [".deb", ".udeb"]
 load(":path.bzl", "dest_path", "compute_data_path")
 
 def _pkg_tar_impl(ctx):
@@ -117,6 +117,7 @@ def _pkg_deb_impl(ctx):
   args += ["--depends=" + d for d in ctx.attr.depends]
   args += ["--suggests=" + d for d in ctx.attr.suggests]
   args += ["--enhances=" + d for d in ctx.attr.enhances]
+  args += ["--conflicts=" + d for d in ctx.attr.conflicts]
   args += ["--pre_depends=" + d for d in ctx.attr.predepends]
   args += ["--recommends=" + d for d in ctx.attr.recommends]
 
@@ -181,6 +182,7 @@ pkg_deb = rule(
         "depends": attr.string_list(default=[]),
         "suggests": attr.string_list(default=[]),
         "enhances": attr.string_list(default=[]),
+        "conflicts": attr.string_list(default=[]),
         "predepends": attr.string_list(default=[]),
         "recommends": attr.string_list(default=[]),
         # Implicit dependencies.

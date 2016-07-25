@@ -14,12 +14,16 @@
 
 package com.google.devtools.build.lib.rules.java;
 
+import static com.google.common.collect.Iterables.getOnlyElement;
+import static com.google.devtools.build.lib.packages.Aspect.INJECTING_RULE_KIND_PARAMETER_KEY;
+import static com.google.devtools.build.lib.util.Preconditions.checkNotNull;
 import static java.nio.charset.StandardCharsets.ISO_8859_1;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Predicates;
 import com.google.common.collect.Collections2;
+import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
@@ -29,6 +33,7 @@ import com.google.devtools.build.lib.actions.ActionExecutionContext;
 import com.google.devtools.build.lib.actions.ActionExecutionException;
 import com.google.devtools.build.lib.actions.ActionOwner;
 import com.google.devtools.build.lib.actions.Artifact;
+import com.google.devtools.build.lib.actions.ArtifactOwner;
 import com.google.devtools.build.lib.actions.BaseSpawn;
 import com.google.devtools.build.lib.actions.ExecException;
 import com.google.devtools.build.lib.actions.Executor;
@@ -55,12 +60,12 @@ import com.google.devtools.build.lib.collect.nestedset.Order;
 import com.google.devtools.build.lib.concurrent.ThreadSafety.Immutable;
 import com.google.devtools.build.lib.concurrent.ThreadSafety.ThreadCompatible;
 import com.google.devtools.build.lib.rules.java.JavaConfiguration.JavaClasspathMode;
+import com.google.devtools.build.lib.skyframe.AspectValue;
 import com.google.devtools.build.lib.util.Fingerprint;
 import com.google.devtools.build.lib.util.Preconditions;
 import com.google.devtools.build.lib.util.ShellEscaper;
 import com.google.devtools.build.lib.util.StringCanonicalizer;
 import com.google.devtools.build.lib.vfs.PathFragment;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -68,6 +73,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Action that represents a Java compilation.
@@ -144,10 +150,11 @@ public final class JavaCompileAction extends AbstractAction {
    */
   private final ImmutableList<String> javacOpts;
 
-  /**
-   * The subset of classpath jars provided by direct dependencies.
-   */
-  private final ImmutableList<Artifact> directJars;
+  /** The subset of classpath jars provided by direct dependencies. */
+  private final NestedSet<Artifact> directJars;
+
+  /** The ExecutionInfo to be used when creating the SpawnAction for this compilation. */
+  private final ImmutableMap<String, String> executionInfo;
 
   /**
    * The level of strict dependency checks (off, warnings, or errors).
@@ -163,12 +170,12 @@ public final class JavaCompileAction extends AbstractAction {
    * Constructs an action to compile a set of Java source files to class files.
    *
    * @param owner the action owner, typically a java_* RuleConfiguredTarget.
-   * @param baseInputs the set of the input artifacts of the compile action
-   *        without the parameter file action;
+   * @param baseInputs the set of the input artifacts of the compile action without the parameter
+   *     file action;
    * @param outputs the outputs of the action
-   * @param javaCompileCommandLine the command line for the java library
-   *        builder - it's actually written to the parameter file, but other
-   *        parts (for example, ide_build_info) need access to the data
+   * @param javaCompileCommandLine the command line for the java library builder - it's actually
+   *     written to the parameter file, but other parts (for example, ide_build_info) need access to
+   *     the data
    * @param commandLine the actual invocation command line
    */
   private JavaCompileAction(
@@ -191,7 +198,8 @@ public final class JavaCompileAction extends AbstractAction {
       Collection<Artifact> sourceJars,
       Collection<Artifact> sourceFiles,
       List<String> javacOpts,
-      Collection<Artifact> directJars,
+      NestedSet<Artifact> directJars,
+      Map<String, String> executionInfo,
       BuildConfiguration.StrictDepsMode strictJavaDeps,
       Collection<Artifact> compileTimeDependencyArtifacts) {
     super(
@@ -213,7 +221,7 @@ public final class JavaCompileAction extends AbstractAction {
     this.javaCompileCommandLine = javaCompileCommandLine;
     this.commandLine = commandLine;
 
-    this.classDirectory = Preconditions.checkNotNull(classDirectory);
+    this.classDirectory = checkNotNull(classDirectory);
     this.outputJar = outputJar;
     this.classpathEntries = classpathEntries;
     this.bootclasspathEntries = ImmutableList.copyOf(bootclasspathEntries);
@@ -226,7 +234,8 @@ public final class JavaCompileAction extends AbstractAction {
     this.sourceJars = ImmutableList.copyOf(sourceJars);
     this.sourceFiles = ImmutableList.copyOf(sourceFiles);
     this.javacOpts = ImmutableList.copyOf(javacOpts);
-    this.directJars = ImmutableList.copyOf(directJars);
+    this.directJars = checkNotNull(directJars, "directJars must not be null");
+    this.executionInfo = ImmutableMap.copyOf(executionInfo);
     this.strictJavaDeps = strictJavaDeps;
     this.compileTimeDependencyArtifacts = ImmutableList.copyOf(compileTimeDependencyArtifacts);
   }
@@ -292,7 +301,12 @@ public final class JavaCompileAction extends AbstractAction {
   }
 
   @VisibleForTesting
-  public Collection<Artifact> getDirectJars() {
+  public ImmutableMap<String, String> getExecutionInfo() {
+    return executionInfo;
+  }
+
+  @VisibleForTesting
+  public NestedSet<Artifact> getDirectJars() {
     return directJars;
   }
 
@@ -356,7 +370,7 @@ public final class JavaCompileAction extends AbstractAction {
     return new BaseSpawn(
         getCommand(),
         ImmutableMap.of("LC_CTYPE", "en_US.UTF-8"),
-        /*executionInfo=*/ ImmutableMap.<String, String>of(),
+        executionInfo,
         this,
         LOCAL_RESOURCES);
   }
@@ -472,13 +486,13 @@ public final class JavaCompileAction extends AbstractAction {
    * Creates an instance.
    *
    * @param configuration the build configuration, which provides the default options and the path
-   *        to the compiler, etc.
+   *     to the compiler, etc.
    * @param classDirectory the directory in which generated classfiles are placed relative to the
-   *        exec root
+   *     exec root
    * @param sourceGenDirectory the directory where source files generated by annotation processors
-   *        should be stored.
+   *     should be stored.
    * @param tempDirectory a directory in which the library builder can store temporary files
-   *        relative to the exec root
+   *     relative to the exec root
    * @param outputJar output jar
    * @param compressJar if true compress the output jar
    * @param outputDepsProto the proto file capturing dependency information
@@ -513,13 +527,13 @@ public final class JavaCompileAction extends AbstractAction {
       Collection<Artifact> sourceFiles,
       Collection<Artifact> extdirInputs,
       List<String> javacOpts,
-      final Collection<Artifact> directJars,
+      final NestedSet<Artifact> directJars,
       BuildConfiguration.StrictDepsMode strictJavaDeps,
       Collection<Artifact> compileTimeDependencyArtifacts,
       String ruleKind,
       Label targetLabel) {
-    Preconditions.checkNotNull(classDirectory);
-    Preconditions.checkNotNull(tempDirectory);
+    checkNotNull(classDirectory);
+    checkNotNull(tempDirectory);
 
     CustomCommandLine.Builder result = CustomCommandLine.builder();
 
@@ -615,12 +629,7 @@ public final class JavaCompileAction extends AbstractAction {
     if (strictJavaDeps != BuildConfiguration.StrictDepsMode.OFF) {
       result.add("--strict_java_deps");
       result.add(strictJavaDeps.toString());
-      result.add(new CustomMultiArgv() {
-        @Override
-        public Iterable<String> argv() {
-          return addJarsToTargets(classpath, directJars);
-        }
-      });
+      result.add(new JarsToTargetsArgv(classpath, directJars));
 
       if (configuration.getFragment(JavaConfiguration.class).getReduceJavaClasspath()
           == JavaClasspathMode.JAVABUILDER) {
@@ -673,36 +682,53 @@ public final class JavaCompileAction extends AbstractAction {
   }
 
   /**
-   * Builds the list of mappings between jars on the classpath and their
-   * originating targets names.
+   * Builds the list of mappings between jars on the classpath and their originating targets names.
    */
-  static ImmutableList<String> addJarsToTargets(
-      NestedSet<Artifact> classpath, Collection<Artifact> directJars) {
-    ImmutableList.Builder<String> builder = ImmutableList.builder();
-    for (Artifact jar : classpath) {
-      builder.add(directJars.contains(jar)
-          ? "--direct_dependency"
-          : "--indirect_dependency");
-      builder.add(jar.getExecPathString());
-      Label label = getTargetName(jar);
-      builder.add(
+  @VisibleForTesting
+  public static class JarsToTargetsArgv extends CustomMultiArgv {
+    private final NestedSet<Artifact> classpath;
+    private final NestedSet<Artifact> directJars;
+
+    @VisibleForTesting
+    public JarsToTargetsArgv(NestedSet<Artifact> classpath, NestedSet<Artifact> directJars) {
+      this.classpath = classpath;
+      this.directJars = directJars;
+    }
+
+    @Override
+    public Iterable<String> argv() {
+      Set<Artifact> directJarSet = directJars.toSet();
+      ImmutableList.Builder<String> builder = ImmutableList.builder();
+      for (Artifact jar : classpath) {
+        builder.add(directJarSet.contains(jar) ? "--direct_dependency" : "--indirect_dependency");
+        builder.add(jar.getExecPathString());
+        builder.add(getArtifactOwnerGeneralizedLabel(jar));
+      }
+      return builder.build();
+    }
+
+    private String getArtifactOwnerGeneralizedLabel(Artifact artifact) {
+      ArtifactOwner owner = checkNotNull(artifact.getArtifactOwner(), artifact);
+      StringBuilder result = new StringBuilder();
+      Label label = owner.getLabel();
+      result.append(
           label.getPackageIdentifier().getRepository().isDefault()
-              || label.getPackageIdentifier().getRepository().isMain()
+                  || label.getPackageIdentifier().getRepository().isMain()
               ? label.toString()
               // Escape '@' prefix for .params file.
               : "@" + label);
-    }
-    return builder.build();
-  }
 
-  /**
-   * Gets the name of the target that produced the given jar artifact.
-   *
-   * <p>When specifying jars directly in the "srcs" attribute of a rule (mostly for third_party
-   * libraries), there is no generating action, so we just return the jar name in label form.
-   */
-  private static Label getTargetName(Artifact jar) {
-    return Preconditions.checkNotNull(jar.getOwner(), jar);
+      if (owner instanceof AspectValue.AspectKey) {
+        AspectValue.AspectKey aspectOwner = (AspectValue.AspectKey) owner;
+        ImmutableCollection<String> injectingRuleKind =
+            aspectOwner.getParameters().getAttribute(INJECTING_RULE_KIND_PARAMETER_KEY);
+        if (injectingRuleKind.size() == 1) {
+          result.append(' ').append(getOnlyElement(injectingRuleKind));
+        }
+      }
+
+      return result.toString();
+    }
   }
 
   /**
@@ -712,8 +738,8 @@ public final class JavaCompileAction extends AbstractAction {
       Artifact langtoolsJar, ImmutableList<Artifact> instrumentationJars, Artifact paramFile,
       ImmutableList<String> javaBuilderJvmFlags, String javaBuilderMainClass,
       String pathDelimiter) {
-    Preconditions.checkNotNull(langtoolsJar);
-    Preconditions.checkNotNull(javaBuilderJar);
+    checkNotNull(langtoolsJar);
+    checkNotNull(javaBuilderJar);
 
     CustomCommandLine.Builder builder =  CustomCommandLine.builder()
         .addPath(javaExecutable)
@@ -786,10 +812,11 @@ public final class JavaCompileAction extends AbstractAction {
     private final Collection<Artifact> translations = new LinkedHashSet<>();
     private BuildConfiguration.StrictDepsMode strictJavaDeps =
         BuildConfiguration.StrictDepsMode.OFF;
-    private final Collection<Artifact> directJars = new ArrayList<>();
+    private NestedSet<Artifact> directJars = NestedSetBuilder.emptySet(Order.NAIVE_LINK_ORDER);
     private final Collection<Artifact> compileTimeDependencyArtifacts = new ArrayList<>();
     private List<String> javacOpts = new ArrayList<>();
     private ImmutableList<String> javacJvmOpts = ImmutableList.of();
+    private ImmutableMap<String, String> executionInfo = ImmutableMap.of();
     private boolean compressJar;
     private NestedSet<Artifact> classpathEntries =
         NestedSetBuilder.emptySet(Order.NAIVE_LINK_ORDER);
@@ -855,11 +882,11 @@ public final class JavaCompileAction extends AbstractAction {
       // Invariant: if strictJavaDeps is OFF, then directJars and
       // dependencyArtifacts are ignored
       if (strictJavaDeps == BuildConfiguration.StrictDepsMode.OFF) {
-        directJars.clear();
+        directJars = NestedSetBuilder.emptySet(Order.NAIVE_LINK_ORDER);
         compileTimeDependencyArtifacts.clear();
       }
 
-      // Invariant: if experimental_java_classpath is not set to 'javabuilder',
+      // Invariant: if java_classpath is not set to 'javabuilder',
       // dependencyArtifacts are ignored
       if (javaConfiguration.getReduceJavaClasspath() != JavaClasspathMode.JAVABUILDER) {
         compileTimeDependencyArtifacts.clear();
@@ -961,6 +988,7 @@ public final class JavaCompileAction extends AbstractAction {
           sourceFiles,
           internedJcopts,
           directJars,
+          executionInfo,
           strictJavaDeps,
           compileTimeDependencyArtifacts);
     }
@@ -1044,11 +1072,9 @@ public final class JavaCompileAction extends AbstractAction {
       return this;
     }
 
-    /**
-     * Accumulates the given jar artifacts as being provided by direct dependencies.
-     */
-    public Builder addDirectJars(Collection<Artifact> directJars) {
-      this.directJars.addAll(directJars);
+    /** Accumulates the given jar artifacts as being provided by direct dependencies. */
+    public Builder setDirectJars(NestedSet<Artifact> directJars) {
+      this.directJars = checkNotNull(directJars, "directJars must not be null");
       return this;
     }
 
@@ -1064,6 +1090,11 @@ public final class JavaCompileAction extends AbstractAction {
 
     public Builder setJavacJvmOpts(ImmutableList<String> opts) {
       this.javacJvmOpts = opts;
+      return this;
+    }
+
+    public Builder setJavacExecutionInfo(ImmutableMap<String, String> executionInfo) {
+      this.executionInfo = executionInfo;
       return this;
     }
 

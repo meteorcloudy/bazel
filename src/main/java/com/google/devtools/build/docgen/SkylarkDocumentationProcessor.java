@@ -16,10 +16,12 @@ package com.google.devtools.build.docgen;
 import com.google.devtools.build.docgen.skylark.SkylarkBuiltinMethodDoc;
 import com.google.devtools.build.docgen.skylark.SkylarkJavaMethodDoc;
 import com.google.devtools.build.docgen.skylark.SkylarkModuleDoc;
+import com.google.devtools.build.lib.skylarkinterface.SkylarkModuleCategory;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -35,22 +37,29 @@ public final class SkylarkDocumentationProcessor {
   public static void generateDocumentation(String outputDir, String... clazz) throws IOException,
       BuildEncyclopediaDocException {
     Map<String, SkylarkModuleDoc> modules = SkylarkDocumentationCollector.collectModules(clazz);
-    List<SkylarkModuleDoc> navModules = new ArrayList<>();
 
     // Generate the top level module first in the doc
     SkylarkModuleDoc topLevelModule = modules.remove(
         SkylarkDocumentationCollector.getTopLevelModule().name());
-    topLevelModule.setTitle("Globals");
     writePage(outputDir, topLevelModule);
-    navModules.add(topLevelModule);
+
+    Map<SkylarkModuleCategory, List<SkylarkModuleDoc>> modulesByCategory = new HashMap<>();
+    for (SkylarkModuleCategory c : SkylarkModuleCategory.values()) {
+      modulesByCategory.put(c, new ArrayList<SkylarkModuleDoc>());
+    }
+
+    modulesByCategory.get(topLevelModule.getAnnotation().category()).add(topLevelModule);
 
     for (SkylarkModuleDoc module : modules.values()) {
       if (module.getAnnotation().documented()) {
         writePage(outputDir, module);
-        navModules.add(module);
+        modulesByCategory.get(module.getAnnotation().category()).add(module);
       }
     }
-    writeNavPage(outputDir, navModules);
+    writeCategoryPage(SkylarkModuleCategory.CONFIGURATION_FRAGMENT, outputDir, modulesByCategory);
+    writeCategoryPage(SkylarkModuleCategory.BUILTIN, outputDir, modulesByCategory);
+    writeCategoryPage(SkylarkModuleCategory.PROVIDER, outputDir, modulesByCategory);
+    writeNavPage(outputDir, modulesByCategory.get(SkylarkModuleCategory.TOP_LEVEL_TYPE));
   }
 
   private static void writePage(String outputDir, SkylarkModuleDoc module) throws IOException {
@@ -60,9 +69,21 @@ public final class SkylarkDocumentationProcessor {
     page.write(skylarkDocPath);
   }
 
+  private static void writeCategoryPage(
+      SkylarkModuleCategory category,
+      String outputDir,
+      Map<SkylarkModuleCategory, List<SkylarkModuleDoc>> modules) throws IOException {
+    File skylarkDocPath = new File(String.format("%s/skylark-%s.html",
+        outputDir, category.getTemplateIdentifier()));
+    Page page = TemplateEngine.newPage(DocgenConsts.SKYLARK_MODULE_CATEGORY_TEMPLATE);
+    page.add("category", category);
+    page.add("modules", modules.get(category));
+    page.write(skylarkDocPath);
+  }
+
   private static void writeNavPage(String outputDir, List<SkylarkModuleDoc> navModules)
       throws IOException {
-    File navFile = new File(outputDir + "/" + "skylark-nav.html");
+    File navFile = new File(outputDir + "/skylark-nav.html");
     Page page = TemplateEngine.newPage(DocgenConsts.SKYLARK_NAV_TEMPLATE);
     page.add("modules", navModules);
     page.write(navFile);

@@ -27,7 +27,6 @@ import com.google.devtools.build.lib.runtime.CommandEnvironment;
 import com.google.devtools.build.lib.util.OS;
 import com.google.devtools.build.lib.util.Preconditions;
 import com.google.devtools.common.options.OptionsBase;
-
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -50,7 +49,7 @@ public class SandboxModule extends BlazeModule {
 
   private synchronized boolean isSandboxingSupported(CommandEnvironment env) {
     if (sandboxingSupported == null) {
-      sandboxingSupported = NamespaceSandboxRunner.isSupported(env);
+      sandboxingSupported = LinuxSandboxRunner.isSupported(env);
     }
     return sandboxingSupported.booleanValue();
   }
@@ -85,7 +84,7 @@ public class SandboxModule extends BlazeModule {
 
   @Override
   public Iterable<Class<? extends OptionsBase>> getCommandOptions(Command command) {
-    return command.builds()
+    return "build".equals(command.name())
         ? ImmutableList.<Class<? extends OptionsBase>>of(SandboxOptions.class)
         : ImmutableList.<Class<? extends OptionsBase>>of();
   }

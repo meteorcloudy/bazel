@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/bin/sh
 #
 # Copyright 2015 The Bazel Authors. All rights reserved.
 #
@@ -13,6 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+set -eu
 
 # This script bootstraps building a Bazel binary without Bazel then
 # use this compiled Bazel to bootstrap Bazel itself. It can also
@@ -37,7 +39,7 @@ cp ${INSTALL_BASE_KEY} ${PACKAGE_DIR}/install_base_key
 # The timestamp of embedded tools should already be zeroed out in the input zip
 touch -t 198001010000.00 ${PACKAGE_DIR}/*
 
-if [[ ${EMBEDDED_TOOLS} != "" ]]; then
+if [ -n "${EMBEDDED_TOOLS}" ]; then
   mkdir ${PACKAGE_DIR}/embedded_tools
   (cd ${PACKAGE_DIR}/embedded_tools && unzip -q ${WORKDIR}/${EMBEDDED_TOOLS})
 fi

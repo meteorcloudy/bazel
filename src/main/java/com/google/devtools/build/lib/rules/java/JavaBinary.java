@@ -37,19 +37,17 @@ import com.google.devtools.build.lib.cmdline.Label;
 import com.google.devtools.build.lib.collect.nestedset.NestedSet;
 import com.google.devtools.build.lib.collect.nestedset.NestedSetBuilder;
 import com.google.devtools.build.lib.packages.BuildType;
-import com.google.devtools.build.lib.packages.RuleClass.ConfiguredTargetFactory.RuleErrorException;
 import com.google.devtools.build.lib.rules.RuleConfiguredTargetFactory;
 import com.google.devtools.build.lib.rules.cpp.CppConfiguration;
 import com.google.devtools.build.lib.rules.cpp.CppHelper;
 import com.google.devtools.build.lib.rules.cpp.LinkerInput;
 import com.google.devtools.build.lib.rules.java.JavaCompilationArgs.ClasspathType;
+import com.google.devtools.build.lib.rules.java.ProguardHelper.ProguardOutput;
 import com.google.devtools.build.lib.syntax.Type;
 import com.google.devtools.build.lib.vfs.PathFragment;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-
 import javax.annotation.Nullable;
 
 /**
@@ -86,8 +84,7 @@ public class JavaBinary implements RuleConfiguredTargetFactory {
       // TODO(cushon): disallow combining launcher=JDK_LAUNCHER_LABEL with create_executable=0
       // and use isAttributeExplicitlySpecified here
       Label launcherAttribute = ruleContext.attributes().get("launcher", BuildType.LABEL);
-      if (launcherAttribute != null
-          && !launcherAttribute.equals(semantics.getJdkLauncherLabel())) {
+      if (launcherAttribute != null && !semantics.isJdkLauncher(launcherAttribute)) {
         ruleContext.ruleError("launcher specified but create_executable is false");
       }
     }
@@ -97,6 +94,7 @@ public class JavaBinary implements RuleConfiguredTargetFactory {
         Lists.<TransitiveInfoCollection>newArrayList(
             common.targetsTreatedAsDeps(ClasspathType.COMPILE_ONLY));
     semantics.checkRule(ruleContext, common);
+    semantics.checkForProtoLibraryAndJavaProtoLibraryOnSameProto(ruleContext, common);
     String mainClass = semantics.getMainClass(ruleContext, common.getSrcsArtifacts());
     String originalMainClass = mainClass;
     if (ruleContext.hasErrors()) {
@@ -166,7 +164,8 @@ public class JavaBinary implements RuleConfiguredTargetFactory {
     List<Artifact> nativeLibraries = attributes.getNativeLibraries();
     if (!nativeLibraries.isEmpty()) {
       jvmFlags.add("-Djava.library.path="
-          + JavaCommon.javaLibraryPath(nativeLibraries, ruleContext.getRule().getWorkspaceName()));
+          + JavaCommon.javaLibraryPath(nativeLibraries,
+              ruleContext.getRule().getPackage().getWorkspaceName()));
     }
 
     JavaConfiguration javaConfig = ruleContext.getFragment(JavaConfiguration.class);
@@ -245,7 +244,7 @@ public class JavaBinary implements RuleConfiguredTargetFactory {
     Artifact deployJar =
         ruleContext.getImplicitOutputArtifact(JavaSemantics.JAVA_BINARY_DEPLOY_JAR);
     boolean runProguard = applyProguardIfRequested(
-        ruleContext, deployJar, common.getBootClasspath(), mainClass, filesBuilder);
+        ruleContext, deployJar, common.getBootClasspath(), mainClass, semantics, filesBuilder);
 
     NestedSet<Artifact> filesToBuild = filesBuilder.build();
 
@@ -484,15 +483,15 @@ public class JavaBinary implements RuleConfiguredTargetFactory {
    * {@link ProguardHelper#applyProguardIfRequested}.
    */
   private static boolean applyProguardIfRequested(RuleContext ruleContext, Artifact deployJar,
-      ImmutableList<Artifact> bootclasspath, String mainClassName,
+      ImmutableList<Artifact> bootclasspath, String mainClassName, JavaSemantics semantics,
       NestedSetBuilder<Artifact> filesBuilder) throws InterruptedException {
     // We only support proguarding tests so Proguard doesn't try to proguard itself.
     if (!ruleContext.getRule().getRuleClass().endsWith("_test")) {
       return false;
     }
-    ProguardHelper.ProguardOutput output =
+    ProguardOutput output =
         JavaBinaryProguardHelper.INSTANCE.applyProguardIfRequested(
-            ruleContext, deployJar, bootclasspath, mainClassName);
+            ruleContext, deployJar, bootclasspath, mainClassName, semantics);
     if (output == null) {
       return false;
     }

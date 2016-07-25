@@ -1,13 +1,13 @@
 ---
 layout: documentation
-title: Skylark - Concepts
+title: Extensions - Overview
 ---
-# Concepts
+# Overview
 
-## Loading a Skylark extension
+## Loading an extension
 
-Use the `load` statement to import a symbol from a `.bzl` Skylark
-extension.
+Extensions are files with the `.bzl` extension. Use the `load` statement to
+import a symbol from an extension.
 
 ```python
 load("//build_tools/rules:maprule.bzl", "maprule")
@@ -37,20 +37,19 @@ load("/path/to:my_rules.bzl", "some_rule", nice_alias = "some_other_rule")
 
 Symbols starting with `_` are private and cannot be loaded from other files.
 Visibility doesn't affect loading: you don't need to use `exports_files` to make
-a Skylark file visible.
+a `.bzl` file visible.
 
 ## Macros and rules
 
-A [macro](macros.md) in Skylark is a function that instantiates rules. The
+A [macro](macros.md) is a function that instantiates rules. The
 function is evaluated as soon as the BUILD file is read. Bazel has little
 information about macros: if your macro generates a `genrule`, Bazel will behave
 as if you wrote the `genrule`. As a result, `bazel query` will only list the
 generated genrule.
 
-A [rule](rules.md) in Skylark is more powerful than a macro, as it can access
+A [rule](rules.md) is more powerful than a macro, as it can access
 Bazel internals and have full control over what is going on. It may for example
-pass information to other rules. A rule defined in Skylark will behave in a
-similar way as a native rule.
+pass information to other rules.
 
 If a macro becomes complex, it is often a good idea to make it a rule.
 
@@ -58,7 +57,7 @@ If a macro becomes complex, it is often a good idea to make it a rule.
 
 A build consists of three phases.
 
-* **Loading phase**. First, we load and evaluate all Skylark extensions and all BUILD
+* **Loading phase**. First, we load and evaluate all extensions and all BUILD
   files that are needed for the build. The execution of the BUILD files simply
   instantiates rules. This is where macros are evaluated.
 
@@ -72,40 +71,86 @@ A build consists of three phases.
   required. If a file is missing or if a command fails to generate one output,
   the build fails. Tests are run during this phase, as they are actions.
 
-## Language
+Bazel uses parallelism to read, parse and evaluate the `.bzl` files and `BUILD`
+files. A file is read at most once per build and the result of the evaluation is
+cached and reused. A file is evaluated only once all its dependencies (`load()`
+statements) have been resolved. By design, loading a `.bzl` file has no visible
+side-effect, it only defines values and functions.
 
-Skylark is a superset of the core build language and its syntax is a subset of
-Python. The following constructs have been added to the core build language:
-`if` statements, `for` loops, and function definitions.
+## Syntax
+
+The extension language (sometimes referred as "Skylark") is a superset of the
+[Core Build Language](/docs/build-ref.html#core_build_language)
+and its syntax is a subset of Python.
 It is designed to be simple, thread-safe and integrated with the
 BUILD language. It is not a general-purpose language and most Python
 features are not included.
 
+The following constructs have been added to the Core Build Language: `if`
+statements, `for` loops, and function definitions. They behave like in Python.
+Here is an example to show the syntax:
 
-Some differences with Python should be noted:
+```python
+def fizz_buzz(n):
+  """Print Fizz Buzz numbers from 1 to n."""
+  for i in range(1, n + 1):
+    s = ""
+    if i % 3 == 0:
+      s += "Fizz"
+    if i % 5 == 0:
+      s += "Buzz"
+    print(s if s else i)
 
-* Although some data structures are mutable, all objects are recursively frozen
-  and become recursively immutable before Bazel invokes Skylark
-  and after it is done with such evaluation,
-  i.e. when a .bzl file is loaded, when a BUILD file is processed,
-  when a Skylark-defined rule is evaluated to create a configured target, or
-  when a callback function is called to compute a configured target attribute.
-  These objects that are frozen notably include the recursive contents of any
-  global variable exported by a .bzl file or imported by a `load()` statement,
-  and any parameter passed to a callback function or result returned by it.
-  From the point of view of the Skylark code
-  in given a Bazel-initiated evaluation,
-  objects passed as input or present in the evaluation's initial environment
-  are immutable, whereas objects created during the evaluation are mutable.
-  From the point of view of the Bazel code that evaluates said Skylark code,
-  all inputs and outputs of the evaluation are recursively immutable
-  and all evaluations are deterministic,
-  which guarantees the hermeticity of the build,
-  and allows sharing of evaluations without any fear of side-effects.
+fizz_buzz(20)
+```
 
-* Lists are mutable, but dicts and sets are immutable.
-  This is temporary: dicts will be made mutable in the near future;
-  however there are no plans to make sets mutable at this time.
+## Mutability
+
+Because evaluation of BUILD and .bzl files is performed in parallel, there are
+some restrictions in order to guarantee thread-safety and determinism. Two
+mutable data structures are available: [lists](lib/list.html) and
+[dicts](lib/dict.html). Unlike in Python, [sets](lib/set.html) are not mutable.
+
+In a build, there are many "evaluation contexts": each `.bzl` file and each
+`BUILD` file is loaded in a different context. Each rule is also analyzed in a
+separate context. We allow side-effects (e.g. appending a value to a list or
+deleting an entry in a dictionary) only on objects created during the current
+evaluation context.
+
+For example, here is the content of the file `foo.bzl`:
+
+```python
+var = []
+
+def fct():
+  var.append(5)
+
+fct()
+```
+
+The variable `var` is created when `foo.bzl` is loaded. `fct()` is called during
+the same context, so it is safe. At the end of the evaluation, the definition
+`var = [5]` is exported. Any other file can load it, and it is possible that
+multiple files will load it at the same time. For this reason, the following
+code is not legal:
+
+```python
+load(":foo.bzl", "var", "fct")
+
+var.append(6)  # not allowed
+
+fct()  # not allowed
+```
+
+Since the call to `fct()` attempts to mutate the shared variable `var`, it will
+fail. `fct()` can only be called during the evaluation of `foo.bzl`. It cannot
+be called from another file. It is also forbidden to call it during the analysis
+phase (i.e. when a custom rule is analyzed).
+
+## Differences with Python
+
+In addition to the mutability restrictions, there are also differences with
+Python:
 
 * All global values are constant (they cannot be reassigned).
 
@@ -120,23 +165,21 @@ Some differences with Python should be noted:
   operand. If you need compatibility with Python, we suggest this syntax:
   `dict(a.items() + b.items())`.
 
-* Dictionary assignment has slightly different semantics: `d["x"] = y` is
-  syntactic sugar for `d = d + {"x": y}` or `d += {"x": y}`. This behavior
-  is temporary, and will follow Python semantics in the future.
-
 * Dictionaries have deterministic order when iterating (sorted by key).
 
-* Sets use a custom order when iterating (see
-  [documentation](lib/globals.html#set)).
+* Sets use a custom order when iterating (see [documentation](lib/globals.html#set)).
 
 * Recursion is not allowed.
+
+* Loops iterate on a shallow copy of the elements. If the list is modified
+  during the iteration, you will only see the old values.
 
 The following Python features are not supported:
 
 * `class` (see [`struct`](lib/globals.html#struct) function)
 * `import` (see [`load`](#loading-a-skylark-extension) statement)
 * `while`, `yield`
-* `lambda`
+* `lambda` and nested functions
 * `is` (use `==` instead)
 * `try`, `raise`, `except`, `finally` (see [`fail`](lib/globals.html#fail)
   for fatal errors).

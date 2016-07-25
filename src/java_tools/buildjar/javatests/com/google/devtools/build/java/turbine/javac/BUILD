@@ -1,3 +1,9 @@
+filegroup(
+    name = "srcs",
+    srcs = glob(["**"]),
+    visibility = ["//src/java_tools/buildjar/javatests/com/google/devtools/build/java/turbine:__pkg__"],
+)
+
 java_test(
     name = "JavacTurbineTest",
     srcs = ["JavacTurbineTest.java"],
@@ -10,6 +16,7 @@ java_test(
     ],
     tags = ["jdk8"],
     deps = [
+        "//src/java_tools/buildjar/java/com/google/devtools/build/buildjar:JarOwner",
         "//src/java_tools/buildjar/java/com/google/devtools/build/java/turbine:turbine_options",
         "//src/java_tools/buildjar/java/com/google/devtools/build/java/turbine/javac:javac_turbine",
         "//src/main/protobuf:deps_java_proto",

@@ -40,6 +40,7 @@ import com.google.devtools.build.lib.events.EventHandler;
 import com.google.devtools.build.lib.rules.cpp.CppConfigurationLoader.CppConfigurationParameters;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkCallable;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkModule;
+import com.google.devtools.build.lib.skylarkinterface.SkylarkModuleCategory;
 import com.google.devtools.build.lib.util.Preconditions;
 import com.google.devtools.build.lib.vfs.Path;
 import com.google.devtools.build.lib.vfs.PathFragment;
@@ -60,12 +61,15 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * This class represents the C/C++ parts of the {@link BuildConfiguration},
- * including the host architecture, target architecture, compiler version, and
- * a standard library version. It has information about the tools locations and
- * the flags required for compiling.
+ * This class represents the C/C++ parts of the {@link BuildConfiguration}, including the host
+ * architecture, target architecture, compiler version, and a standard library version. It has
+ * information about the tools locations and the flags required for compiling.
  */
-@SkylarkModule(name = "cpp", doc = "A configuration fragment for C++")
+@SkylarkModule(
+  name = "cpp",
+  doc = "A configuration fragment for C++",
+  category = SkylarkModuleCategory.CONFIGURATION_FRAGMENT
+)
 @Immutable
 public class CppConfiguration extends BuildConfiguration.Fragment {
 
@@ -1592,7 +1596,7 @@ public class CppConfiguration extends BuildConfiguration.Fragment {
   }
 
   public boolean isLipoOptimizationOrInstrumentation() {
-    return cppOptions.isLipoOptimizationOrInstrumentation();
+    return cppOptions.isLipoOptimizationOrInstrumentation() && !isLipoContextCollector();
   }
 
   /**
@@ -1996,14 +2000,6 @@ public class CppConfiguration extends BuildConfiguration.Fragment {
   }
 
   @Override
-  public ImmutableList<Label> getGcovLabels() {
-    // TODO(bazel-team): Using a gcov-specific crosstool filegroup here could reduce the number of
-    // inputs significantly. We'd also need to add logic in tools/coverage/collect_coverage.sh to
-    // drop crosstool dependency if metadataFiles does not contain *.gcno artifacts.
-    return ImmutableList.of(crosstoolTop);
-  }
-
-  @Override
   public String getOutputDirectoryName() {
     String lipoSuffix;
     if (getLipoMode() != LipoMode.OFF && !isAutoFdoLipo()) {
@@ -2043,9 +2039,7 @@ public class CppConfiguration extends BuildConfiguration.Fragment {
     // until they're read from the CROSSTOOL. Feed the CROSSTOOL defaults in here.
     return ImmutableMap.<String, Object>of(
         "cpu", getTargetCpu(),
-        "compiler", getCompiler(),
-        "glibc", getTargetLibc()
-    );
+        "compiler", getCompiler());
   }
 
   public PathFragment getFdoInstrument() {

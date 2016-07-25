@@ -17,20 +17,22 @@ package com.google.devtools.build.java.turbine;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.base.CharMatcher;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
-
+import com.google.devtools.build.buildjar.JarOwner;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayDeque;
 import java.util.Deque;
-
+import java.util.List;
 import javax.annotation.Nullable;
 
 /** A command line options parser for {@link TurbineOptions}. */
 public class TurbineOptionsParser {
+  private static final Splitter SPACE_SPLITTER = Splitter.on(' ');
 
   /**
    * Parses command line options into {@link TurbineOptions}, expanding any {@code @params}
@@ -94,13 +96,13 @@ public class TurbineOptionsParser {
           builder.addProcessors(readList(argumentDeque));
           break;
         case "--processorpath":
-          builder.addProcessorPathEntries(splitClasspath(readOne(argumentDeque)));
+          builder.addProcessorPathEntries(splitClasspath(readList(argumentDeque)));
           break;
         case "--classpath":
-          builder.addClassPathEntries(splitClasspath(readOne(argumentDeque)));
+          builder.addClassPathEntries(splitClasspath(readList(argumentDeque)));
           break;
         case "--bootclasspath":
-          builder.addBootClassPathEntries(splitClasspath(readOne(argumentDeque)));
+          builder.addBootClassPathEntries(splitClasspath(readList(argumentDeque)));
           break;
         case "--javacopts":
           builder.addAllJavacOpts(readList(argumentDeque));
@@ -115,14 +117,14 @@ public class TurbineOptionsParser {
           {
             String jar = readOne(argumentDeque);
             String target = readOne(argumentDeque);
-            builder.addDirectJarToTarget(jar, target);
+            builder.addDirectJarToTarget(jar, parseJarOwner(target));
             break;
           }
         case "--indirect_dependency":
           {
             String jar = readOne(argumentDeque);
             String target = readOne(argumentDeque);
-            builder.addIndirectJarToTarget(jar, target);
+            builder.addIndirectJarToTarget(jar, parseJarOwner(target));
             break;
           }
         case "--deps_artifacts":
@@ -130,10 +132,6 @@ public class TurbineOptionsParser {
           break;
         case "--target_label":
           builder.setTargetLabel(readOne(argumentDeque));
-          break;
-        case "--strict_java_deps":
-          // TODO(cushon): remove once Blaze no longer passes this flag
-          readOne(argumentDeque); // ignored
           break;
         case "--rule_kind":
           builder.setRuleKind(readOne(argumentDeque));
@@ -144,6 +142,18 @@ public class TurbineOptionsParser {
           }
       }
     }
+  }
+
+  private static JarOwner parseJarOwner(String line) {
+    List<String> ownerStringParts = SPACE_SPLITTER.splitToList(line);
+    JarOwner owner;
+    Preconditions.checkState(ownerStringParts.size() == 1 || ownerStringParts.size() == 2);
+    if (ownerStringParts.size() == 1) {
+      owner = JarOwner.create(ownerStringParts.get(0));
+    } else {
+      owner = JarOwner.create(ownerStringParts.get(0), ownerStringParts.get(1));
+    }
+    return owner;
   }
 
   /** Returns the value of an option, or {@code null}. */
@@ -167,9 +177,10 @@ public class TurbineOptionsParser {
   private static final Splitter CLASSPATH_SPLITTER =
       Splitter.on(':').trimResults().omitEmptyStrings();
 
-  private static ImmutableList<String> splitClasspath(String path) {
+  // TODO(cushon): stop splitting classpaths once cl/127006119 is released
+  private static ImmutableList<String> splitClasspath(Iterable<String> paths) {
     ImmutableList.Builder<String> classpath = ImmutableList.builder();
-    if (path != null) {
+    for (String path : paths) {
       classpath.addAll(CLASSPATH_SPLITTER.split(path));
     }
     return classpath.build();

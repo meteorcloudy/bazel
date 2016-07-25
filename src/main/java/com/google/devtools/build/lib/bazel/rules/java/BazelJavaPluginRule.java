@@ -15,6 +15,7 @@
 package com.google.devtools.build.lib.bazel.rules.java;
 
 import static com.google.devtools.build.lib.packages.Attribute.attr;
+import static com.google.devtools.build.lib.syntax.Type.BOOLEAN;
 import static com.google.devtools.build.lib.syntax.Type.STRING;
 
 import com.google.devtools.build.lib.analysis.RuleDefinition;
@@ -43,11 +44,26 @@ public final class BazelJavaPluginRule implements RuleDefinition {
         use as entry point to the annotation processor. If not specified, this rule will not
         contribute an annotation processor to the Java compiler's annotation processing, but its
         runtime classpath will still be included on the compiler's annotation processor path. (This
-        is primarily intended for use by <a href="http://errorprone.info/">Error Prone plugins</a>,
-        which are loaded from the annotation processor path using <code>META-INF/services</code>
-        files.)
+        is primarily intended for use by
+        <a href="http://errorprone.info/docs/plugins">Error Prone plugins</a>, which are loaded
+        from the annotation processor path using
+        <a href="https://docs.oracle.com/javase/8/docs/api/java/util/ServiceLoader.html">
+        java.util.ServiceLoader</a>.)
         <!-- #END_BLAZE_RULE.ATTRIBUTE --> */
         .add(attr("processor_class", STRING))
+        /* <!-- #BLAZE_RULE(java_plugin).ATTRIBUTE(generates_api) -->
+        ${SYNOPSIS}
+        This attribute marks annotation processors that generate API code.
+        <i>(Boolean; optional, default is 0)</i><br/>
+        If a rule uses an API-generating annotation processor, other rules
+        depending on it can refer to the generated code only if their
+        compilation actions are scheduled after the generating rule. This
+        attribute instructs Blaze to introduce scheduling constraints when
+        --java_header_compilation is enabled.
+        <p><em class="harmful">WARNING: This attribute affects build
+        performance, use it only if necessary.</em></p>
+        <!-- #END_BLAZE_RULE.ATTRIBUTE --> */
+        .add(attr("generates_api", BOOLEAN).value(false))
         .removeAttribute("runtime_deps")
         .removeAttribute("exports")
         .removeAttribute("exported_plugins")

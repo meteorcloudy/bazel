@@ -28,21 +28,22 @@ import com.google.devtools.build.lib.events.Event;
 import com.google.devtools.build.lib.events.EventHandler;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkCallable;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkModule;
+import com.google.devtools.build.lib.skylarkinterface.SkylarkModuleCategory;
 import com.google.devtools.common.options.TriState;
 
 import java.util.List;
 
 import javax.annotation.Nullable;
 
-/**
- * A java compiler configuration containing the flags required for compilation.
- */
+/** A java compiler configuration containing the flags required for compilation. */
 @Immutable
-@SkylarkModule(name = "java", doc = "A java compiler configuration")
+@SkylarkModule(
+  name = "java",
+  doc = "A java compiler configuration",
+  category = SkylarkModuleCategory.CONFIGURATION_FRAGMENT
+)
 public final class JavaConfiguration extends Fragment {
-  /**
-   * Values for the --experimental_java_classpath option
-   */
+  /** Values for the --java_classpath option */
   public static enum JavaClasspathMode {
     /** Use full transitive classpaths, the default behavior. */
     OFF,
@@ -128,8 +129,10 @@ public final class JavaConfiguration extends Fragment {
   private final Label javaLauncherLabel;
   private final boolean useIjars;
   private final boolean useHeaderCompilation;
+  private final boolean optimizeHeaderCompilationAnnotationProcessing;
   private final boolean generateJavaDeps;
-  private final JavaClasspathMode experimentalJavaClasspath;
+  private final boolean javaProtoLibraryDepsAreStrict;
+  private final JavaClasspathMode javaClasspath;
   private final ImmutableList<String> javaWarns;
   private final ImmutableList<String> defaultJvmFlags;
   private final ImmutableList<String> checkedConstraints;
@@ -154,8 +157,10 @@ public final class JavaConfiguration extends Fragment {
     this.javaLauncherLabel = javaOptions.javaLauncher;
     this.useIjars = javaOptions.useIjars;
     this.useHeaderCompilation = javaOptions.headerCompilation;
+    this.optimizeHeaderCompilationAnnotationProcessing =
+        javaOptions.optimizeHeaderCompilationAnnotationProcessing;
     this.generateJavaDeps = generateJavaDeps;
-    this.experimentalJavaClasspath = javaOptions.experimentalJavaClasspath;
+    this.javaClasspath = javaOptions.javaClasspath;
     this.javaWarns = ImmutableList.copyOf(javaOptions.javaWarns);
     this.defaultJvmFlags = ImmutableList.copyOf(defaultJvmFlags);
     this.checkedConstraints = ImmutableList.copyOf(javaOptions.checkedConstraints);
@@ -168,6 +173,7 @@ public final class JavaConfiguration extends Fragment {
     this.javaToolchain = javaToolchain;
     this.javaOptimizationMode = javaOptions.javaOptimizationMode;
     this.legacyBazelJavaTest = javaOptions.legacyBazelJavaTest;
+    this.javaProtoLibraryDepsAreStrict = javaOptions.javaProtoLibraryDepsAreStrict;
 
     ImmutableList.Builder<Label> translationsBuilder = ImmutableList.builder();
     for (String s : javaOptions.translationTargets) {
@@ -216,6 +222,11 @@ public final class JavaConfiguration extends Fragment {
     return useHeaderCompilation;
   }
 
+  /** Returns true if only api-generating java_plugins should be run during header compilation. */
+  public boolean optimizeHeaderCompilationAnnotationProcessing() {
+    return optimizeHeaderCompilationAnnotationProcessing;
+  }
+
   /**
    * Returns true iff dependency information is generated after compilation.
    */
@@ -224,7 +235,7 @@ public final class JavaConfiguration extends Fragment {
   }
 
   public JavaClasspathMode getReduceJavaClasspath() {
-    return experimentalJavaClasspath;
+    return javaClasspath;
   }
 
   /**
@@ -326,5 +337,10 @@ public final class JavaConfiguration extends Fragment {
    */
   public boolean useLegacyBazelJavaTest() {
     return legacyBazelJavaTest;
+  }
+
+  // TODO(b/29867858): Replace with a BUILD-level attribute.
+  public boolean javaProtoLibraryDepsAreStrict() {
+    return javaProtoLibraryDepsAreStrict;
   }
 }

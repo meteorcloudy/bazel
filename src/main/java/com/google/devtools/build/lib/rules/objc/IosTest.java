@@ -18,7 +18,6 @@ import static com.google.devtools.build.lib.rules.objc.ObjcProvider.STORYBOARD;
 import static com.google.devtools.build.lib.rules.objc.ObjcProvider.XCDATAMODEL;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.devtools.build.lib.actions.Artifact;
@@ -32,7 +31,6 @@ import com.google.devtools.build.lib.analysis.RunfilesSupport;
 import com.google.devtools.build.lib.analysis.actions.ExecutionRequirements;
 import com.google.devtools.build.lib.collect.nestedset.NestedSet;
 import com.google.devtools.build.lib.collect.nestedset.NestedSetBuilder;
-import com.google.devtools.build.lib.packages.RuleClass.ConfiguredTargetFactory.RuleErrorException;
 import com.google.devtools.build.lib.rules.RuleConfiguredTargetFactory;
 import com.google.devtools.build.lib.rules.apple.AppleConfiguration;
 import com.google.devtools.build.lib.rules.objc.CompilationSupport.ExtraLinkArgs;
@@ -53,7 +51,7 @@ public final class IosTest implements RuleConfiguredTargetFactory {
 
   // Attributes for IosTest rules.
   // Documentation on usage is in {@link IosTestRule@}.
-  static final String GCOV_ATTR = ":gcov";
+  static final String OBJC_GCOV_ATTR = "$objc_gcov";
   static final String DEVICE_ARG_ATTR = "ios_device_arg";
   static final String IS_XCTEST_ATTR = "xctest";
   static final String MEMLEAKS_DEP_ATTR = "$memleaks_dep";
@@ -85,7 +83,30 @@ public final class IosTest implements RuleConfiguredTargetFactory {
   @Override
   public final ConfiguredTarget create(RuleContext ruleContext)
       throws InterruptedException, RuleErrorException {
-    ObjcCommon common = common(ruleContext);
+    ObjcConfiguration objcConfiguration = ObjcRuleClasses.objcConfiguration(ruleContext);
+
+    ObjcProvider protosObjcProvider = null;
+    XcodeProvider protosXcodeProvider = null;
+
+    if (objcConfiguration.experimentalAutoTopLevelUnionObjCProtos()) {
+      XcodeProvider.Builder protosXcodeProviderBuilder = new XcodeProvider.Builder();
+      ProtoSupport protoSupport = new ProtoSupport(ruleContext, TargetType.LINKING_TARGET)
+          .registerActions()
+          .addXcodeProviderOptions(protosXcodeProviderBuilder);
+
+      ObjcCommon protoCommon = protoSupport.getCommon();
+      protosObjcProvider = protoCommon.getObjcProvider();
+
+      new CompilationSupport(
+              ruleContext,
+              protoSupport.getIntermediateArtifacts(),
+              new CompilationAttributes.Builder().build())
+          .registerCompileAndArchiveActions(protoCommon, protoSupport.getUserHeaderSearchPaths())
+          .addXcodeSettings(protosXcodeProviderBuilder, protoCommon);
+      protosXcodeProvider = protosXcodeProviderBuilder.build();
+    }
+
+    ObjcCommon common = common(ruleContext, protosObjcProvider);
 
     if (!common.getCompilationArtifacts().get().getArchive().isPresent()) {
       ruleContext.ruleError(REQUIRES_SOURCE_ERROR);
@@ -96,21 +117,12 @@ public final class IosTest implements RuleConfiguredTargetFactory {
     }
 
     XcodeProvider.Builder xcodeProviderBuilder = new XcodeProvider.Builder();
+    if (protosXcodeProvider != null) {
+      xcodeProviderBuilder.addPropagatedDependencies(
+          ImmutableList.of(protosXcodeProvider));
+    }
     NestedSetBuilder<Artifact> filesToBuild = NestedSetBuilder.stableOrder();
     addResourceFilesToBuild(ruleContext, common.getObjcProvider(), filesToBuild);
-
-    ObjcConfiguration objcConfiguration = ObjcRuleClasses.objcConfiguration(ruleContext);
-    if (objcConfiguration.experimentalAutoTopLevelUnionObjCProtos()) {
-      ProtoSupport protoSupport =
-          new ProtoSupport(ruleContext, TargetType.LINKING_TARGET).registerActions();
-
-      ObjcCommon protoCommon = protoSupport.getCommon();
-      new CompilationSupport(
-              ruleContext,
-              protoSupport.getIntermediateArtifacts(),
-              new CompilationAttributes.Builder().build())
-          .registerCompileAndArchiveActions(protoCommon, protoSupport.getUserHeaderSearchPaths());
-    }
 
     XcodeProductType productType = getProductType(ruleContext);
     ExtraLinkArgs extraLinkArgs;
@@ -198,6 +210,7 @@ public final class IosTest implements RuleConfiguredTargetFactory {
         ruleContext.getWorkspaceName(),
         ruleContext.getConfiguration().legacyExternalRunfiles())
         .addRunfiles(ruleContext, RunfilesProvider.DEFAULT_RUNFILES);
+
     NestedSetBuilder<Artifact> filesToBuildBuilder =
         NestedSetBuilder.<Artifact>stableOrder().addTransitive(filesToBuildSet);
 
@@ -254,18 +267,9 @@ public final class IosTest implements RuleConfiguredTargetFactory {
   /**
    * Constructs an {@link ObjcCommon} instance based on the attributes.
    */
-  private ObjcCommon common(RuleContext ruleContext) {
+  private ObjcCommon common(RuleContext ruleContext, ObjcProvider protosObjcProvider) {
     CompilationArtifacts compilationArtifacts =
         CompilationSupport.compilationArtifacts(ruleContext);
-
-    Optional<Artifact> protoLib;
-    ObjcConfiguration objcConfiguration = ObjcRuleClasses.objcConfiguration(ruleContext);
-    if (objcConfiguration.experimentalAutoTopLevelUnionObjCProtos()) {
-      ProtoSupport protoSupport = new ProtoSupport(ruleContext, TargetType.LINKING_TARGET);
-      protoLib = protoSupport.getCommon().getCompiledArchive();
-    } else {
-      protoLib = Optional.absent();
-    }
 
     ObjcCommon.Builder builder =
         new ObjcCommon.Builder(ruleContext)
@@ -275,18 +279,22 @@ public final class IosTest implements RuleConfiguredTargetFactory {
             .setResourceAttributes(new ResourceAttributes(ruleContext))
             .addDefines(ruleContext.getTokenizedStringListAttr("defines"))
             .addDeps(ruleContext.getPrerequisites("deps", Mode.TARGET))
+            .addRuntimeDeps(ruleContext.getPrerequisites("runtime_deps", Mode.TARGET))
             .addDeps(ruleContext.getPrerequisites("bundles", Mode.TARGET))
             .addNonPropagatedDepObjcProviders(
                 ruleContext.getPrerequisites(
                     "non_propagated_deps", Mode.TARGET, ObjcProvider.class))
             .setIntermediateArtifacts(ObjcRuleClasses.intermediateArtifacts(ruleContext))
-            .addExtraImportLibraries(protoLib.asSet())
             .setHasModuleMap();
 
     if (isXcTest(ruleContext)) {
       builder
           .addExtraSdkFrameworks(AUTOMATIC_SDK_FRAMEWORKS_FOR_XCTEST)
           .addDepObjcProviders(ImmutableList.of(xcTestAppProvider(ruleContext).getObjcProvider()));
+    }
+
+    if (protosObjcProvider != null) {
+      builder.addDepObjcProviders(ImmutableList.of(protosObjcProvider));
     }
 
     // Add the memleaks library if the --ios_memleaks flag is true.  The library pauses the test

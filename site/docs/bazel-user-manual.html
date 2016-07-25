@@ -267,7 +267,7 @@ the <code class='flag'>--bazelrc=<var>file</var></code> option, and the
 </p>
 <p>
   Bazel prints progress messages during
-  the <a href='#phases'>execution phase</a> of the build, showing the
+  the <a href='#execution-phase'>execution phase</a> of the build, showing the
   current build step (compiler, linker, etc.) that is being started,
   and the number of completed over total number of build actions. As the
   build starts the number of total actions will often increase as Bazel
@@ -1215,16 +1215,6 @@ $ bazel fetch //...
   Note that copts parameters listed in specific cc_library or cc_binary build rules
   will be placed on the gcc command line <em>after</em> these options.
 </p>
-
-<p>
-  This is similar to <code class='flag'>--copt</code> and <code class='flag'>--cxxopt</code>, but can only
-  be used to enable warnings. The arguments to this option are appended to the
-  "-W" flag to gcc, and must not contain a leading "no-" prefix.
-  For example:
-</p>
-<pre>
-  % bazel build --cwarn="unused-variable" --cwarn="unused-function" //foo/cruddy_code
-</pre>
 
 <h4 id='flag--linkopt'><code class='flag'>--linkopt <var>linker-option</var></code></h4>
 <p>
@@ -2260,7 +2250,7 @@ either to the terminal, or to additional log files.
   which drive a build.
 </p>
 
-<h4 id='flag--subcommands'><code class='flag'>--subcommands</code>  (-s)</h4>
+<h4 id='flag--subcommands'><code class='flag'>--subcommands</code> (<code>-s</code>)</h4>
 <p>
   This option causes Bazel's execution phase to print the full command line
   for each command prior to executing it.
@@ -2429,7 +2419,7 @@ either to the terminal, or to additional log files.
 
 <h3>Options for <code>bazel test</code></h3>
 
-<h4 id="flag--cache_test_results"><code class='flag'>--cache_test_results=(yes|no|auto)</code> (-t)</h4>
+<h4 id="flag--cache_test_results"><code class='flag'>--cache_test_results=(yes|no|auto)</code> (<code>-t</code>)</h4>
 <p>
   If this option is set to 'auto' (the default) then Bazel will only rerun a test if any of the
   following conditions applies:
@@ -2651,9 +2641,9 @@ value, merely warns if Bazel thinks the timeout could be restricted further.
   order).
   In either form, zero or a negative value for any of the test sizes will
   be substituted by the default timeout for the given timeout categories as
-  defined by the
-  <a href="test-encyclopedia.html">Test Encyclopedia</a>.
-  By default, Bazel will use Test Encyclopedia timeouts for all tests by
+  defined by the page
+  <a href="test-encyclopedia.html">Writing Tests</a>.
+  By default, Bazel will use these timeouts for all tests by
   inferring the timeout limit from the test's size whether the size is
   implicitly or explicitly set.
 </p>
@@ -2799,12 +2789,11 @@ Examples:
 
 <p>
   <code>bazel run</code> can also execute test binaries, which has the effect of
-running the test, but without the setup documented in the
-<a href='test-encyclopedia.html'>Test Encyclopedia</a>, so that the test runs
+running the test, but without the setup documented on the page
+<a href='test-encyclopedia.html'>Writing Tests</a>, so that the test runs
 in an environment closer to the current shell environment. Note that none of the
 --test_* arguments have an effect when running a test in this manner.
 </p>
-
 
 <h2 id='query'>Querying the dependency graph with Bazel</h2>
 
@@ -2865,7 +2854,7 @@ in an environment closer to the current shell environment. Note that none of the
   that do not correspond to commands.
 </p>
 
-<h4 id='flag--long'><code class='flag'>--[no]long</code> (-l)</h4>
+<h4 id='flag--long'><code class='flag'>--[no]long</code> (<code>-l</code>)</h4>
 <p>
   By default, <code>bazel help [<var>topic</var>]</code> prints only a
   summary of the relevant options for a topic.  If
@@ -2939,8 +2928,7 @@ in an environment closer to the current shell environment. Note that none of the
     symlink named
 
     <code>bazel-&lt;workspace&gt;</code>
-    is placed there pointing to this
-    directory.
+    is placed there pointing to this directory.
   </li>
   <li><code>output_path</code>: the absolute path to the output
     directory beneath the execution root used for all files actually

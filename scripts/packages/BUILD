@@ -1,3 +1,9 @@
+filegroup(
+    name = "srcs",
+    srcs = glob(["**"]),
+    visibility = ["//scripts:__pkg__"],
+)
+
 sh_binary(
     name = "package-info-generator",
     srcs = ["package_info_generator.sh"],
@@ -111,6 +117,9 @@ pkg_deb(
     name = "bazel-debian",
     architecture = "amd64",
     built_using = "bazel (HEAD)",
+    conflicts = [
+        "openjdk-9-jdk",
+    ],
     data = ":debian-data",
     depends = select({
         "//tools/jdk:jdk7": [

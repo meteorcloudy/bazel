@@ -11,6 +11,7 @@ filegroup(
         "//tools/android/jack:srcs",
         "//tools/buildstamp:srcs",
         "//tools/build_defs/apple:srcs",
+        "//tools/build_defs/apple/test:srcs",
         "//tools/build_defs/docker:srcs",
         "//tools/build_defs/pkg:srcs",
         "//tools/build_rules:srcs",
@@ -19,6 +20,7 @@ filegroup(
         "//tools/cpp:srcs",
         "//tools/j2objc:srcs",
         "//tools/objc:srcs",
+        "//tools/osx:srcs",
         "//tools/osx/crosstool:srcs",
         "//tools/test:srcs",
         "//tools/python:srcs",
@@ -45,6 +47,7 @@ filegroup(
         "//tools/python:srcs",
         "//tools/test:srcs",
         "//tools/osx/crosstool:srcs",
+        "//tools/osx:srcs",
         "//tools/zip:srcs",
     ],
 )

@@ -18,13 +18,13 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.devtools.build.lib.packages.RuleClass.Builder.RuleClassType.ABSTRACT;
 import static com.google.devtools.build.lib.packages.RuleClass.Builder.RuleClassType.TEST;
 
+import com.google.common.base.Preconditions;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableBiMap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
 import com.google.devtools.build.lib.analysis.buildinfo.BuildInfoFactory;
 import com.google.devtools.build.lib.analysis.config.BuildConfiguration;
 import com.google.devtools.build.lib.analysis.config.BuildOptions;
@@ -56,6 +56,9 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
+
+import javax.annotation.Nullable;
 
 /**
  * Knows about every rule Blaze supports and the associated configuration options.
@@ -103,13 +106,13 @@ public class ConfiguredRuleClassProvider implements RuleClassProvider {
     private ConfigurationCollectionFactory configurationCollectionFactory;
     private Class<? extends BuildConfiguration.Fragment> universalFragment;
     private PrerequisiteValidator prerequisiteValidator;
-    private ImmutableMap<String, Object> skylarkAccessibleTopLevels = ImmutableMap.of();
+    private ImmutableMap.Builder<String, Object> skylarkAccessibleTopLevels =
+        ImmutableMap.builder();
     private ImmutableList.Builder<Class<?>> skylarkModules =
         ImmutableList.<Class<?>>builder().addAll(SkylarkModules.MODULES);
-    private final List<Class<? extends FragmentOptions>> buildOptions = Lists.newArrayList();
-    private ImmutableBiMap<String, Class<? extends TransitiveInfoProvider>>
-        registeredSkylarkProviders = ImmutableBiMap.of();
- 
+    private ImmutableBiMap.Builder<String, Class<? extends TransitiveInfoProvider>>
+        registeredSkylarkProviders = ImmutableBiMap.builder();
+    private Map<String, String> platformRegexps = new TreeMap<>();
 
     public void addWorkspaceFilePrefix(String contents) {
       defaultWorkspaceFilePrefix.append(contents);
@@ -127,11 +130,6 @@ public class ConfiguredRuleClassProvider implements RuleClassProvider {
             String.format("Prelude label '%s' is invalid: %s", preludeLabelString, e.getMessage());
         throw new IllegalArgumentException(errorMsg);
       }
-      return this;
-    }
-
-    public Builder addBuildOptions(Collection<Class<? extends FragmentOptions>> optionsClasses) {
-      buildOptions.addAll(optionsClasses);
       return this;
     }
 
@@ -176,6 +174,12 @@ public class ConfiguredRuleClassProvider implements RuleClassProvider {
       return this;
     }
 
+    public Builder addConfigurationOptions(
+        Collection<Class<? extends FragmentOptions>> optionsClasses) {
+      this.configurationOptions.addAll(optionsClasses);
+      return this;
+    }
+
     public Builder addConfigurationFragment(ConfigurationFragmentFactory factory) {
       configurationFragments.add(factory);
       return this;
@@ -192,8 +196,8 @@ public class ConfiguredRuleClassProvider implements RuleClassProvider {
       return this;
     }
 
-    public Builder setSkylarkAccessibleTopLevels(ImmutableMap<String, Object> objects) {
-      this.skylarkAccessibleTopLevels = objects;
+    public Builder addSkylarkAccessibleTopLevels(String name, Object object) {
+      this.skylarkAccessibleTopLevels.put(name, object);
       return this;
     }
 
@@ -203,12 +207,32 @@ public class ConfiguredRuleClassProvider implements RuleClassProvider {
     }
 
     /**
-     * Registers a map that indicates which keys in structs returned by skylark rules should be
+     * Adds a mapping that determines which keys in structs returned by skylark rules should be
      * interpreted as native TransitiveInfoProvider instances of type (map value).
      */
-    public Builder setSkylarkProviderRegistry(
-        ImmutableBiMap<String, Class<? extends TransitiveInfoProvider>> providers) {
-      this.registeredSkylarkProviders = providers;
+    public Builder registerSkylarkProvider(
+        String name, Class<? extends TransitiveInfoProvider> provider) {
+      this.registeredSkylarkProviders.put(name, provider);
+      return this;
+    }
+
+    /**
+     * Do not use - this only exists for backwards compatibility! Platform regexps are part of a
+     * legacy mechanism - {@code vardef} - that is not exposed in Bazel.
+     *
+     * <p>{@code vardef} needs explicit support in the rule implementations, and cannot express
+     * conditional dependencies, only conditional attribute values. This mechanism will be
+     * supplanted by configuration dependent attributes, and its effect can usually also be achieved
+     * with select().
+     *
+     * <p>This is a map of platform names to regexps. When a name is used as the third argument to
+     * {@code vardef}, the corresponding regexp is used to match on the C++ abi, and the variable is
+     * only set to that value if the regexp matches. For example, the entry
+     * {@code "oldlinux": "i[34]86-libc[345]-linux"} might define a set of platforms representing
+     * certain older linux releases.
+     */
+    public Builder addPlatformRegexps(Map<String, String> platformRegexps) {
+      this.platformRegexps.putAll(Preconditions.checkNotNull(platformRegexps));
       return this;
     }
 
@@ -286,10 +310,9 @@ public class ConfiguredRuleClassProvider implements RuleClassProvider {
           configurationCollectionFactory,
           universalFragment,
           prerequisiteValidator,
-          skylarkAccessibleTopLevels,
+          skylarkAccessibleTopLevels.build(),
           skylarkModules.build(),
-          buildOptions,
-          registeredSkylarkProviders);
+          registeredSkylarkProviders.build());
     }
 
     @Override
@@ -300,6 +323,16 @@ public class ConfiguredRuleClassProvider implements RuleClassProvider {
     @Override
     public Label getToolsLabel(String labelValue) {
       return getLabel(toolsRepository + labelValue);
+    }
+
+    @Override
+    public String getToolsRepository() {
+      return toolsRepository;
+    }
+
+    @Nullable
+    public Map<String, String> getPlatformRegexps() {
+      return platformRegexps.isEmpty() ? null : ImmutableMap.copyOf(platformRegexps);
     }
   }
 
@@ -387,8 +420,6 @@ public class ConfiguredRuleClassProvider implements RuleClassProvider {
 
   private final Environment.Frame globals;
 
-  private final List<Class<? extends FragmentOptions>> buildOptions;
-  
   private final ImmutableBiMap<String, Class<? extends TransitiveInfoProvider>>
       registeredSkylarkProviders;
 
@@ -409,7 +440,6 @@ public class ConfiguredRuleClassProvider implements RuleClassProvider {
       PrerequisiteValidator prerequisiteValidator,
       ImmutableMap<String, Object> skylarkAccessibleJavaClasses,
       ImmutableList<Class<?>> skylarkModules,
-      List<Class<? extends FragmentOptions>> buildOptions,
       ImmutableBiMap<String, Class<? extends TransitiveInfoProvider>> registeredSkylarkProviders) {
     this.preludeLabel = preludeLabel;
     this.runfilesPrefix = runfilesPrefix;
@@ -426,7 +456,6 @@ public class ConfiguredRuleClassProvider implements RuleClassProvider {
     this.universalFragment = universalFragment;
     this.prerequisiteValidator = prerequisiteValidator;
     this.globals = createGlobals(skylarkAccessibleJavaClasses, skylarkModules);
-    this.buildOptions = buildOptions;
     this.registeredSkylarkProviders = registeredSkylarkProviders;
   }
 
@@ -522,10 +551,6 @@ public class ConfiguredRuleClassProvider implements RuleClassProvider {
         BuildOptions.of(configurationOptions, optionsProvider));
   }
 
-  public ImmutableList<Class<? extends FragmentOptions>> getOptionFragments() {
-    return ImmutableList.copyOf(buildOptions);
-  }
-
   /**
    * Returns a map that indicates which keys in structs returned by skylark rules should be
    * interpreted as native TransitiveInfoProvider instances of type (map value).
@@ -538,7 +563,7 @@ public class ConfiguredRuleClassProvider implements RuleClassProvider {
       getRegisteredSkylarkProviders() {
     return this.registeredSkylarkProviders;
   }
-  
+
   /**
    * Creates a BuildOptions class for the given options taken from an optionsProvider.
    */

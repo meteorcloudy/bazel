@@ -30,7 +30,6 @@ import com.google.devtools.common.options.Converters.StringSetConverter;
 import com.google.devtools.common.options.EnumConverter;
 import com.google.devtools.common.options.Option;
 import com.google.devtools.common.options.TriState;
-
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -79,9 +78,7 @@ public class JavaOptions extends FragmentOptions {
     }
   }
 
-  /**
-   * Converter for the --experimental_java_classpath option.
-   */
+  /** Converter for the --java_classpath option. */
   public static class JavaClasspathModeConverter extends EnumConverter<JavaClasspathMode> {
     public JavaClasspathModeConverter() {
       super(JavaClasspathMode.class, "Java classpath reduction strategy");
@@ -167,19 +164,21 @@ public class JavaOptions extends FragmentOptions {
   public boolean useSourceIjars;
 
   @Option(
-    name = "experimental_java_header_compilation",
+    name = "java_header_compilation",
     defaultValue = "false",
-    category = "undocumented",
-    help = "Experimental: compile ijars directly from source."
+    category = "semantics",
+    help = "Compile ijars directly from source.",
+    oldName = "experimental_java_header_compilation"
   )
   public boolean headerCompilation;
 
-  @Deprecated
-  @Option(name = "experimental_incremental_ijars",
-      defaultValue = "false",
-      category = "undocumented",
-      help = "No-op. Kept here for backwards compatibility.")
-  public boolean incrementalIjars;
+  @Option(
+    name = "experimental_optimize_header_compilation_annotation_processing",
+    defaultValue = "false",
+    category = "undocumented",
+    help = "Experimental: only run api-generating java_plugins during header compilation."
+  )
+  public boolean optimizeHeaderCompilationAnnotationProcessing;
 
   @Option(name = "java_deps",
       defaultValue = "true",
@@ -187,20 +186,16 @@ public class JavaOptions extends FragmentOptions {
       help = "Generate dependency information (for now, compile-time classpath) per Java target.")
   public boolean javaDeps;
 
-  @Option(name = "experimental_java_deps",
-      defaultValue = "false",
-      category = "experimental",
-      expansion = "--java_deps",
-      deprecationWarning = "Use --java_deps instead")
-  public boolean experimentalJavaDeps;
-
-  @Option(name = "experimental_java_classpath",
-      allowMultiple = false,
-      defaultValue = "javabuilder",
-      converter = JavaClasspathModeConverter.class,
-      category = "semantics",
-      help = "Enables reduced classpaths for Java compilations.")
-  public JavaClasspathMode experimentalJavaClasspath;
+  @Option(
+    name = "java_classpath",
+    allowMultiple = false,
+    defaultValue = "javabuilder",
+    converter = JavaClasspathModeConverter.class,
+    category = "semantics",
+    help = "Enables reduced classpaths for Java compilations.",
+    oldName = "experimental_java_classpath"
+  )
+  public JavaClasspathMode javaClasspath;
 
   @Option(name = "java_debug",
       defaultValue = "null",
@@ -352,12 +347,25 @@ public class JavaOptions extends FragmentOptions {
       help = "Use the legacy mode of Bazel for java_test.")
   public boolean legacyBazelJavaTest;
 
+  @Option(
+    name = "java_proto_library_deps_are_strict",
+    defaultValue = "false",
+    category = "undocumented",
+    help =
+        "This only applies to java_proto_library. "
+            + "If true: (1) if a Java file uses proto Foo, it must depend on a  "
+            + "java_{lite,...}_proto_library that directly depends on a proto_library that has Foo "
+            + "in its srcs. (2) strict-deps violations are reported for the proto_library rules "
+            + "themselves."
+  )
+  public boolean javaProtoLibraryDepsAreStrict;
+
   @Override
   public FragmentOptions getHost(boolean fallback) {
     JavaOptions host = (JavaOptions) getDefault();
 
     host.javaBase = hostJavaBase;
-    host.jvmOpts = ImmutableList.of("-client", "-XX:ErrorFile=/dev/stderr");
+    host.jvmOpts = ImmutableList.of("-XX:ErrorFile=/dev/stderr");
 
     host.javacOpts = javacOpts;
     host.javaToolchain = hostJavaToolchain;
@@ -369,7 +377,7 @@ public class JavaOptions extends FragmentOptions {
     host.useIjars = useIjars;
 
     host.javaDeps = javaDeps;
-    host.experimentalJavaClasspath = experimentalJavaClasspath;
+    host.javaClasspath = javaClasspath;
 
     return host;
   }

@@ -20,6 +20,7 @@ import com.google.devtools.build.lib.actions.Artifact;
 import com.google.devtools.build.lib.collect.nestedset.NestedSet;
 import com.google.devtools.build.lib.skylarkinterface.Param;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkModule;
+import com.google.devtools.build.lib.skylarkinterface.SkylarkModuleCategory;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkSignature;
 import com.google.devtools.build.lib.syntax.BuiltinFunction;
 import com.google.devtools.build.lib.syntax.Environment;
@@ -27,18 +28,20 @@ import com.google.devtools.build.lib.syntax.SkylarkList.MutableList;
 import com.google.devtools.build.lib.syntax.SkylarkNestedSet;
 import com.google.devtools.build.lib.syntax.SkylarkSignatureProcessor;
 
-/**
- * A Skylark module class to create memory efficient command lines.
- */
-@SkylarkModule(name = "cmd_helper", namespace = true,
-    doc = "Module for creating memory efficient command lines.")
+/** A Skylark module class to create memory efficient command lines. */
+@SkylarkModule(
+  name = "cmd_helper",
+  namespace = true,
+  category = SkylarkModuleCategory.BUILTIN,
+  doc = "Module for creating memory efficient command lines."
+)
 public class SkylarkCommandLine {
 
   @SkylarkSignature(name = "join_paths", objectType = SkylarkCommandLine.class,
       returnType = String.class,
       doc = "Creates a single command line argument joining the paths of a set "
           + "of files on the separator string.",
-      mandatoryPositionals = {
+      parameters = {
       @Param(name = "separator", type = String.class, doc = "the separator string to join on"),
       @Param(name = "files", type = SkylarkNestedSet.class, generic1 = Artifact.class,
              doc = "the files to concatenate")})
@@ -55,7 +58,7 @@ public class SkylarkCommandLine {
       doc = "Transforms a set of files to a list of strings using the template string.",
       objectType = SkylarkCommandLine.class,
       returnType = MutableList.class,
-      mandatoryPositionals = {
+      parameters = {
       @Param(name = "items", type = SkylarkNestedSet.class, generic1 = Artifact.class,
           doc = "The set of structs to transform."),
       @Param(name = "template", type = String.class,

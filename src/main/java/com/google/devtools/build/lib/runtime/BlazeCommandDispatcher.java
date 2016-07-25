@@ -33,6 +33,7 @@ import com.google.devtools.build.lib.events.Reporter;
 import com.google.devtools.build.lib.flags.InvocationPolicyEnforcer;
 import com.google.devtools.build.lib.util.AbruptExitException;
 import com.google.devtools.build.lib.util.AnsiStrippingOutputStream;
+import com.google.devtools.build.lib.util.BlazeClock;
 import com.google.devtools.build.lib.util.ExitCode;
 import com.google.devtools.build.lib.util.LoggingUtil;
 import com.google.devtools.build.lib.util.Pair;
@@ -45,7 +46,6 @@ import com.google.devtools.common.options.OpaqueOptionsData;
 import com.google.devtools.common.options.OptionPriority;
 import com.google.devtools.common.options.OptionsParser;
 import com.google.devtools.common.options.OptionsParsingException;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
@@ -57,7 +57,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.logging.Level;
-
 import javax.annotation.Nullable;
 
 /**
@@ -290,13 +289,20 @@ public class BlazeCommandDispatcher {
     }
 
 
+    long waitTimeInMs = 0;
     synchronized (commandLock) {
-      if (currentClientDescription != null) {
+      boolean warningPrinted = false;
+      while (currentClientDescription != null) {
         switch (lockingMode) {
           case WAIT:
-            outErr.printErrLn("Another command (" + currentClientDescription + ") is running. "
-                + " Waiting for it to complete...");
+            if (!warningPrinted) {
+              outErr.printErrLn("Another command (" + currentClientDescription + ") is running. "
+                  + " Waiting for it to complete...");
+              warningPrinted = true;
+            }
+            long clockBefore = BlazeClock.nanoTime();
             commandLock.wait();
+            waitTimeInMs = (BlazeClock.nanoTime() - clockBefore) / (1000L * 1000L);
             break;
 
           case ERROR_OUT:
@@ -313,7 +319,7 @@ public class BlazeCommandDispatcher {
     }
 
     try {
-      return execExclusively(args, outErr, firstContactTime, commandName, command);
+      return execExclusively(args, outErr, firstContactTime, commandName, command, waitTimeInMs);
     } finally {
       synchronized (commandLock) {
         currentClientDescription = null;
@@ -323,7 +329,8 @@ public class BlazeCommandDispatcher {
   }
 
   private int execExclusively(List<String> args, OutErr outErr, long firstContactTime,
-      String commandName, BlazeCommand command) throws ShutdownBlazeServerException {
+      String commandName, BlazeCommand command, long waitTimeInMs)
+      throws ShutdownBlazeServerException {
     Command commandAnnotation = command.getClass().getAnnotation(Command.class);
 
     // Record the start time for the profiler. Do not put anything before this!
@@ -462,7 +469,8 @@ public class BlazeCommandDispatcher {
 
       try {
         // Notify the BlazeRuntime, so it can do some initial setup.
-        env.beforeCommand(commandAnnotation, optionsParser, commonOptions, execStartTimeNanos);
+        env.beforeCommand(commandAnnotation, optionsParser, commonOptions, execStartTimeNanos,
+            waitTimeInMs);
         // Allow the command to edit options after parsing:
         command.editOptions(env, optionsParser);
       } catch (AbruptExitException e) {
@@ -483,13 +491,13 @@ public class BlazeCommandDispatcher {
       numericExitCode = e.getExitStatus();
       throw e;
     } catch (Throwable e) {
+      e.printStackTrace();
       BugReport.printBug(outErr, e);
       BugReport.sendBugReport(e, args, crashData);
-      numericExitCode = e instanceof OutOfMemoryError
-          ? ExitCode.OOM_ERROR.getNumericExitCode()
-          : ExitCode.BLAZE_INTERNAL_ERROR.getNumericExitCode();
+      numericExitCode = BugReport.getExitCodeForThrowable(e);
       throw new ShutdownBlazeServerException(numericExitCode, ShutdownMethod.CLEAN, e);
     } finally {
+      env.getEventBus().post(new AfterCommandEvent());
       runtime.afterCommand(env, numericExitCode);
       // Swallow IOException, as we are already in a finally clause
       Flushables.flushQuietly(outErr.getOutputStream());

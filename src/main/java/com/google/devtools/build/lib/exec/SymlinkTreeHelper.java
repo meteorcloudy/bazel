@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.google.devtools.build.lib.exec;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -43,8 +44,8 @@ import java.util.List;
  * Used to generate runfiles and fileset symlink farms.
  */
 public final class SymlinkTreeHelper {
-
-  private static final String BUILD_RUNFILES = "build-runfiles" + OsUtils.executableExtension();
+  @VisibleForTesting
+  public static final String BUILD_RUNFILES = "build-runfiles" + OsUtils.executableExtension();
 
   /**
    * These actions run faster overall when serialized, because most of their
@@ -89,7 +90,9 @@ public final class SymlinkTreeHelper {
    */
   public void createSymlinksUsingCommand(Path execRoot,
       BuildConfiguration config, BinTools binTools) throws CommandException {
-    List<String> argv = getSpawnArgumentList(execRoot, binTools, config.getShExecutable());
+    List<String> argv =
+        getSpawnArgumentList(
+            execRoot, binTools, config.getShExecutable(), config.runfilesEnabled());
 
     CommandBuilder builder = new CommandBuilder();
     builder.addArgs(argv);
@@ -105,19 +108,25 @@ public final class SymlinkTreeHelper {
    * block for undetermined period of time. If it is interrupted during
    * that wait, ExecException will be thrown but interrupted bit will be
    * preserved.
-   *  @param action action instance that requested symlink tree creation
+   * @param action action instance that requested symlink tree creation
    * @param actionExecutionContext Services that are in the scope of the action.
    * @param shExecutable
+   * @param enableRunfiles
    */
   public void createSymlinks(
       AbstractAction action,
       ActionExecutionContext actionExecutionContext,
       BinTools binTools,
       PathFragment shExecutable,
-      ImmutableMap<String, String> shellEnvironment)
+      ImmutableMap<String, String> shellEnvironment,
+      boolean enableRunfiles)
       throws ExecException, InterruptedException {
-    List<String> args = getSpawnArgumentList(
-        actionExecutionContext.getExecutor().getExecRoot(), binTools, shExecutable);
+    List<String> args =
+        getSpawnArgumentList(
+            actionExecutionContext.getExecutor().getExecRoot(),
+            binTools,
+            shExecutable,
+            enableRunfiles);
     try (ResourceHandle handle =
         ResourceManager.instance().acquireResources(action, RESOURCE_SET)) {
       actionExecutionContext.getExecutor().getSpawnActionContext(action.getMnemonic()).exec(
@@ -130,7 +139,7 @@ public final class SymlinkTreeHelper {
    * Returns the complete argument list build-runfiles has to be called with.
    */
   private List<String> getSpawnArgumentList(
-      Path execRoot, BinTools binTools, PathFragment shExecutable) {
+      Path execRoot, BinTools binTools, PathFragment shExecutable, boolean enableRunfiles) {
     PathFragment path = binTools.getExecPath(BUILD_RUNFILES);
     Preconditions.checkNotNull(path, BUILD_RUNFILES + " not found in embedded tools");
 
@@ -154,6 +163,10 @@ public final class SymlinkTreeHelper {
         || (fs instanceof UnixFileSystem
             && ((UnixFileSystem) fs).getSymlinkStrategy() == SymlinkStrategy.WINDOWS_COMPATIBLE)) {
       args.add("--windows_compatible");
+    }
+
+    if (!enableRunfiles) {
+      args.add("--manifest_only");
     }
 
     args.add(inputManifest.getPathString());

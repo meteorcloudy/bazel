@@ -15,18 +15,16 @@ package com.google.devtools.build.lib.analysis.mock;
 
 import com.google.common.base.Functions;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableList.Builder;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.io.ByteStreams;
 import com.google.devtools.build.lib.analysis.ConfigurationCollectionFactory;
+import com.google.devtools.build.lib.analysis.ConfiguredRuleClassProvider;
 import com.google.devtools.build.lib.analysis.config.ConfigurationFactory;
 import com.google.devtools.build.lib.analysis.util.AnalysisMock;
 import com.google.devtools.build.lib.bazel.rules.BazelConfiguration;
 import com.google.devtools.build.lib.bazel.rules.BazelConfigurationCollection;
 import com.google.devtools.build.lib.bazel.rules.BazelRuleClassProvider;
 import com.google.devtools.build.lib.bazel.rules.python.BazelPythonConfiguration;
-import com.google.devtools.build.lib.packages.Attribute;
-import com.google.devtools.build.lib.packages.RuleClass;
 import com.google.devtools.build.lib.packages.util.BazelMockCcSupport;
 import com.google.devtools.build.lib.packages.util.MockCcSupport;
 import com.google.devtools.build.lib.packages.util.MockToolsConfig;
@@ -53,7 +51,6 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
 
 public final class BazelAnalysisMock extends AnalysisMock {
   public static final AnalysisMock INSTANCE = new BazelAnalysisMock();
@@ -132,7 +129,10 @@ public final class BazelAnalysisMock extends AnalysisMock {
         "java_import(name = 'jarjar_import',",
         "            jars = [ 'jarjar.jar' ])");
 
-    config.create("/bazel_tools_workspace/tools/test/BUILD", "filegroup(name = 'runtime')");
+    config.create("/bazel_tools_workspace/tools/test/BUILD",
+        "filegroup(name = 'runtime')",
+        "filegroup(name = 'coverage_support')",
+        "filegroup(name = 'coverage_report_generator', srcs = ['coverage_report_generator.sh'])");
 
     config.create(
         "/bazel_tools_workspace/tools/python/BUILD",
@@ -143,11 +143,7 @@ public final class BazelAnalysisMock extends AnalysisMock {
   }
 
   private ImmutableList<String> createAndroidBuildContents() {
-    RuleClass androidSdkRuleClass =
-        TestRuleClassProvider.getRuleClassProvider().getRuleClassMap().get("android_sdk");
-
-    List<Attribute> attrs = androidSdkRuleClass.getAttributes();
-    Builder<String> androidBuildContents = ImmutableList.builder();
+    ImmutableList.Builder<String> androidBuildContents = ImmutableList.builder();
 
     BuildRuleWithDefaultsBuilder ruleBuilder =
         new BuildRuleWithDefaultsBuilder("android_sdk", "sdk")
@@ -161,6 +157,8 @@ public final class BazelAnalysisMock extends AnalysisMock {
         .add("sh_binary(name = 'aar_generator', srcs = ['empty.sh'])")
         .add("sh_binary(name = 'dexbuilder', srcs = ['empty.sh'])")
         .add("sh_binary(name = 'dexmerger', srcs = ['empty.sh'])")
+        .add("sh_binary(name = 'manifest_merger', srcs = ['empty.sh'])")
+        .add("sh_binary(name = 'rclass_generator', srcs = ['empty.sh'])")
         .add("sh_binary(name = 'resources_processor', srcs = ['empty.sh'])")
         .add("sh_binary(name = 'resource_shrinker', srcs = ['empty.sh'])")
         .add("android_library(name = 'incremental_stub_application')")
@@ -211,7 +209,7 @@ public final class BazelAnalysisMock extends AnalysisMock {
         new CppConfigurationLoader(Functions.<String>identity()),
         new PythonConfigurationLoader(Functions.<String>identity()),
         new BazelPythonConfiguration.Loader(),
-        new JvmConfigurationLoader(false, BazelRuleClassProvider.JAVA_CPU_SUPPLIER),
+        new JvmConfigurationLoader(BazelRuleClassProvider.JAVA_CPU_SUPPLIER),
         new JavaConfigurationLoader(),
         new ObjcConfigurationLoader(),
         new AppleConfiguration.Loader(),
@@ -220,18 +218,23 @@ public final class BazelAnalysisMock extends AnalysisMock {
   }
 
   @Override
-  public ConfigurationFactory createFullConfigurationFactory() {
-    return createConfigurationFactory();
-  }
-
-  @Override
   public ConfigurationCollectionFactory createConfigurationCollectionFactory() {
     return new BazelConfigurationCollection();
   }
 
   @Override
+  public ConfiguredRuleClassProvider createRuleClassProvider() {
+    return TestRuleClassProvider.getRuleClassProvider();
+  }
+
+  @Override
   public Collection<String> getOptionOverrides() {
     return ImmutableList.of();
+  }
+
+  @Override
+  public boolean isThisBazel() {
+    return true;
   }
 
   @Override

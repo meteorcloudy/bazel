@@ -13,8 +13,6 @@
 // limitations under the License.
 package com.google.devtools.build.lib.runtime;
 
-import com.google.common.base.Function;
-import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.devtools.build.lib.actions.ActionContextConsumer;
@@ -23,15 +21,11 @@ import com.google.devtools.build.lib.actions.ActionInputFileCache;
 import com.google.devtools.build.lib.analysis.BlazeDirectories;
 import com.google.devtools.build.lib.analysis.BlazeVersionInfo;
 import com.google.devtools.build.lib.analysis.ConfiguredRuleClassProvider;
-import com.google.devtools.build.lib.analysis.WorkspaceStatusAction;
 import com.google.devtools.build.lib.cmdline.Label;
 import com.google.devtools.build.lib.exec.OutputService;
-import com.google.devtools.build.lib.packages.AttributeContainer;
 import com.google.devtools.build.lib.packages.NoSuchThingException;
 import com.google.devtools.build.lib.packages.Package;
 import com.google.devtools.build.lib.packages.PackageFactory;
-import com.google.devtools.build.lib.packages.Preprocessor;
-import com.google.devtools.build.lib.packages.RuleClass;
 import com.google.devtools.build.lib.packages.RuleClassProvider;
 import com.google.devtools.build.lib.query2.AbstractBlazeQueryEnvironment;
 import com.google.devtools.build.lib.query2.QueryEnvironmentFactory;
@@ -39,19 +33,11 @@ import com.google.devtools.build.lib.query2.engine.QueryEnvironment.QueryFunctio
 import com.google.devtools.build.lib.query2.output.OutputFormatter;
 import com.google.devtools.build.lib.rules.test.CoverageReportActionFactory;
 import com.google.devtools.build.lib.runtime.commands.InfoItem;
-import com.google.devtools.build.lib.runtime.proto.InvocationPolicyOuterClass.InvocationPolicy;
-import com.google.devtools.build.lib.skyframe.DiffAwareness;
-import com.google.devtools.build.lib.skyframe.PrecomputedValue.Injected;
-import com.google.devtools.build.lib.skyframe.SkyValueDirtinessChecker;
-import com.google.devtools.build.lib.skyframe.SkyframeExecutor;
-import com.google.devtools.build.lib.skyframe.SkyframeExecutorFactory;
 import com.google.devtools.build.lib.util.AbruptExitException;
 import com.google.devtools.build.lib.util.Clock;
 import com.google.devtools.build.lib.vfs.FileSystem;
 import com.google.devtools.build.lib.vfs.Path;
 import com.google.devtools.build.lib.vfs.PathFragment;
-import com.google.devtools.build.skyframe.SkyFunction;
-import com.google.devtools.build.skyframe.SkyFunctionName;
 import com.google.devtools.common.options.OptionsBase;
 import com.google.devtools.common.options.OptionsProvider;
 
@@ -110,18 +96,18 @@ public abstract class BlazeModule {
   }
 
   /**
-   * May yield a supplier that provides factories for the Preprocessor to apply. Only one of the
-   * configured modules may return non-null.
+   * Called to initialize a new server ({@link BlazeRuntime}). Modules can override this method to
+   * affect how the server is configured. This is called after the startup options have been
+   * collected and parsed, and after the file system was setup.
    *
-   * <p>The factory yielded by the supplier will be checked with
-   * {@link Preprocessor.Factory#isStillValid} at the beginning of each incremental build. This
-   * allows modules to have preprocessors customizable by flags.
-   *
-   * <p>This method will be called during Blaze startup (after #blazeStartup).
+   * @param startupOptions the server startup options
+   * @param builder builder class that collects the server configuration
    */
-  public Preprocessor.Factory.Supplier getPreprocessorFactorySupplier() {
-    return null;
-  }
+  public void serverInit(OptionsProvider startupOptions, ServerBuilder builder) {}
+
+  /** Called when Blaze initializes a new workspace. */
+  @SuppressWarnings("unused")
+  public void workspaceInit(BlazeDirectories directories, WorkspaceBuilder builder) {}
 
   /**
    * Adds the rule classes supported by this module.
@@ -133,69 +119,12 @@ public abstract class BlazeModule {
   }
 
   /**
-   * Returns the list of commands this module contributes to Blaze.
-   *
-   * <p>This method will be called during Blaze startup (after #blazeStartup).
-   */
-  public Iterable<? extends BlazeCommand> getCommands() {
-    return ImmutableList.of();
-  }
-
-  /**
    * Returns the list of query output formatters this module provides.
    *
    * <p>This method will be called during Blaze startup (after #blazeStartup).
    */
   public Iterable<OutputFormatter> getQueryOutputFormatters() {
     return ImmutableList.of();
-  }
-
-  /**
-   * Returns the {@link DiffAwareness} strategies this module contributes. These will be used to
-   * determine which files, if any, changed between Blaze commands.
-   *
-   * <p>This method will be called during Blaze startup (after #blazeStartup).
-   */
-  @SuppressWarnings("unused")
-  public Iterable<? extends DiffAwareness.Factory> getDiffAwarenessFactories(boolean watchFS) {
-    return ImmutableList.of();
-  }
-
-  /**
-   * Returns the workspace status action factory contributed by this module.
-   *
-   * <p>There should always be exactly one of these in a Blaze instance.
-   */
-  public WorkspaceStatusAction.Factory getWorkspaceStatusActionFactory() {
-    return null;
-  }
-
-  /**
-   * PlatformSet is a group of platforms characterized by a regular expression.  For example, the
-   * entry "oldlinux": "i[34]86-libc[345]-linux" might define a set of platforms representing
-   * certain older linux releases.
-   *
-   * <p>Platform-set names are used in BUILD files in the third argument to <tt>vardef</tt>, to
-   * define per-platform tweaks to variables such as CFLAGS.
-   *
-   * <p>vardef is a legacy mechanism: it needs explicit support in the rule implementations,
-   * and cannot express conditional dependencies, only conditional attribute values. This
-   * mechanism will be supplanted by configuration dependent attributes, and its effect can
-   * usually also be achieved with select().
-   *
-   * <p>This method will be called during Blaze startup (after #blazeStartup).
-   */
-  public Map<String, String> getPlatformSetRegexps() {
-    return ImmutableMap.<String, String>of();
-  }
-
-  public Iterable<SkyValueDirtinessChecker> getCustomDirtinessCheckers() {
-    return ImmutableList.of();
-  }
-
-  @Nullable
-  protected Function<RuleClass, AttributeContainer> getAttributeContainerSupplier() {
-    return null;
   }
 
   /**
@@ -245,12 +174,37 @@ public abstract class BlazeModule {
   }
 
   /**
-   * Returns the extra options this module contributes to a specific command.
+   * Returns extra options this module contributes to a specific command. Note that option
+   * inheritance applies: if this method returns a non-empty list, then the returned options are
+   * added to every command that depends on this command.
    *
-   * <p>This method will be called at the beginning of each command (after #beforeCommand).
+   * <p>This method may be called at any time, and the returned value may be cached. Implementations
+   * must be thread-safe and never return different lists for the same command object. Typical
+   * implementations look like this:
+   * <pre>
+   * return "build".equals(command.name())
+   *     ? ImmutableList.<Class<? extends OptionsBase>>of(MyOptions.class)
+   *     : ImmutableList.<Class<? extends OptionsBase>>of();
+   * </pre>
+   * Note that this example adds options to all commands that inherit from the build command.
+   *
+   * <p>This method is also used to generate command-line documentation; in order to avoid
+   * duplicated options descriptions, this method should never return the same options class for two
+   * different commands if one of them inherits the other.
+   *
+   * <p>If you want to add options to all commands, override {@link #getCommonCommandOptions}
+   * instead.
+   *
+   * @param command the command
    */
-  @SuppressWarnings("unused")
   public Iterable<Class<? extends OptionsBase>> getCommandOptions(Command command) {
+    return ImmutableList.of();
+  }
+
+  /**
+   * Returns extra options this module contributes to all commands.
+   */
+  public Iterable<Class<? extends OptionsBase>> getCommonCommandOptions() {
     return ImmutableList.of();
   }
 
@@ -316,13 +270,6 @@ public abstract class BlazeModule {
   }
 
   /**
-   * Action inputs are allowed to be missing for all inputs where this predicate returns true.
-   */
-  public Predicate<PathFragment> getAllowedMissingInputs() {
-    return null;
-  }
-
-  /**
    * Perform module specific check of current command environment.
    */
   public void checkEnvironment(CommandEnvironment env) {
@@ -363,47 +310,6 @@ public abstract class BlazeModule {
   }
 
   /**
-   * Returns a factory for creating {@link SkyframeExecutor} objects. If the module does not
-   * provide any SkyframeExecutorFactory, it returns null. Note that only one factory per
-   * Bazel/Blaze runtime is allowed.
-   *
-   * @param directories the workspace directories
-   */
-  public SkyframeExecutorFactory getSkyframeExecutorFactory(BlazeDirectories directories) {
-    return null;
-  }
-
-  /** Returns a map of "extra" SkyFunctions for SkyValues that this module may want to build. */
-  public ImmutableMap<SkyFunctionName, SkyFunction> getSkyFunctions(BlazeDirectories directories) {
-    return ImmutableMap.of();
-  }
-
-  /**
-   * Returns the extra precomputed values that the module makes available in Skyframe.
-   *
-   * <p>This method is called once per Blaze instance at the very beginning of its life.
-   * If it creates the injected values by using a {@code com.google.common.base.Supplier},
-   * that supplier is asked for the value it contains just before the loading phase begins. This
-   * functionality can be used to implement precomputed values that are not constant during the
-   * lifetime of a Blaze instance (naturally, they must be constant over the course of a build)
-   *
-   * <p>The following things must be done in order to define a new precomputed values:
-   * <ul>
-   * <li> Create a public static final variable of type
-   * {@link com.google.devtools.build.lib.skyframe.PrecomputedValue.Precomputed}
-   * <li> Set its value by adding an {@link Injected} in this method (it can be created using the
-   * aforementioned variable and the value or a supplier of the value)
-   * <li> Reference the value in Skyframe functions by calling get {@code get} method on the
-   * {@link com.google.devtools.build.lib.skyframe.PrecomputedValue.Precomputed} variable. This
-   * will never return null, because its value will have been injected before most of the Skyframe
-   * values are computed.
-   * </ul>
-   */
-  public Iterable<Injected> getPrecomputedSkyframeValues() {
-    return ImmutableList.of();
-  }
-
-  /**
    * Optionally returns a provider for project files that can be used to bundle targets and
    * command-line options.
    */
@@ -417,14 +323,6 @@ public abstract class BlazeModule {
    */
   @Nullable
   public CoverageReportActionFactory getCoverageReportFactory() {
-    return null;
-  }
-
-  /**
-   * Optionally returns the invocation policy to override options in blaze.
-   */
-  @Nullable
-  public InvocationPolicy getInvocationPolicy() {
     return null;
   }
 }

@@ -53,6 +53,7 @@ import com.google.devtools.build.lib.packages.Target;
 import com.google.devtools.build.lib.rules.test.TestActionBuilder;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkCallable;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkModule;
+import com.google.devtools.build.lib.skylarkinterface.SkylarkModuleCategory;
 import com.google.devtools.build.lib.util.CPU;
 import com.google.devtools.build.lib.util.Fingerprint;
 import com.google.devtools.build.lib.util.OS;
@@ -60,8 +61,6 @@ import com.google.devtools.build.lib.util.Preconditions;
 import com.google.devtools.build.lib.util.RegexFilter;
 import com.google.devtools.build.lib.vfs.Path;
 import com.google.devtools.build.lib.vfs.PathFragment;
-import com.google.devtools.build.skyframe.SkyFunction;
-import com.google.devtools.build.skyframe.SkyFunction.Environment;
 import com.google.devtools.common.options.Converter;
 import com.google.devtools.common.options.Converters;
 import com.google.devtools.common.options.EnumConverter;
@@ -110,10 +109,10 @@ import javax.annotation.Nullable;
  * <pre>c1.equals(c2) <=> c1==c2.</pre>
  */
 @SkylarkModule(name = "configuration",
+    category = SkylarkModuleCategory.BUILTIN,
     doc = "Data required for the analysis of a target that comes from targets that "
         + "depend on it and not targets that it depends on.")
 public final class BuildConfiguration {
-
   /**
    * An interface for language-specific configurations.
    *
@@ -167,13 +166,6 @@ public final class BuildConfiguration {
     }
 
     /**
-     * Adds all the roots from this fragment.
-     */
-    @SuppressWarnings("unused")
-    public void addRoots(List<Root> roots) {
-    }
-
-    /**
      * Returns a (key, value) mapping to insert into the subcommand environment for coverage.
      */
     public Map<String, String> getCoverageEnvironment() {
@@ -185,27 +177,6 @@ public final class BuildConfiguration {
      */
     public ImmutableMap<String, String> getCommandLineDefines() {
       return ImmutableMap.of();
-    }
-
-    /**
-     * Returns the labels required to run coverage for the fragment.
-     */
-    public ImmutableList<Label> getCoverageLabels() {
-      return ImmutableList.of();
-    }
-
-    /**
-     * Returns all labels required to run gcov, if provided by this fragment.
-     */
-    public ImmutableList<Label> getGcovLabels() {
-      return ImmutableList.of();
-    }
-
-    /**
-     * Returns the coverage report generator tool labels.
-     */
-    public ImmutableList<Label> getCoverageReportGeneratorLabels() {
-      return ImmutableList.of();
     }
 
     /**
@@ -254,14 +225,6 @@ public final class BuildConfiguration {
      */
     public Map<String, Object> lateBoundOptionDefaults() {
       return ImmutableMap.of();
-    }
-
-    /**
-     * Declares dependencies on any relevant Skyframe values (for example, relevant FileValues).
-     *
-     * @param env the skyframe environment
-     */
-    public void declareSkyframeDependencies(Environment env) {
     }
 
     /**
@@ -453,8 +416,10 @@ public final class BuildConfiguration {
             switch (CPU.getCurrent()) {
               case X86_64:
                 return "x64_windows";
+              default:
+                // We only support x64 Windows for now.
+                return "unknown";
             }
-            break; // We only support x64 Windows for now.
           case LINUX:
             switch (CPU.getCurrent()) {
               case X86_32:
@@ -465,9 +430,12 @@ public final class BuildConfiguration {
                 return "ppc";
               case ARM:
                 return "arm";
+              default:
+                return "unknown";
             }
+          default:
+            return "unknown";
         }
-        return "unknown";
       }
       return input;
     }
@@ -559,7 +527,7 @@ public final class BuildConfiguration {
     public boolean stampBinaries;
 
     // TODO(bazel-team): delete from OSS tree
-    // This value is always overwritten in the case of "blaze coverage" by :
+    // This default value is always overwritten in the case of "blaze coverage" by
     // CoverageCommand.setDefaultInstrumentationFilter()
     @Option(name = "instrumentation_filter",
         converter = RegexFilter.RegexFilterConverter.class,
@@ -570,6 +538,15 @@ public final class BuildConfiguration {
             + "with '-' are excluded instead. By default, rules containing "
             + "'javatests' or ending with '_test' will not be instrumented.")
     public RegexFilter instrumentationFilter;
+
+    @Option(name = "instrument_test_targets",
+        defaultValue = "true",
+        category = "semantics",
+        help = "When coverage is enabled, specifies whether to consider instrumenting test rules. "
+            + "When true (the default), test rules included by --instrumentation_filter are "
+            + "instrumented. When false, test rules are always excluded from coverage "
+            + "instrumentation.")
+    public boolean instrumentTestTargets;
 
     @Option(name = "show_cached_analysis_results",
         defaultValue = "true",
@@ -649,6 +626,23 @@ public final class BuildConfiguration {
             + "instead."
         )
     public boolean collectMicroCoverage;
+
+    @Option(name = "coverage_support",
+        converter = LabelConverter.class,
+        defaultValue = "@bazel_tools//tools/test:coverage_support",
+        category = "testing",
+        help = "Location of support files that are required on the inputs of every test action "
+            + "that collects code coverage. Defaults to '//tools/test:coverage_support'.")
+    public Label coverageSupport;
+
+    @Option(name = "coverage_report_generator",
+        converter = LabelConverter.class,
+        defaultValue = "@bazel_tools//tools/test:coverage_report_generator",
+        category = "testing",
+        help = "Location of the binary that is used to generate coverage reports. This must "
+            + "currently be a filegroup that contains a single file, the binary. Defaults to "
+            + "'//tools/test:coverage_report_generator'.")
+    public Label coverageReportGenerator;
 
     @Option(name = "cache_test_results",
         defaultValue = "auto",
@@ -863,6 +857,14 @@ public final class BuildConfiguration {
             + "static globally defined ones")
     public boolean useDynamicConfigurations;
 
+    @Option(
+      name = "experimental_enable_runfiles",
+      defaultValue = "auto",
+      category = "undocumented",
+      help = "Enable runfiles; off on Windows, on on other platforms"
+    )
+    public TriState enableRunfiles;
+
     @Override
     public FragmentOptions getHost(boolean fallback) {
       Options host = (Options) getDefault();
@@ -917,6 +919,12 @@ public final class BuildConfiguration {
       if ((runUnder != null) && (runUnder.getLabel() != null)) {
         labelMap.put("RunUnder", runUnder.getLabel());
       }
+    }
+    @Override
+    public Map<String, Set<Label>> getDefaultsLabels(BuildConfiguration.Options commonOptions) {
+      return ImmutableMap.<String, Set<Label>>of(
+          "coverage_support", ImmutableSet.of(coverageSupport),
+          "coverage_report_generator", ImmutableSet.of(coverageReportGenerator));
     }
   }
 
@@ -1025,10 +1033,6 @@ public final class BuildConfiguration {
 
   /** If false, AnalysisEnviroment doesn't register any actions created by the ConfiguredTarget. */
   private final boolean actionsEnabled;
-
-  private final ImmutableSet<Label> coverageLabels;
-  private final ImmutableSet<Label> coverageReportGeneratorLabels;
-  private final ImmutableSet<Label> gcovLabels;
 
   // TODO(bazel-team): Move this to a configuration fragment.
   private final PathFragment shExecutable;
@@ -1219,18 +1223,6 @@ public final class BuildConfiguration {
     this.outputRoots = outputRoots != null
         ? outputRoots
         : new OutputRoots(directories, outputDirName);
-
-    ImmutableSet.Builder<Label> coverageLabelsBuilder = ImmutableSet.builder();
-    ImmutableSet.Builder<Label> coverageReportGeneratorLabelsBuilder = ImmutableSet.builder();
-    ImmutableSet.Builder<Label> gcovLabelsBuilder = ImmutableSet.builder();
-    for (Fragment fragment : fragments.values()) {
-      coverageLabelsBuilder.addAll(fragment.getCoverageLabels());
-      coverageReportGeneratorLabelsBuilder.addAll(fragment.getCoverageReportGeneratorLabels());
-      gcovLabelsBuilder.addAll(fragment.getGcovLabels());
-    }
-    this.coverageLabels = coverageLabelsBuilder.build();
-    this.coverageReportGeneratorLabels = coverageReportGeneratorLabelsBuilder.build();
-    this.gcovLabels = gcovLabelsBuilder.build();
 
     this.localShellEnvironment = setupShellEnvironment();
 
@@ -2045,24 +2037,12 @@ public final class BuildConfiguration {
   }
 
   /**
-   * Returns the set of labels for coverage.
+   * Returns a boolean of whether to include targets created by *_test rules in the set of targets
+   * matched by --instrumentation_filter. If this is false, all test targets are excluded from
+   * instrumentation.
    */
-  public Set<Label> getCoverageLabels() {
-    return coverageLabels;
-  }
-
-  /**
-   * Returns the set of labels for gcov.
-   */
-  public Set<Label> getGcovLabels() {
-    return gcovLabels;
-  }
-
-  /**
-   * Returns the set of labels for the coverage report generator.
-   */
-  public Set<Label> getCoverageReportGeneratorLabels() {
-    return coverageReportGeneratorLabels;
+  public boolean shouldInstrumentTestTargets() {
+    return options.instrumentTestTargets;
   }
 
   /**
@@ -2326,15 +2306,6 @@ public final class BuildConfiguration {
   }
 
   /**
-   * Declares dependencies on any relevant Skyframe values (for example, relevant FileValues).
-   */
-  public void declareSkyframeDependencies(SkyFunction.Environment env) {
-    for (Fragment fragment : fragments.values()) {
-      fragment.declareSkyframeDependencies(env);
-    }
-  }
-
-  /**
    * Returns all the roots for this configuration.
    */
   public List<Root> getRoots() {
@@ -2347,11 +2318,6 @@ public final class BuildConfiguration {
     roots.add(getMiddlemanDirectory());
     roots.add(getTestLogsDirectory());
 
-    // Fragment-defined roots
-    for (Fragment fragment : fragments.values()) {
-      fragment.addRoots(roots);
-    }
-
     return ImmutableList.copyOf(roots);
   }
 
@@ -2361,6 +2327,17 @@ public final class BuildConfiguration {
 
   public String getCpu() {
     return options.cpu;
+  }
+
+  public boolean runfilesEnabled() {
+    switch (options.enableRunfiles) {
+      case YES:
+        return true;
+      case NO:
+        return false;
+      default:
+        return OS.getCurrent() != OS.WINDOWS;
+    }
   }
 
   /**

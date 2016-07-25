@@ -15,22 +15,6 @@ package com.google.devtools.build.android;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-import com.google.common.base.Function;
-import com.google.common.base.Joiner;
-import com.google.common.base.Strings;
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Multimap;
-import com.google.devtools.build.android.Converters.ExistingPathConverter;
-import com.google.devtools.build.android.Converters.FullRevisionConverter;
-import com.google.devtools.common.options.Converters.ColonSeparatedOptionListConverter;
-import com.google.devtools.common.options.Converters.CommaSeparatedOptionListConverter;
-import com.google.devtools.common.options.Option;
-import com.google.devtools.common.options.OptionsBase;
-import com.google.devtools.common.options.TriState;
-
 import com.android.annotations.Nullable;
 import com.android.builder.core.VariantConfiguration;
 import com.android.builder.dependency.SymbolFileProvider;
@@ -41,13 +25,7 @@ import com.android.ide.common.internal.CommandLineRunner;
 import com.android.ide.common.internal.ExecutorSingleton;
 import com.android.ide.common.internal.LoggedErrorException;
 import com.android.ide.common.internal.PngCruncher;
-import com.android.ide.common.res2.AssetMerger;
-import com.android.ide.common.res2.AssetSet;
-import com.android.ide.common.res2.MergedAssetWriter;
-import com.android.ide.common.res2.MergedResourceWriter;
 import com.android.ide.common.res2.MergingException;
-import com.android.ide.common.res2.ResourceMerger;
-import com.android.ide.common.res2.ResourceSet;
 import com.android.manifmerger.ManifestMerger2;
 import com.android.manifmerger.ManifestMerger2.Invoker;
 import com.android.manifmerger.ManifestMerger2.Invoker.Feature;
@@ -58,14 +36,38 @@ import com.android.manifmerger.MergingReport;
 import com.android.manifmerger.PlaceholderHandler;
 import com.android.manifmerger.XmlDocument;
 import com.android.sdklib.repository.FullRevision;
+import com.android.utils.Pair;
 import com.android.utils.StdLogger;
-
-import org.xml.sax.SAXException;
-
+import com.google.common.base.Function;
+import com.google.common.base.Joiner;
+import com.google.common.base.Stopwatch;
+import com.google.common.base.Strings;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
+import com.google.devtools.build.android.Converters.ExistingPathConverter;
+import com.google.devtools.build.android.Converters.FullRevisionConverter;
+import com.google.devtools.build.android.SplitConfigurationFilter.UnrecognizedSplitsException;
+import com.google.devtools.build.android.resources.RClassGenerator;
+import com.google.devtools.common.options.Converters.CommaSeparatedOptionListConverter;
+import com.google.devtools.common.options.Option;
+import com.google.devtools.common.options.OptionsBase;
+import com.google.devtools.common.options.TriState;
 import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -79,13 +81,21 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.jar.Attributes;
+import java.util.jar.JarFile;
+import java.util.jar.Manifest;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
-
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.stream.FactoryConfigurationError;
 import javax.xml.stream.XMLEventFactory;
@@ -97,11 +107,14 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.events.Attribute;
 import javax.xml.stream.events.StartElement;
 import javax.xml.stream.events.XMLEvent;
+import org.xml.sax.SAXException;
 
 /**
  * Provides a wrapper around the AOSP build tools for resource processing.
  */
 public class AndroidResourceProcessor {
+  private static final Logger logger = Logger.getLogger(AndroidResourceProcessor.class.getName());
+
   /**
    * Options class containing flags for Aapt setup.
    */
@@ -171,12 +184,28 @@ public class AndroidResourceProcessor {
         help = "A list of resource config filters to pass to aapt.")
     public List<String> resourceConfigs;
 
-    @Option(name = "splits",
-        defaultValue = "",
-        converter = ColonSeparatedOptionListConverter.class,
-        category = "config",
-        help = "A list of splits to pass to aapt, separated by colons."
-            + " Each split is a list of qualifiers separated by commas.")
+    private static final String ANDROID_SPLIT_DOCUMENTATION_URL =
+        "https://developer.android.com/guide/topics/resources/providing-resources.html"
+        + "#QualifierRules";
+
+    @Option(
+      name = "split",
+      defaultValue = "required but ignored due to allowMultiple",
+      category = "config",
+      allowMultiple = true,
+      help =
+          "An individual split configuration to pass to aapt."
+              + " Each split is a list of configuration filters separated by commas."
+              + " Configuration filters are lists of configuration qualifiers separated by dashes,"
+              + " as used in resource directory names and described on the Android developer site: "
+              + ANDROID_SPLIT_DOCUMENTATION_URL
+              + " For example, a split might be 'en-television,en-xxhdpi', containing English"
+              + " assets which either are for TV screens or are extra extra high resolution."
+              + " Multiple splits can be specified by passing this flag multiple times."
+              + " Each split flag will produce an additional output file, named by replacing the"
+              + " commas in the split specification with underscores, and appending the result to"
+              + " the output package name following an underscore."
+    )
     public List<String> splits;
   }
 
@@ -217,9 +246,31 @@ public class AndroidResourceProcessor {
     }
   }
 
+  /** Shutdowns and verifies that no tasks are running in the executor service. */
+  private static final class ExecutorServiceCloser implements Closeable {
+    private final ListeningExecutorService executorService;
+    private ExecutorServiceCloser(ListeningExecutorService executorService) {
+      this.executorService = executorService;
+    }
+
+    @Override
+    public void close() throws IOException {
+      List<Runnable> unfinishedTasks = executorService.shutdownNow();
+      if (!unfinishedTasks.isEmpty()) {
+        throw new IOException(
+            "Shutting down the executor with unfinished tasks:" + unfinishedTasks);
+      }
+    }
+
+    public static Closeable createWith(ListeningExecutorService executorService) {
+      return new ExecutorServiceCloser(executorService);
+    }
+  }
+
   private static final ImmutableMap<SystemProperty, String> SYSTEM_PROPERTY_NAMES = Maps.toMap(
       Arrays.asList(SystemProperty.values()), new Function<SystemProperty, String>() {
-        @Override public String apply(SystemProperty property) {
+        @Override
+        public String apply(SystemProperty property) {
           if (property == SystemProperty.PACKAGE) {
             return "applicationId";
           } else {
@@ -237,6 +288,7 @@ public class AndroidResourceProcessor {
 
   /**
    * Copies the R.txt to the expected place.
+   *
    * @param generatedSourceRoot The path to the generated R.txt.
    * @param rOutput The Path to write the R.txt.
    * @param staticIds Boolean that indicates if the ids should be set to 0x1 for caching purposes.
@@ -247,8 +299,10 @@ public class AndroidResourceProcessor {
       final Path source = generatedSourceRoot.resolve("R.txt");
       if (Files.exists(source)) {
         if (staticIds) {
-          String contents = HEX_REGEX.matcher(Joiner.on("\n").join(
-              Files.readAllLines(source, UTF_8))).replaceAll("0x1");
+          String contents =
+              HEX_REGEX
+                  .matcher(Joiner.on("\n").join(Files.readAllLines(source, UTF_8)))
+                  .replaceAll("0x1");
           Files.write(rOutput, contents.getBytes(UTF_8));
         } else {
           Files.copy(source, rOutput);
@@ -273,8 +327,9 @@ public class AndroidResourceProcessor {
       Files.createDirectories(srcJar.getParent());
       try (final ZipOutputStream zip = new ZipOutputStream(
           new BufferedOutputStream(Files.newOutputStream(srcJar)))) {
-        Files.walkFileTree(generatedSourcesRoot,
-            new SymbolFileSrcJarBuildingVisitor(zip, generatedSourcesRoot, staticIds));
+        SymbolFileSrcJarBuildingVisitor visitor =
+            new SymbolFileSrcJarBuildingVisitor(zip, generatedSourcesRoot, staticIds);
+        Files.walkFileTree(generatedSourcesRoot, visitor);
       }
       // Set to the epoch for caching purposes.
       Files.setLastModifiedTime(srcJar, FileTime.fromMillis(0L));
@@ -284,10 +339,29 @@ public class AndroidResourceProcessor {
   }
 
   /**
+   * Creates a zip archive from all found R.class (and inner class) files.
+   */
+  public void createClassJar(Path generatedClassesRoot, Path classJar) {
+    try {
+      Files.createDirectories(classJar.getParent());
+      try (final ZipOutputStream zip = new ZipOutputStream(
+          new BufferedOutputStream(Files.newOutputStream(classJar)))) {
+        ClassJarBuildingVisitor visitor = new ClassJarBuildingVisitor(zip, generatedClassesRoot);
+        Files.walkFileTree(generatedClassesRoot, visitor);
+        visitor.writeManifestContent();
+      }
+      // Set to the epoch for caching purposes.
+      Files.setLastModifiedTime(classJar, FileTime.fromMillis(0L));
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  /**
    * Copies the AndroidManifest.xml to the specified output location.
    *
    * @param androidData The MergedAndroidData which contains the manifest to be written to
-   *     manifestOut.
+   *    manifestOut.
    * @param manifestOut The Path to write the AndroidManifest.xml.
    */
   public void copyManifestToOutput(MergedAndroidData androidData, Path manifestOut) {
@@ -323,9 +397,7 @@ public class AndroidResourceProcessor {
   }
 
   // TODO(bazel-team): Clean up this method call -- 13 params is too many.
-  /**
-   * Processes resources for generated sources, configs and packaging resources.
-   */
+  /** Processes resources for generated sources, configs and packaging resources. */
   public void processResources(
       Path aapt,
       Path androidJar,
@@ -343,16 +415,10 @@ public class AndroidResourceProcessor {
       Path proguardOut,
       Path mainDexProguardOut,
       Path publicResourcesOut)
-      throws IOException, InterruptedException, LoggedErrorException {
-    List<SymbolFileProvider> libraries = new ArrayList<>();
-    for (DependencyAndroidData dataDep : dependencyData) {
-      SymbolFileProvider library = dataDep.asSymbolFileProvider();
-      libraries.add(library);
-    }
-
+      throws IOException, InterruptedException, LoggedErrorException, UnrecognizedSplitsException {
     Path androidManifest = primaryData.getManifest();
-    Path resourceDir = primaryData.getResourceDir();
-    Path assetsDir = primaryData.getAssetDir();
+    final Path resourceDir = primaryData.getResourceDir();
+    final Path assetsDir = primaryData.getAssetDir();
     if (publicResourcesOut != null) {
       prepareOutputPath(publicResourcesOut.getParent());
     }
@@ -401,14 +467,20 @@ public class AndroidResourceProcessor {
         .add("-c", Joiner.on(',').join(resourceConfigs))
         // Split APKs if any splits were specified.
         .whenVersionIsAtLeast(new FullRevision(23)).thenAddRepeated("--split", splits);
-
-    new CommandLineRunner(stdLogger).runCmdLine(commandBuilder.build(), null);
+    try {
+      new CommandLineRunner(stdLogger).runCmdLine(commandBuilder.build(), null);
+    } catch (LoggedErrorException e) {
+      // Add context and throw the error to resume processing.
+      throw new LoggedErrorException(
+          e.getCmdLineError(), getOutputWithSourceContext(aapt, e.getOutput()), e.getCmdLine());
+    }
 
     // The R needs to be created for each library in the dependencies,
     // but only if the current project is not a library.
-    writeDependencyPackageRs(variantType, customPackageForR, libraries, androidManifest.toFile(),
-        sourceOut);
-
+    if (sourceOut != null && variantType != VariantConfiguration.Type.LIBRARY) {
+      writeDependencyPackageRJavaFiles(
+          dependencyData, customPackageForR, androidManifest, sourceOut);
+    }
     // Reset the output date stamps.
     if (proguardOut != null) {
       Files.setLastModifiedTime(proguardOut, FileTime.fromMillis(0L));
@@ -418,65 +490,242 @@ public class AndroidResourceProcessor {
     }
     if (packageOut != null) {
       Files.setLastModifiedTime(packageOut, FileTime.fromMillis(0L));
+      if (!splits.isEmpty()) {
+        Iterable<Path> splitFilenames = findAndRenameSplitPackages(packageOut, splits);
+        for (Path splitFilename : splitFilenames) {
+          Files.setLastModifiedTime(splitFilename, FileTime.fromMillis(0L));
+        }
+      }
     }
     if (publicResourcesOut != null && Files.exists(publicResourcesOut)) {
       Files.setLastModifiedTime(publicResourcesOut, FileTime.fromMillis(0L));
     }
   }
 
-  private void writeDependencyPackageRs(VariantConfiguration.Type variantType,
-      String customPackageForR, List<SymbolFileProvider> libraries, File androidManifest,
-      Path sourceOut) throws IOException {
-    if (sourceOut != null && variantType != VariantConfiguration.Type.LIBRARY
-        && !libraries.isEmpty()) {
-      SymbolLoader fullSymbolValues = null;
-
-      String appPackageName = customPackageForR;
-      if (appPackageName == null) {
-        appPackageName = VariantConfiguration.getManifestPackage(androidManifest);
+  /** Adds 10 lines of source to each syntax error. Very useful for debugging. */
+  private List<String> getOutputWithSourceContext(Path aapt, List<String> lines)
+      throws IOException {
+    List<String> outputWithSourceContext = new ArrayList<>();
+    for (String line : lines) {
+      if (line.contains("Duplicate file") || line.contains("Original")) {
+        String[] parts = line.split(":");
+        String fileName = parts[0].trim();
+        outputWithSourceContext.add("\n" + fileName + ":\n\t");
+        outputWithSourceContext.add(
+            Joiner.on("\n\t")
+                .join(
+                    Files.readAllLines(
+                        aapt.getFileSystem().getPath(fileName), StandardCharsets.UTF_8)));
+      } else if (line.contains("error")) {
+        String[] parts = line.split(":");
+        String fileName = parts[0].trim();
+        try {
+          int lineNumber = Integer.valueOf(parts[1].trim());
+          StringBuilder expandedError =
+              new StringBuilder("\nError at " + lineNumber + " : " + line);
+          List<String> errorSource =
+              Files.readAllLines(aapt.getFileSystem().getPath(fileName), StandardCharsets.UTF_8);
+          for (int i = Math.max(lineNumber - 5, 0);
+              i < Math.min(lineNumber + 5, errorSource.size());
+              i++) {
+            expandedError.append("\n").append(i).append("\t:  ").append(errorSource.get(i));
+          }
+          outputWithSourceContext.add(expandedError.toString());
+        } catch (IOException | NumberFormatException formatError) {
+          outputWithSourceContext.add("error parsing line" + line);
+          stdLogger.error(formatError, "error during reading source %s", fileName);
+        }
+      } else {
+        outputWithSourceContext.add(line);
       }
+    }
+    return outputWithSourceContext;
+  }
 
-      // List of all the symbol loaders per package names.
-      Multimap<String, SymbolLoader> libMap = ArrayListMultimap.create();
+  /** Task to parse java package from AndroidManifest.xml */
+  private static final class PackageParsingTask implements Callable<String> {
 
+    private final File manifest;
+
+    PackageParsingTask(File manifest) {
+      this.manifest = manifest;
+    }
+
+    @Override
+    public String call() throws Exception {
+      return VariantConfiguration.getManifestPackage(manifest);
+    }
+  }
+
+  /** Task to load and parse R.txt symbols */
+  private static final class SymbolLoadingTask implements Callable<Object> {
+
+    private final SymbolLoader symbolLoader;
+
+    SymbolLoadingTask(SymbolLoader symbolLoader) {
+      this.symbolLoader = symbolLoader;
+    }
+
+    @Override
+    public Object call() throws Exception {
+      symbolLoader.load();
+      return null;
+    }
+  }
+
+  @Nullable
+  public SymbolLoader loadResourceSymbolTable(
+      List<SymbolFileProvider> libraries,
+      String appPackageName,
+      Path primaryRTxt,
+      Multimap<String, SymbolLoader> libMap) throws IOException {
+    // The reported availableProcessors may be higher than the actual resources
+    // (on a shared system). On the other hand, a lot of the work is I/O, so it's not completely
+    // CPU bound. As a compromise, divide by 2 the reported availableProcessors.
+    int numThreads = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
+    ListeningExecutorService executorService = MoreExecutors.listeningDecorator(
+        Executors.newFixedThreadPool(numThreads));
+    try (Closeable closeable = ExecutorServiceCloser.createWith(executorService)) {
+      // Load the package names from the manifest files.
+      Map<SymbolFileProvider, ListenableFuture<String>> packageJobs = new HashMap<>();
+      for (final SymbolFileProvider lib : libraries) {
+        packageJobs.put(lib, executorService.submit(new PackageParsingTask(lib.getManifest())));
+      }
+      Map<SymbolFileProvider, String> packageNames = new HashMap<>();
+      try {
+        for (Map.Entry<SymbolFileProvider, ListenableFuture<String>> entry : packageJobs
+            .entrySet()) {
+          packageNames.put(entry.getKey(), entry.getValue().get());
+        }
+      } catch (InterruptedException | ExecutionException e) {
+        throw new IOException("Failed to load package name: ", e);
+      }
+      // Associate the packages with symbol files.
       for (SymbolFileProvider lib : libraries) {
-        String packageName = VariantConfiguration.getManifestPackage(lib.getManifest());
-
-        // If the library package matches the app package skip -- the R class will contain
-        // all the possible resources so it will not need to generate a new R.
+        String packageName = packageNames.get(lib);
+        // If the library package matches the app package skip -- the final app resource IDs are
+        // stored in the primaryRTxt file.
         if (appPackageName.equals(packageName)) {
           continue;
         }
-
         File rFile = lib.getSymbolFile();
         // If the library has no resource, this file won't exist.
         if (rFile.isFile()) {
-          // Load the full values if that's not already been done.
-          // Doing it lazily allow us to support the case where there's no
-          // resources anywhere.
-          if (fullSymbolValues == null) {
-            fullSymbolValues = new SymbolLoader(sourceOut.resolve("R.txt").toFile(), stdLogger);
-            fullSymbolValues.load();
-          }
-
           SymbolLoader libSymbols = new SymbolLoader(rFile, stdLogger);
-          libSymbols.load();
-
-          // store these symbols by associating them with the package name.
           libMap.put(packageName, libSymbols);
         }
       }
+      // Even if there are no libraries, load fullSymbolValues, in case we only have resources
+      // defined for the binary.
+      File primaryRTxtFile = primaryRTxt.toFile();
+      SymbolLoader fullSymbolValues = null;
+      if (primaryRTxtFile.isFile()) {
+        fullSymbolValues = new SymbolLoader(primaryRTxtFile, stdLogger);
+      }
+      // Now load the symbol files in parallel.
+      List<ListenableFuture<?>> loadJobs = new ArrayList<>();
+      Iterable<SymbolLoader> toLoad = fullSymbolValues != null
+          ? Iterables.concat(libMap.values(), ImmutableList.of(fullSymbolValues))
+          : libMap.values();
+      for (final SymbolLoader loader : toLoad) {
+        loadJobs.add(executorService.submit(new SymbolLoadingTask(loader)));
+      }
+      try {
+        Futures.allAsList(loadJobs).get();
+      } catch (InterruptedException | ExecutionException e) {
+        throw new IOException("Failed to load SymbolFile: ", e);
+      }
+      return fullSymbolValues;
+    }
+  }
 
-      // Loop on all the package name, merge all the symbols to write, and write.
-      for (String packageName : libMap.keySet()) {
-        Collection<SymbolLoader> symbols = libMap.get(packageName);
-        SymbolWriter writer = new SymbolWriter(sourceOut.toString(), packageName, fullSymbolValues);
-        for (SymbolLoader symbolLoader : symbols) {
-          writer.addSymbolsToWrite(symbolLoader);
-        }
-        writer.write();
+  void writeDependencyPackageRJavaFiles(
+      List<DependencyAndroidData> dependencyData,
+      String customPackageForR,
+      Path androidManifest,
+      Path sourceOut) throws IOException {
+    List<SymbolFileProvider> libraries = new ArrayList<>();
+    for (DependencyAndroidData dataDep : dependencyData) {
+      SymbolFileProvider library = dataDep.asSymbolFileProvider();
+      libraries.add(library);
+    }
+    String appPackageName = customPackageForR;
+    if (appPackageName == null) {
+      appPackageName = VariantConfiguration.getManifestPackage(androidManifest.toFile());
+    }
+    Multimap<String, SymbolLoader> libSymbolMap = ArrayListMultimap.create();
+    Path primaryRTxt = sourceOut != null ? sourceOut.resolve("R.txt") : null;
+    if (primaryRTxt != null && !libraries.isEmpty()) {
+      SymbolLoader fullSymbolValues = loadResourceSymbolTable(libraries,
+          appPackageName, primaryRTxt, libSymbolMap);
+      if (fullSymbolValues != null) {
+        writePackageRJavaFiles(libSymbolMap, fullSymbolValues, sourceOut);
       }
     }
+  }
+
+  private void writePackageRJavaFiles(
+      Multimap<String, SymbolLoader> libMap,
+      SymbolLoader fullSymbolValues,
+      Path sourceOut) throws IOException {
+    // Loop on all the package name, merge all the symbols to write, and write.
+    for (String packageName : libMap.keySet()) {
+      Collection<SymbolLoader> symbols = libMap.get(packageName);
+      SymbolWriter writer = new SymbolWriter(sourceOut.toString(), packageName, fullSymbolValues);
+      for (SymbolLoader symbolLoader : symbols) {
+        writer.addSymbolsToWrite(symbolLoader);
+      }
+      writer.write();
+    }
+  }
+
+  void writePackageRClasses(
+      Multimap<String, SymbolLoader> libMap,
+      SymbolLoader fullSymbolValues,
+      String appPackageName,
+      Path classesOut,
+      boolean finalFields) throws IOException {
+    for (String packageName : libMap.keySet()) {
+      Collection<SymbolLoader> symbols = libMap.get(packageName);
+      RClassGenerator classWriter = RClassGenerator.fromSymbols(
+          classesOut, packageName, fullSymbolValues, symbols, finalFields);
+      classWriter.write();
+    }
+    // Unlike the R.java generation, we also write the app's R.class file so that the class
+    // jar file can be complete (aapt doesn't generate it for us).
+    RClassGenerator classWriter = RClassGenerator.fromSymbols(classesOut, appPackageName,
+        fullSymbolValues, ImmutableList.of(fullSymbolValues), finalFields);
+    classWriter.write();
+  }
+
+  /** Finds aapt's split outputs and renames them according to the input flags. */
+  private Iterable<Path> findAndRenameSplitPackages(Path packageOut, Iterable<String> splits)
+      throws UnrecognizedSplitsException, IOException {
+    String prefix = packageOut.getFileName().toString() + "_";
+    // The regex java string literal below is received as [\\{}\[\]*?] by the regex engine,
+    // which produces a character class containing \{}[]*?
+    // The replacement string literal is received as \\$0 by the regex engine, which places
+    // a backslash before the match.
+    String prefixGlob = prefix.replaceAll("[\\\\{}\\[\\]*?]", "\\\\$0") + "*";
+    Path outputDirectory = packageOut.getParent();
+    ImmutableList.Builder<String> filenameSuffixes = new ImmutableList.Builder<>();
+    try (DirectoryStream<Path> glob = Files.newDirectoryStream(outputDirectory, prefixGlob)) {
+      for (Path file : glob) {
+        filenameSuffixes.add(file.getFileName().toString().substring(prefix.length()));
+      }
+    }
+    Map<String, String> outputs =
+        SplitConfigurationFilter.mapFilenamesToSplitFlags(filenameSuffixes.build(), splits);
+    ImmutableList.Builder<Path> outputPaths = new ImmutableList.Builder<>();
+    for (Map.Entry<String, String> splitMapping : outputs.entrySet()) {
+      Path resultPath = packageOut.resolveSibling(prefix + splitMapping.getValue());
+      outputPaths.add(resultPath);
+      if (!splitMapping.getKey().equals(splitMapping.getValue())) {
+        Path sourcePath = packageOut.resolveSibling(prefix + splitMapping.getKey());
+        Files.move(sourcePath, resultPath);
+      }
+    }
+    return outputPaths.build();
   }
 
   public MergedAndroidData processManifest(
@@ -486,13 +735,16 @@ public class AndroidResourceProcessor {
       int versionCode,
       String versionName,
       MergedAndroidData primaryData,
-      Path processedManifest) throws IOException {
+      Path processedManifest)
+      throws IOException {
 
-    ManifestMerger2.MergeType mergeType = variantType == VariantConfiguration.Type.DEFAULT
-        ? ManifestMerger2.MergeType.APPLICATION : ManifestMerger2.MergeType.LIBRARY;
+    ManifestMerger2.MergeType mergeType =
+        variantType == VariantConfiguration.Type.DEFAULT
+            ? ManifestMerger2.MergeType.APPLICATION
+            : ManifestMerger2.MergeType.LIBRARY;
 
-    String newManifestPackage = variantType == VariantConfiguration.Type.DEFAULT
-        ? applicationId : customPackageForR;
+    String newManifestPackage =
+        variantType == VariantConfiguration.Type.DEFAULT ? applicationId : customPackageForR;
 
     if (versionCode != -1 || versionName != null || newManifestPackage != null) {
       Files.createDirectories(processedManifest.getParent());
@@ -533,12 +785,14 @@ public class AndroidResourceProcessor {
           default:
             throw new RuntimeException("Unhandled result type : " + mergingReport.getResult());
         }
-      } catch (
-          IOException | SAXException | ParserConfigurationException | MergeFailureException e) {
+      } catch (IOException
+          | SAXException
+          | ParserConfigurationException
+          | MergeFailureException e) {
         throw new RuntimeException(e);
       }
-      return new MergedAndroidData(primaryData.getResourceDir(), primaryData.getAssetDir(),
-          processedManifest);
+      return new MergedAndroidData(
+          primaryData.getResourceDir(), primaryData.getAssetDir(), processedManifest);
     }
     return primaryData;
   }
@@ -559,10 +813,11 @@ public class AndroidResourceProcessor {
    */
   public Path mergeManifest(
       Path manifest,
-      List<Path> mergeeManifests,
+      Map<Path, String> mergeeManifests,
       MergeType mergeType,
       Map<String, String> values,
-      Path output) throws IOException {
+      Path output)
+      throws IOException {
     if (mergeeManifests.isEmpty() && values.isEmpty()) {
       return manifest;
     }
@@ -573,9 +828,11 @@ public class AndroidResourceProcessor {
     }
 
     // Add mergee manifests
-    for (Path mergeeManifest : mergeeManifests) {
-      manifestMerger.addLibraryManifest(mergeeManifest.toFile());
+    List<Pair<String, File>> libraryManifests = new ArrayList<>();
+    for (Entry<Path, String> mergeeManifest : mergeeManifests.entrySet()) {
+      libraryManifests.add(Pair.of(mergeeManifest.getValue(), mergeeManifest.getKey().toFile()));
     }
+    manifestMerger.addLibraryManifests(libraryManifests);
 
     // Extract SystemProperties from the provided values.
     Map<String, String> placeholders = new HashMap<>(values);
@@ -617,21 +874,19 @@ public class AndroidResourceProcessor {
         default:
           throw new RuntimeException("Unhandled result type : " + mergingReport.getResult());
       }
-    } catch (
-        SAXException | ParserConfigurationException | MergeFailureException e) {
+    } catch (SAXException | ParserConfigurationException | MergeFailureException e) {
       throw new RuntimeException(e);
     }
 
     return output;
   }
 
-  private void writeMergedManifest(MergingReport mergingReport,
-      Path manifestOut) throws IOException, SAXException, ParserConfigurationException {
+  private void writeMergedManifest(MergingReport mergingReport, Path manifestOut)
+      throws IOException, SAXException, ParserConfigurationException {
     XmlDocument xmlDocument = mergingReport.getMergedDocument().get();
     String annotatedDocument = mergingReport.getActions().blame(xmlDocument);
     stdLogger.verbose(annotatedDocument);
-    Files.write(
-        manifestOut, xmlDocument.prettyPrint().getBytes(UTF_8));
+    Files.write(manifestOut, xmlDocument.prettyPrint().getBytes(UTF_8));
   }
 
   /**
@@ -643,7 +898,7 @@ public class AndroidResourceProcessor {
    * @return The output manifest if generated or the input manifest if no overwriting is required.
    */
   /* TODO(apell): switch from custom xml parsing to Gradle merger with NO_PLACEHOLDER_REPLACEMENT
-   * set when android common is updated to version 2.5.0. 
+   * set when android common is updated to version 2.5.0.
    */
   public Path writeManifestPackage(Path manifest, String customPackage, Path output) {
     if (Strings.isNullOrEmpty(customPackage)) {
@@ -651,10 +906,12 @@ public class AndroidResourceProcessor {
     }
     try {
       Files.createDirectories(output.getParent());
-      XMLEventReader reader = XMLInputFactory.newInstance()
-          .createXMLEventReader(Files.newInputStream(manifest), UTF_8.name());
-      XMLEventWriter writer = XMLOutputFactory.newInstance()
-          .createXMLEventWriter(Files.newOutputStream(output), UTF_8.name());
+      XMLEventReader reader =
+          XMLInputFactory.newInstance()
+              .createXMLEventReader(Files.newInputStream(manifest), UTF_8.name());
+      XMLEventWriter writer =
+          XMLOutputFactory.newInstance()
+              .createXMLEventWriter(Files.newOutputStream(output), UTF_8.name());
       XMLEventFactory eventFactory = XMLEventFactory.newInstance();
       while (reader.hasNext()) {
         XMLEvent event = reader.nextEvent();
@@ -672,8 +929,9 @@ public class AndroidResourceProcessor {
               newAttributes.add(attr);
             }
           }
-          writer.add(eventFactory.createStartElement(
-              element.getName(), newAttributes.build().iterator(), element.getNamespaces()));
+          writer.add(
+              eventFactory.createStartElement(
+                  element.getName(), newAttributes.build().iterator(), element.getNamespaces()));
         } else {
           writer.add(event);
         }
@@ -685,117 +943,143 @@ public class AndroidResourceProcessor {
 
     return output;
   }
-
+  
   /**
    * Merges all secondary resources with the primary resources.
    */
   public MergedAndroidData mergeData(
       final UnvalidatedAndroidData primary,
-      final List<DependencyAndroidData> secondary,
+      final List<DependencyAndroidData> direct,
+      final List<DependencyAndroidData> transitive,
       final Path resourcesOut,
       final Path assetsOut,
-      final ImmutableList<DirectoryModifier> modifiers,
       @Nullable final PngCruncher cruncher,
-      final boolean strict) throws MergingException {
-
-    List<ResourceSet> resourceSets = new ArrayList<>();
-    List<AssetSet> assetSets = new ArrayList<>();
-
-    if (strict) {
-      androidDataToStrictMergeSet(primary, secondary, modifiers, resourceSets, assetSets);
-    } else {
-      androidDataToRelaxedMergeSet(primary, secondary, modifiers, resourceSets, assetSets);
+      final VariantConfiguration.Type type,
+      @Nullable final Path symbolsOut)
+      throws MergingException {
+    Stopwatch timer = Stopwatch.createStarted();
+    final ListeningExecutorService executorService =
+        MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(15));
+    try (Closeable closeable = ExecutorServiceCloser.createWith(executorService)) {
+      AndroidDataMerger merger = AndroidDataMerger.createWithPathDeduplictor(executorService);
+      UnwrittenMergedAndroidData merged =
+          merger.merge(transitive, direct, primary, type != VariantConfiguration.Type.LIBRARY);
+      logger.fine(String.format("merge finished in %sms", timer.elapsed(TimeUnit.MILLISECONDS)));
+      timer.reset().start();
+      if (symbolsOut != null) {
+        AndroidDataSerializer serializer = AndroidDataSerializer.create();
+        merged.serializeTo(serializer);
+        serializer.flushTo(symbolsOut);
+        logger.fine(
+            String.format(
+                "serialize merge finished in %sms", timer.elapsed(TimeUnit.MILLISECONDS)));
+        timer.reset().start();
+      }
+      AndroidDataWriter writer =
+          AndroidDataWriter.createWith(
+              resourcesOut.getParent(), resourcesOut, assetsOut, cruncher, executorService);
+      return merged.write(writer);
+    } catch (IOException e) {
+      throw new MergingException(e);
+    } finally {
+      logger.fine(
+          String.format("write merge finished in %sms", timer.elapsed(TimeUnit.MILLISECONDS)));
     }
-    ResourceMerger merger = new ResourceMerger();
-    for (ResourceSet set : resourceSets) {
-      set.loadFromFiles(stdLogger);
-      merger.addDataSet(set);
-    }
-
-    AssetMerger assetMerger = new AssetMerger();
-    for (AssetSet set : assetSets) {
-      set.loadFromFiles(stdLogger);
-      assetMerger.addDataSet(set);
-    }
-
-    MergedResourceWriter resourceWriter = new MergedResourceWriter(resourcesOut.toFile(), cruncher);
-    MergedAssetWriter assetWriter = new MergedAssetWriter(assetsOut.toFile());
-
-    merger.mergeData(resourceWriter, false);
-    assetMerger.mergeData(assetWriter, false);
-
-    return new MergedAndroidData(resourcesOut, assetsOut, primary.getManifest());
   }
 
   /**
    * Shutdown AOSP utilized thread-pool.
    */
   public void shutdown() {
+    FullyQualifiedName.logCacheUsage(logger);
     // AOSP code never shuts down its singleton executor and leaves the process hanging.
     ExecutorSingleton.getExecutor().shutdownNow();
   }
 
-  private void androidDataToRelaxedMergeSet(UnvalidatedAndroidData primary,
-      List<DependencyAndroidData> secondary, ImmutableList<DirectoryModifier> modifiers,
-      List<ResourceSet> resourceSets, List<AssetSet> assetSets) {
-
-    for (DependencyAndroidData dependency : secondary) {
-      DependencyAndroidData modifiedDependency = dependency.modify(modifiers);
-      modifiedDependency.addAsResourceSets(resourceSets);
-      modifiedDependency.addAsAssetSets(assetSets);
-    }
-    UnvalidatedAndroidData modifiedPrimary = primary.modify(modifiers);
-    modifiedPrimary.addAsResourceSets(resourceSets);
-    modifiedPrimary.addAsAssetSets(assetSets);
-
-  }
-
-  private void androidDataToStrictMergeSet(UnvalidatedAndroidData primary,
-      List<DependencyAndroidData> secondary, ImmutableList<DirectoryModifier> modifiers,
-      List<ResourceSet> resourceSets, List<AssetSet> assetSets) {
-    UnvalidatedAndroidData modifiedPrimary = primary.modify(modifiers);
-    ResourceSet mainResources = modifiedPrimary.addToResourceSet(new ResourceSet("main"));
-    AssetSet mainAssets = modifiedPrimary.addToAssets(new AssetSet("main"));
-    ResourceSet dependentResources = new ResourceSet("deps");
-    AssetSet dependentAssets = new AssetSet("deps");
-    for (DependencyAndroidData dependency : secondary) {
-      DependencyAndroidData modifiedDependency = dependency.modify(modifiers);
-      modifiedDependency.addToResourceSet(dependentResources);
-      modifiedDependency.addToAssets(dependentAssets);
-    }
-    resourceSets.add(dependentResources);
-    resourceSets.add(mainResources);
-    assetSets.add(dependentAssets);
-    assetSets.add(mainAssets);
-  }
-
-  @Nullable private Path prepareOutputPath(@Nullable Path out) throws IOException {
+  @Nullable
+  private Path prepareOutputPath(@Nullable Path out) throws IOException {
     if (out == null) {
       return null;
     }
     return Files.createDirectories(out);
   }
 
+  private static class ZipBuilderVisitor extends SimpleFileVisitor<Path> {
+
+    // The earliest date representable in a zip file, 1-1-1980 (the DOS epoch).
+    private static final long ZIP_EPOCH = 315561600000L;
+    // ZIP timestamps have a resolution of 2 seconds.
+    // see http://www.info-zip.org/FAQ.html#limits
+    private static final long MINIMUM_TIMESTAMP_INCREMENT = 2000L;
+
+    private final ZipOutputStream zip;
+    protected final Path root;
+    private final String directoryPrefix;
+    private int storageMethod = ZipEntry.STORED;
+
+    ZipBuilderVisitor(ZipOutputStream zip, Path root, String directory) {
+      this.zip = zip;
+      this.root = root;
+      this.directoryPrefix = directory;
+    }
+
+    public void setCompress(boolean compress) {
+      storageMethod = compress ? ZipEntry.DEFLATED : ZipEntry.STORED;
+    }
+
+    /**
+     * Normalize timestamps for deterministic builds. Stamp .class files to be a bit newer
+     * than .java files. See:
+     * {@link com.google.devtools.build.buildjar.jarhelper.JarHelper#normalizedTimestamp(String)}
+     */
+    protected long normalizeTime(String filename) {
+      if (filename.endsWith(".class")) {
+        return ZIP_EPOCH + MINIMUM_TIMESTAMP_INCREMENT;
+      } else {
+        return ZIP_EPOCH;
+      }
+    }
+
+    protected void addEntry(Path file, byte[] content) throws IOException {
+      String prefix = directoryPrefix != null ? (directoryPrefix + "/") : "";
+      String relativeName = root.relativize(file).toString();
+      ZipEntry entry = new ZipEntry(prefix + relativeName);
+      entry.setMethod(storageMethod);
+      entry.setTime(normalizeTime(relativeName));
+      entry.setSize(content.length);
+      CRC32 crc32 = new CRC32();
+      crc32.update(content);
+      entry.setCrc(crc32.getValue());
+
+      zip.putNextEntry(entry);
+      zip.write(content);
+      zip.closeEntry();
+    }
+
+    @Override
+    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+      byte[] content = Files.readAllBytes(file);
+      addEntry(file, content);
+      return FileVisitResult.CONTINUE;
+    }
+  }
+
   /**
    * A FileVisitor that will add all R.java files to be stored in a zip archive.
    */
-  private static final class SymbolFileSrcJarBuildingVisitor extends SimpleFileVisitor<Path> {
-    static final Pattern PACKAGE_PATTERN = Pattern.compile(
-        "\\s*package ([a-zA-Z_$][a-zA-Z\\d_$]*(?:\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*)");
-    static final Pattern ID_PATTERN = Pattern.compile(
-        "public static int ([\\w\\.]+)=0x[0-9A-fa-f]+;");
-    static final Pattern INNER_CLASS = Pattern.compile("public static class ([a-z_]*) \\{(.*?)\\}",
-        Pattern.DOTALL);
+  private static final class SymbolFileSrcJarBuildingVisitor extends ZipBuilderVisitor {
 
-    // The earliest date representable in a zip file, 1-1-1980.
-    private static final long ZIP_EPOCH = 315561600000L;
-    private final ZipOutputStream zip;
-    private final Path root;
+    static final Pattern PACKAGE_PATTERN =
+        Pattern.compile("\\s*package ([a-zA-Z_$][a-zA-Z\\d_$]*(?:\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*)");
+    static final Pattern ID_PATTERN =
+        Pattern.compile("public static int ([\\w\\.]+)=0x[0-9A-fa-f]+;");
+    static final Pattern INNER_CLASS =
+        Pattern.compile("public static class ([a-z_]*) \\{(.*?)\\}", Pattern.DOTALL);
+
     private final boolean staticIds;
 
     private SymbolFileSrcJarBuildingVisitor(ZipOutputStream zip, Path root, boolean staticIds) {
-      this.zip = zip;
-      this.root = root;
+      super(zip, root, null);
       this.staticIds = staticIds;
     }
 
@@ -813,11 +1097,14 @@ public class AndroidResourceProcessor {
         StringBuffer resourceIds = new StringBuffer();
         while (idMatcher.find()) {
           String javaId = idMatcher.group(1);
-          idMatcher.appendReplacement(resourceIds, String.format("public static int %s=0x%08X;",
-              javaId, Objects.hash(pkg, resourceType, javaId)));
+          idMatcher.appendReplacement(
+              resourceIds,
+              String.format(
+                  "public static int %s=0x%08X;", javaId, Objects.hash(pkg, resourceType, javaId)));
         }
         idMatcher.appendTail(resourceIds);
-        innerClassMatcher.appendReplacement(out,
+        innerClassMatcher.appendReplacement(
+            out,
             String.format("public static class %s {%s}", resourceType, resourceIds.toString()));
       }
       innerClassMatcher.appendTail(out);
@@ -829,55 +1116,52 @@ public class AndroidResourceProcessor {
       if (file.getFileName().endsWith("R.java")) {
         byte[] content = Files.readAllBytes(file);
         if (staticIds) {
-          content = replaceIdsWithStaticIds(UTF_8.decode(
-              ByteBuffer.wrap(content)).toString()).getBytes(UTF_8);
+          content =
+              replaceIdsWithStaticIds(UTF_8.decode(ByteBuffer.wrap(content)).toString())
+                  .getBytes(UTF_8);
         }
-        ZipEntry entry = new ZipEntry(root.relativize(file).toString());
-
-        entry.setMethod(ZipEntry.STORED);
-        entry.setTime(ZIP_EPOCH);
-        entry.setSize(content.length);
-        CRC32 crc32 = new CRC32();
-        crc32.update(content);
-        entry.setCrc(crc32.getValue());
-        zip.putNextEntry(entry);
-        zip.write(content);
-        zip.closeEntry();
+        addEntry(file, content);
       }
       return FileVisitResult.CONTINUE;
     }
   }
 
-  private static final class ZipBuilderVisitor extends SimpleFileVisitor<Path> {
-    // The earliest date representable in a zip file, 1-1-1980.
-    private static final long ZIP_EPOCH = 315561600000L;
-    private final ZipOutputStream zip;
-    private final Path root;
-    private final String directory;
+  /**
+   * A FileVisitor that will add all R class files to be stored in a zip archive.
+   */
+  private static final class ClassJarBuildingVisitor extends ZipBuilderVisitor {
 
-    public ZipBuilderVisitor(ZipOutputStream zip, Path root, String directory) {
-      this.zip = zip;
-      this.root = root;
-      this.directory = directory;
+    ClassJarBuildingVisitor(ZipOutputStream zip, Path root) {
+      super(zip, root, null);
     }
 
     @Override
     public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-      byte[] content = Files.readAllBytes(file);
-
-      CRC32 crc32 = new CRC32();
-      crc32.update(content);
-
-      ZipEntry entry = new ZipEntry(directory + "/" + root.relativize(file));
-      entry.setMethod(ZipEntry.STORED);
-      entry.setTime(ZIP_EPOCH);
-      entry.setSize(content.length);
-      entry.setCrc(crc32.getValue());
-
-      zip.putNextEntry(entry);
-      zip.write(content);
-      zip.closeEntry();
+      Path filename = file.getFileName();
+      String name = filename.toString();
+      if (name.endsWith(".class")) {
+        byte[] content = Files.readAllBytes(file);
+        addEntry(file, content);
+      }
       return FileVisitResult.CONTINUE;
     }
+
+    private byte[] manifestContent() throws IOException {
+      Manifest manifest = new Manifest();
+      Attributes attributes = manifest.getMainAttributes();
+      attributes.put(Attributes.Name.MANIFEST_VERSION, "1.0");
+      Attributes.Name createdBy = new Attributes.Name("Created-By");
+      if (attributes.getValue(createdBy) == null) {
+        attributes.put(createdBy, "bazel");
+      }
+      ByteArrayOutputStream out = new ByteArrayOutputStream();
+      manifest.write(out);
+      return out.toByteArray();
+    }
+
+    void writeManifestContent() throws IOException {
+      addEntry(root.resolve(JarFile.MANIFEST_NAME), manifestContent());
+    }
   }
+
 }

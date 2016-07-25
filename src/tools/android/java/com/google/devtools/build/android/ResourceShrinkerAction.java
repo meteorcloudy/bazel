@@ -129,6 +129,13 @@ public class ResourceShrinkerAction {
         converter = PathConverter.class,
         help = "Path to where the shrunk resource.ap_ should be written.")
     public Path shrunkResources;
+
+    @Option(name = "log",
+        defaultValue = "null",
+        category = "output",
+        converter = PathConverter.class,
+        help = "Path to where the shrinker log should be written.")
+    public Path log;
   }
 
   private static AaptConfigOptions aaptConfigOptions;
@@ -160,11 +167,10 @@ public class ResourceShrinkerAction {
     options = optionsParser.getOptions(Options.class);
 
     AndroidResourceProcessor resourceProcessor = new AndroidResourceProcessor(stdLogger);
-    try {
-      // Setup temporary working directories.
-      Path working = Files.createTempDirectory("resource_shrinker_tmp");
-      working.toFile().deleteOnExit();
-
+    // Setup temporary working directories.
+    try (ScopedTemporaryDirectory scopedTmp =
+        new ScopedTemporaryDirectory("resource_shrinker_tmp")) {
+      Path working = scopedTmp.getPath();
       final Path resourceFiles = working.resolve("resource_files");
 
       final Path shrunkResources = working.resolve("shrunk_resources");
@@ -195,7 +201,8 @@ public class ResourceShrinkerAction {
           options.rTxt,
           options.shrunkJar,
           options.primaryManifest,
-          resourceFiles.resolve("res"));
+          resourceFiles.resolve("res"),
+          options.log);
 
       resourceShrinker.shrink(shrunkResources);
       logger.fine(String.format("Shrinking resources finished at %sms",

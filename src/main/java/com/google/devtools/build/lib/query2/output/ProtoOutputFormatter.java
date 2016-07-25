@@ -27,9 +27,8 @@ import com.google.devtools.build.lib.cmdline.Label;
 import com.google.devtools.build.lib.graph.Digraph;
 import com.google.devtools.build.lib.packages.AggregatingAttributeMapper;
 import com.google.devtools.build.lib.packages.Attribute;
-import com.google.devtools.build.lib.packages.AttributeSerializer;
+import com.google.devtools.build.lib.packages.AttributeFormatter;
 import com.google.devtools.build.lib.packages.BuildType;
-import com.google.devtools.build.lib.packages.DependencyFilter;
 import com.google.devtools.build.lib.packages.EnvironmentGroup;
 import com.google.devtools.build.lib.packages.InputFile;
 import com.google.devtools.build.lib.packages.OutputFile;
@@ -47,7 +46,6 @@ import com.google.devtools.build.lib.query2.proto.proto2api.Build.GeneratedFile;
 import com.google.devtools.build.lib.query2.proto.proto2api.Build.QueryResult.Builder;
 import com.google.devtools.build.lib.query2.proto.proto2api.Build.SourceFile;
 import com.google.devtools.build.lib.syntax.Environment;
-
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Collection;
@@ -69,9 +67,6 @@ public class ProtoOutputFormatter extends AbstractUnorderedFormatter {
    */
   public static final String RULE_IMPLEMENTATION_HASH_ATTR_NAME = "$rule_implementation_hash";
 
-  private transient DependencyFilter dependencyFilter;
-  protected transient AspectResolver aspectResolver;
-
   private boolean relativeLocations = false;
   protected boolean includeDefaultValues = true;
 
@@ -85,13 +80,14 @@ public class ProtoOutputFormatter extends AbstractUnorderedFormatter {
   }
 
   @Override
-  public OutputFormatterCallback<Target> createStreamCallback(QueryOptions options,
-      final PrintStream out, AspectResolver aspectResolver) {
-    relativeLocations = options.relativeLocations;
-    this.aspectResolver = aspectResolver;
+  public void setOptions(QueryOptions options, AspectResolver aspectResolver) {
+    super.setOptions(options, aspectResolver);
+    this.relativeLocations = options.relativeLocations;
     this.includeDefaultValues = options.protoIncludeDefaultValues;
-    setDependencyFilter(options);
+  }
 
+  @Override
+  public OutputFormatterCallback<Target> createStreamCallback(final PrintStream out) {
     return new OutputFormatterCallback<Target>() {
 
       private Builder queryResult;
@@ -130,8 +126,7 @@ public class ProtoOutputFormatter extends AbstractUnorderedFormatter {
   /**
    * Converts a logical {@link Target} object into a {@link Build.Target} protobuffer.
    */
-  protected Build.Target toTargetProtoBuffer(Target target)
-      throws InterruptedException {
+  protected Build.Target toTargetProtoBuffer(Target target) throws InterruptedException {
     Build.Target.Builder targetPb = Build.Target.newBuilder();
 
     String location = getLocation(target, relativeLocations);
@@ -155,11 +150,10 @@ public class ProtoOutputFormatter extends AbstractUnorderedFormatter {
             AggregatingAttributeMapper.flattenAttributeValues(
                 attr.getType(), possibleAttributeValues);
         Build.Attribute serializedAttribute =
-            AttributeSerializer.getAttributeProto(
+            AttributeFormatter.getAttributeProto(
                 attr,
                 flattenedAttributeValue,
                 rule.isAttributeValueExplicitlySpecified(attr),
-                /*includeGlobs=*/ false,
                 /*encodeBooleanAndTriStateAsIntegerAndString=*/ true);
         rulePb.addAttribute(serializedAttribute);
         serializedAttributes.put(attr, serializedAttribute);
@@ -190,11 +184,10 @@ public class ProtoOutputFormatter extends AbstractUnorderedFormatter {
         }
         Object attributeValue = getAspectAttributeValue(attribute, labels);
         Build.Attribute serializedAttribute =
-            AttributeSerializer.getAttributeProto(
+            AttributeFormatter.getAttributeProto(
                 attribute,
                 attributeValue,
                 /*explicitlySpecified=*/ false,
-                /*includeGlobs=*/ false,
                 /*encodeBooleanAndTriStateAsIntegerAndString=*/ true);
         rulePb.addAttribute(serializedAttribute);
       }

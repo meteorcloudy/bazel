@@ -42,6 +42,14 @@ java_binary(
 )
 
 java_binary(
+    name = "RClassGeneratorAction",
+    main_class = "com.google.devtools.build.android.RClassGeneratorAction",
+    runtime_deps = [
+        ":android_builder_lib",
+    ],
+)
+
+java_binary(
     name = "ResourceShrinkerAction",
     main_class = "com.google.devtools.build.android.ResourceShinkerAction",
     runtime_deps = [
@@ -59,6 +67,7 @@ java_library(
         "//src/main/java/com/google/devtools/common/options",
         "//src/main/protobuf:package_manifest_java_proto",
         "//src/tools/android/java/com/google/devtools/build/android/proto:serialize_format_proto",
+        "//src/tools/android/java/com/google/devtools/build/android/resources",
         "//third_party:android_common",
         "//third_party:apache_commons_compress",
         "//third_party:asm",
@@ -75,6 +84,7 @@ filegroup(
         "//src/tools/android/java/com/google/devtools/build/android/idlclass:srcs",
         "//src/tools/android/java/com/google/devtools/build/android/incrementaldeployment:srcs",
         "//src/tools/android/java/com/google/devtools/build/android/proto:srcs",
+        "//src/tools/android/java/com/google/devtools/build/android/resources:srcs",
         "//src/tools/android/java/com/google/devtools/build/android/ziputils:srcs",
     ],
     visibility = ["//src:__pkg__"],

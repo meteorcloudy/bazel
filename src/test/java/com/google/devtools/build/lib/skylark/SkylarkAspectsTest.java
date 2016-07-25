@@ -16,6 +16,7 @@ package com.google.devtools.build.lib.skylark;
 import static com.google.common.collect.Iterables.transform;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
+import static com.google.devtools.build.lib.analysis.OutputGroupProvider.INTERNAL_SUFFIX;
 import static org.junit.Assert.fail;
 
 import com.google.common.base.Function;
@@ -29,6 +30,7 @@ import com.google.devtools.build.lib.analysis.SkylarkProviders;
 import com.google.devtools.build.lib.analysis.ViewCreationFailedException;
 import com.google.devtools.build.lib.analysis.util.AnalysisTestCase;
 import com.google.devtools.build.lib.cmdline.Label;
+import com.google.devtools.build.lib.cmdline.TargetParsingException;
 import com.google.devtools.build.lib.collect.nestedset.NestedSet;
 import com.google.devtools.build.lib.packages.AspectDefinition;
 import com.google.devtools.build.lib.packages.Attribute.ConfigurationTransition;
@@ -36,8 +38,8 @@ import com.google.devtools.build.lib.rules.cpp.CppConfiguration;
 import com.google.devtools.build.lib.rules.java.Jvm;
 import com.google.devtools.build.lib.skyframe.AspectValue;
 import com.google.devtools.build.lib.syntax.SkylarkNestedSet;
-
 import com.google.devtools.build.lib.vfs.FileSystemUtils;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -54,6 +56,8 @@ public class SkylarkAspectsTest extends AnalysisTestCase {
   protected boolean keepGoing() {
     return false;
   }
+
+  private static final String LINE_SEPARATOR = System.lineSeparator();
 
   @Test
   public void testAspect() throws Exception {
@@ -252,7 +256,7 @@ public class SkylarkAspectsTest extends AnalysisTestCase {
     scratch.file(
         "test/aspect.bzl",
         "def _impl(target, ctx):",
-        "   f = target.output_group('_hidden_top_level')",
+        "   f = target.output_group('_hidden_top_level" + INTERNAL_SUFFIX + "')",
         "   return struct(output_groups = { 'my_result' : f })",
         "",
         "MyAspect = aspect(",
@@ -417,9 +421,11 @@ public class SkylarkAspectsTest extends AnalysisTestCase {
         "ERROR /workspace/test/BUILD:1:1: in "
             + "//test:aspect.bzl%MyAspect aspect on java_library rule //test:xxx: \n"
             + "Traceback (most recent call last):\n"
-            + "\tFile \"/workspace/test/BUILD\", line 1\n"
+            + "\tFile \"/workspace/test/BUILD\", line 1"
+            + LINE_SEPARATOR
             + "\t\t//test:aspect.bzl%MyAspect(...)\n"
-            + "\tFile \"/workspace/test/aspect.bzl\", line 2, in _impl\n"
+            + "\tFile \"/workspace/test/aspect.bzl\", line 2, in _impl"
+            + LINE_SEPARATOR
             + "\t\t1 / 0\n"
             + "integer division by zero");
   }
@@ -1026,6 +1032,74 @@ public class SkylarkAspectsTest extends AnalysisTestCase {
     }
   }
 
+  @Test
+  public void toplevelAspectOnFile() throws Exception {
+    scratch.file(
+        "test/aspect.bzl",
+        "def _impl(target, ctx):",
+        "   print('This aspect does nothing')",
+        "   return struct()",
+        "MyAspect = aspect(implementation=_impl)");
+    scratch.file("test/BUILD", "exports_files(['file.txt'])");
+    scratch.file("test/file.txt", "");
+    AnalysisResult analysisResult =
+        update(ImmutableList.of("test/aspect.bzl%MyAspect"), "//test:file.txt");
+    assertThat(analysisResult.hasError()).isFalse();
+    assertThat(analysisResult.getAspects()).isEmpty();
+  }
+
+  @Test
+  public void sharedAttributeDefintionWithAspects() throws Exception {
+    scratch.file(
+        "test/aspect.bzl",
+        "def _aspect_impl(target,ctx):",
+        "  return struct()",
+        "my_aspect = aspect(implementation = _aspect_impl)",
+        "_ATTR = { 'deps' : attr.label_list(aspects = [my_aspect]) }",
+        "def _dummy_impl(ctx):",
+        "  pass",
+        "r1 = rule(_dummy_impl, attrs =  _ATTR)",
+        "r2 = rule(_dummy_impl, attrs =  _ATTR)"
+    );
+
+    scratch.file(
+        "test/BUILD",
+        "load(':aspect.bzl', 'r1', 'r2')",
+        "r1(name = 't1')",
+        "r2(name = 't2', deps = [':t1'])"
+    );
+    AnalysisResult analysisResult = update("//test:t2");
+    assertThat(analysisResult.hasError()).isFalse();
+  }
+
+  @Test
+  public void multipleAspects() throws Exception {
+    scratch.file(
+        "test/aspect.bzl",
+        "def _aspect_impl(target,ctx):",
+        "  return struct()",
+        "my_aspect = aspect(implementation = _aspect_impl)",
+        "def _dummy_impl(ctx):",
+        "  pass",
+        "r1 = rule(_dummy_impl, ",
+        "          attrs = { 'deps' : attr.label_list(aspects = [my_aspect, my_aspect]) })"
+    );
+
+    scratch.file(
+        "test/BUILD",
+        "load(':aspect.bzl', 'r1')",
+        "r1(name = 't1')"
+    );
+    reporter.removeHandler(failFastHandler);
+    try {
+      AnalysisResult result = update("//test:r1");
+      assertThat(keepGoing()).isTrue();
+      assertThat(result.hasError()).isTrue();
+    } catch (TargetParsingException | ViewCreationFailedException expected) {
+      // expected.
+    }
+    assertContainsEvent("Aspect //test:aspect.bzl%my_aspect added more than once");
+  }
 
   @RunWith(JUnit4.class)
   public static final class WithKeepGoing extends SkylarkAspectsTest {

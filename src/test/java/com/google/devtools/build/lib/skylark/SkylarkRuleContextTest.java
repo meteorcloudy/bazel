@@ -36,7 +36,6 @@ import com.google.devtools.build.lib.skylark.util.SkylarkTestCase;
 import com.google.devtools.build.lib.syntax.SkylarkDict;
 import com.google.devtools.build.lib.syntax.SkylarkList;
 import com.google.devtools.build.lib.syntax.SkylarkNestedSet;
-import com.google.devtools.build.lib.testutil.TestConstants;
 import com.google.devtools.build.lib.vfs.FileSystemUtils;
 import com.google.devtools.build.lib.vfs.PathFragment;
 
@@ -339,7 +338,7 @@ public class SkylarkRuleContextTest extends SkylarkTestCase {
     scratch.file("/r/BUILD", "cc_library(name = 'cclib',", "  srcs = ['sub/my_sub_lib.h'])");
     scratch.file("/r/sub/BUILD", "cc_library(name = 'my_sub_lib', srcs = ['my_sub_lib.h'])");
     scratch.overwriteFile("WORKSPACE", "local_repository(name='r', path='/r')");
-    invalidatePackages();
+    invalidatePackages(/*alsoConfigs=*/false); // Repository shuffling messes with toolchain labels.
     reporter.removeHandler(failFastHandler);
     getConfiguredTarget("@r//:cclib");
     assertContainsEvent(
@@ -472,6 +471,24 @@ public class SkylarkRuleContextTest extends SkylarkTestCase {
 
     // Parse the BUILD file, to make sure select() makes it out of native.rule().
     createRuleContext("//test/getrule:x");
+  }
+
+  @Test
+  public void testExistingRuleReturnNone() throws Exception {
+    scratch.file(
+        "test/rulestr.bzl",
+        "def test_rule(name, x):",
+        "  print(native.existing_rule(x))",
+        "  if native.existing_rule(x) == None:",
+        "    native.cc_library(name = name)");
+    scratch.file(
+        "test/BUILD",
+        "load('//test:rulestr.bzl', 'test_rule')",
+        "test_rule('a', 'does not exist')",
+        "test_rule('b', 'BUILD')");
+
+    assertNotNull(getConfiguredTarget("//test:a"));
+    assertNotNull(getConfiguredTarget("//test:b"));
   }
 
   @Test
@@ -694,7 +711,7 @@ public class SkylarkRuleContextTest extends SkylarkTestCase {
   public void testFeatures() throws Exception {
     SkylarkRuleContext ruleContext = createRuleContext("//foo:cc_with_features");
     Object result = evalRuleContextCode(ruleContext, "ruleContext.features");
-    assertThat((SkylarkList) result).containsExactly("cc_include_scanning", "f1", "f2");
+    assertThat((SkylarkList<?>) result).containsExactly("cc_include_scanning", "f1", "f2");
   }
 
 
@@ -707,9 +724,11 @@ public class SkylarkRuleContextTest extends SkylarkTestCase {
 
   @Test
   public void testWorkspaceName() throws Exception {
+    assertThat(ruleClassProvider.getRunfilesPrefix()).isNotNull();
+    assertThat(ruleClassProvider.getRunfilesPrefix()).isNotEmpty();
     SkylarkRuleContext ruleContext = createRuleContext("//foo:foo");
     Object result = evalRuleContextCode(ruleContext, "ruleContext.workspace_name");
-    assertSame(result, TestConstants.WORKSPACE_NAME);
+    assertSame(result, ruleClassProvider.getRunfilesPrefix());
   }
 
   @Test
@@ -812,7 +831,7 @@ public class SkylarkRuleContextTest extends SkylarkTestCase {
     scratch.overwriteFile("WORKSPACE",
         "local_repository(name='r', path='/r')");
 
-    invalidatePackages();
+    invalidatePackages(/*alsoConfigs=*/false); // Repository shuffling messes with toolchain labels.
     SkylarkRuleContext context = createRuleContext("@r//a:r");
     Label depLabel = (Label) evalRuleContextCode(context, "ruleContext.attr.internal_dep.label");
     assertThat(depLabel).isEqualTo(Label.parseAbsolute("//:dep"));
@@ -843,7 +862,7 @@ public class SkylarkRuleContextTest extends SkylarkTestCase {
     scratch.overwriteFile("WORKSPACE",
         "local_repository(name='r', path='/r')");
 
-    invalidatePackages();
+    invalidatePackages(/*alsoConfigs=*/false); // Repository shuffling messes with toolchain labels.
     SkylarkRuleContext context = createRuleContext("@r//a:r");
     Label depLabel = (Label) evalRuleContextCode(context, "ruleContext.attr.internal_dep.label");
     assertThat(depLabel).isEqualTo(Label.parseAbsolute("@r//:dep"));
@@ -879,7 +898,7 @@ public class SkylarkRuleContextTest extends SkylarkTestCase {
         "load('@r2//:other_test.bzl', 'other_macro')",  // We can still refer to r2 in other chunks.
         "macro(NEXT_NAME, '/r2')"  // and we can still use macro outside of its chunk.
     );
-    invalidatePackages();
+    invalidatePackages(/*alsoConfigs=*/false); // Repository shuffling messes with toolchain labels.
     assertThat(getConfiguredTarget("@r1//:test")).isNotNull();
   }
 
@@ -897,7 +916,7 @@ public class SkylarkRuleContextTest extends SkylarkTestCase {
         "WORKSPACE",
         "local_repository(name = 'foo', path = '/bar')",
         "local_repository(name = 'foo', path = '/baz')");
-    invalidatePackages();
+    invalidatePackages(/*alsoConfigs=*/false); // Repository shuffling messes with toolchain labels.
     assertThat(
             (List<Label>)
                 getConfiguredTarget("@foo//:baz")
@@ -915,7 +934,7 @@ public class SkylarkRuleContextTest extends SkylarkTestCase {
         "load('//:bar.bzl', 'dummy')",
         "local_repository(name = 'foo', path = '/baz')");
     try {
-      invalidatePackages();
+      invalidatePackages(/*alsoConfigs=*/false); // Repository shuffling messes with toolchains.
       createRuleContext("@foo//:baz");
       fail("Should have failed because repository 'foo' is overloading after a load!");
     } catch (Exception ex) {

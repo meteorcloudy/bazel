@@ -18,6 +18,19 @@
 
 set -o errexit
 
+# If BAZEL_WRKDIR is set, default all variables to point into
+# that directory
+
+if [ -n "${BAZEL_WRKDIR}" ] ; then
+ mkdir -p "${BAZEL_WRKDIR}/tmp"
+ mkdir -p "${BAZEL_WRKDIR}/user_root"
+ : ${TMPDIR:=${BAZEL_WRKDIR}/tmp}
+ export TMPDIR
+ : ${BAZEL_DIR_STARTUP_OPTIONS:="--output_user_root=${BAZEL_WRKDIR}/user_root"}
+fi
+
+
+# Set standard variables
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 WORKSPACE_DIR="$(dirname $(dirname ${DIR}))"
 
@@ -42,6 +55,13 @@ case "${PLATFORM}" in
 msys*|mingw*)
   EXE_EXT=".exe"
 esac
+
+# Fix TMPDIR on msys
+case "${PLATFORM}" in
+msys*|mingw*)
+  TMPDIR=${TMPDIR:-$(cygpath -m $TMP)}
+esac
+
 
 # Whether we display build messages or not.  We set this conditionally because
 # the file including us or the user may already have defined VERBOSE to their
@@ -90,10 +110,11 @@ function run_atexit_handlers() {
 
 function tempdir() {
   local tmp=${TMPDIR:-/tmp}
-  local DIR="$(mktemp -d ${tmp%%/}/bazel.XXXXXXXX)"
+  local DIR="$(mktemp -d ${tmp%%/}/bazel_XXXXXXXX)"
   mkdir -p "${DIR}"
-  eval "cleanup_tempdir() { rm -rf '${DIR}'; }"
-  atexit cleanup_tempdir
+  local DIRBASE=$(basename "${DIR}")
+  eval "cleanup_tempdir_${DIRBASE}() { rm -rf '${DIR}'; }"
+  atexit cleanup_tempdir_${DIRBASE}
   NEW_TMPDIR="${DIR}"
 }
 tempdir
@@ -237,6 +258,6 @@ function get_java_version() {
 
 # Return the target that a bind point to, using Bazel query.
 function get_bind_target() {
-  $BAZEL --bazelrc=${BAZELRC} --nomaster_bazelrc \
+  $BAZEL --bazelrc=${BAZELRC} --nomaster_bazelrc ${BAZEL_DIR_STARTUP_OPTIONS} \
     query "deps($1, 1) - $1"
 }

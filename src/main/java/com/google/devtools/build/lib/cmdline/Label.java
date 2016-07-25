@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.google.devtools.build.lib.cmdline;
 
+import com.google.common.base.Function;
 import com.google.common.collect.ComparisonChain;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Interner;
@@ -22,31 +23,37 @@ import com.google.devtools.build.lib.concurrent.ThreadSafety.Immutable;
 import com.google.devtools.build.lib.concurrent.ThreadSafety.ThreadSafe;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkCallable;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkModule;
+import com.google.devtools.build.lib.skylarkinterface.SkylarkModuleCategory;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkPrintableValue;
 import com.google.devtools.build.lib.util.Preconditions;
 import com.google.devtools.build.lib.util.StringCanonicalizer;
 import com.google.devtools.build.lib.util.StringUtilities;
 import com.google.devtools.build.lib.vfs.PathFragment;
-
 import java.io.IOException;
 import java.io.InvalidObjectException;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
-import java.util.Objects;
+import javax.annotation.Nullable;
 
 /**
- * A class to identify a BUILD target. All targets belong to exactly one package.
- * The name of a target is called its label. A typical label looks like this:
- * //dir1/dir2:target_name where 'dir1/dir2' identifies the package containing a BUILD file,
- * and 'target_name' identifies the target within the package.
+ * A class to identify a BUILD target. All targets belong to exactly one package. The name of a
+ * target is called its label. A typical label looks like this: //dir1/dir2:target_name where
+ * 'dir1/dir2' identifies the package containing a BUILD file, and 'target_name' identifies the
+ * target within the package.
  *
  * <p>Parsing is robust against bad input, for example, from the command line.
  */
-@SkylarkModule(name = "Label", doc = "A BUILD target identifier.")
-@Immutable @ThreadSafe
+@SkylarkModule(
+  name = "Label",
+  category = SkylarkModuleCategory.BUILTIN,
+  doc = "A BUILD target identifier."
+)
+@Immutable
+@ThreadSafe
 public final class Label implements Comparable<Label>, Serializable, SkylarkPrintableValue {
   public static final PathFragment EXTERNAL_PACKAGE_NAME = new PathFragment("external");
   public static final PathFragment EXTERNAL_PACKAGE_FILE_NAME = new PathFragment("WORKSPACE");
+  public static final String DEFAULT_REPOSITORY_DIRECTORY = "__main__";
 
   /**
    * Package names that aren't made relative to the current repository because they mean special
@@ -136,6 +143,15 @@ public final class Label implements Comparable<Label>, Serializable, SkylarkPrin
   public static Label parseAbsoluteUnchecked(String absName) {
     return parseAbsoluteUnchecked(absName, true);
   }
+
+  /** A long way to say '(String) s -> parseAbsoluteUnchecked(s)'. */
+  public static final Function<String, Label> PARSE_ABSOLUTE_UNCHECKED =
+      new Function<String, Label>() {
+        @Override
+        public Label apply(@Nullable String s) {
+          return s == null ? null : parseAbsoluteUnchecked(s);
+        }
+      };
 
   /**
    * Factory for Labels from separate components.
@@ -274,7 +290,15 @@ public final class Label implements Comparable<Label>, Serializable, SkylarkPrin
       }
       throw e;
     }
-    this.hashCode = Objects.hash(this.name, this.packageIdentifier);
+    this.hashCode = hashCode(this.name, this.packageIdentifier);
+  }
+
+  /**
+   * A specialization of Arrays.HashCode() that does not require constructing a 2-element array.
+   */
+  private static final int hashCode(Object obj1, Object obj2) {
+    int result = 31 + (obj1 == null ? 0 : obj1.hashCode());
+    return 31 * result + (obj2 == null ? 0 : obj2.hashCode());
   }
 
   private Object writeReplace() {
@@ -326,14 +350,6 @@ public final class Label implements Comparable<Label>, Serializable, SkylarkPrin
   public PathFragment getPackageFragment() {
     return packageIdentifier.getPackageFragment();
   }
-
-  public static final com.google.common.base.Function<Label, PathFragment> PACKAGE_FRAGMENT =
-      new com.google.common.base.Function<Label, PathFragment>() {
-        @Override
-        public PathFragment apply(Label label) {
-          return label.getPackageFragment();
-        }
-  };
 
   /**
    * Returns the label as a path fragment, using the package and the label name.

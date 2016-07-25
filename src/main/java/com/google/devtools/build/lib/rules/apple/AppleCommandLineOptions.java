@@ -87,6 +87,12 @@ public class AppleCommandLineOptions extends FragmentOptions {
   @VisibleForTesting public static final String DEFAULT_WATCHOS_SDK_VERSION = "2.0";
   @VisibleForTesting public static final String DEFAULT_MACOSX_SDK_VERSION = "10.10";
   @VisibleForTesting public static final String DEFAULT_APPLETVOS_SDK_VERSION = "1.0";
+  @VisibleForTesting static final String DEFAULT_IOS_CPU = "x86_64";
+
+  /**
+   * The default watchos CPU value.
+   */
+  public static final String DEFAULT_WATCHOS_CPU = "i386";
 
   @Option(name = "ios_cpu",
       defaultValue = DEFAULT_IOS_CPU,
@@ -131,7 +137,12 @@ public class AppleCommandLineOptions extends FragmentOptions {
           + "is a universal binary containing all specified architectures.")
   public List<String> iosMultiCpus;
 
-  @VisibleForTesting static final String DEFAULT_IOS_CPU = "x86_64";
+  @Option(name = "watchos_cpus",
+      converter = CommaSeparatedOptionListConverter.class,
+      defaultValue = DEFAULT_WATCHOS_CPU,
+      category = "flags",
+      help = "Comma-separated list of architectures for which to build apple watchos binaries.")
+  public List<String> watchosCpus;
 
   @Option(name = "default_ios_provisioning_profile",
       defaultValue = "",
@@ -197,25 +208,25 @@ public class AppleCommandLineOptions extends FragmentOptions {
    */
   public enum AppleBitcodeMode {
 
+    /** Do not compile bitcode. */
+    NONE("none", ImmutableList.<String>of()),
     /**
-     * Do not compile bitcode.
+     * Compile the minimal set of bitcode markers. This is often the best option for developer/debug
+     * builds.
      */
-    NONE("none"),
-    /**
-     * Compile the minimal set of bitcode markers. This is often the best option for
-     * developer/debug builds.
-     */
-    EMBEDDED_MARKERS("embedded_markers", "-fembed-bitcode-marker"),
-    /**
-     * Fully embed bitcode in compiled files. This is often the best option for release builds.
-     */
-    EMBEDDED("embedded", "-fembed-bitcode");
+    EMBEDDED_MARKERS(
+        "embedded_markers", ImmutableList.of("bitcode_embedded_markers"), "-fembed-bitcode-marker"),
+    /** Fully embed bitcode in compiled files. This is often the best option for release builds. */
+    EMBEDDED("embedded", ImmutableList.of("bitcode_embedded"), "-fembed-bitcode");
 
     private final String mode;
+    private final ImmutableList<String> featureNames;
     private final ImmutableList<String> compilerFlags;
 
-    private AppleBitcodeMode(String mode, String... compilerFlags) {
+    private AppleBitcodeMode(
+        String mode, ImmutableList<String> featureNames, String... compilerFlags) {
       this.mode = mode;
+      this.featureNames = featureNames;
       this.compilerFlags = ImmutableList.copyOf(compilerFlags);
     }
 
@@ -224,9 +235,12 @@ public class AppleCommandLineOptions extends FragmentOptions {
       return mode;
     }
 
-    /**
-     * Returns the flags that should be added to compile actions to use this bitcode setting.
-     */
+    /** Returns the names of any crosstool features that correspond to this bitcode mode. */
+    public ImmutableList<String> getFeatureNames() {
+      return featureNames;
+    }
+
+    /** Returns the flags that should be added to compile actions to use this bitcode setting. */
     public ImmutableList<String> getCompilerFlags() {
       return compilerFlags;
     }

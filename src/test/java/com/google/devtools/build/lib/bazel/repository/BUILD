@@ -1,3 +1,9 @@
+filegroup(
+    name = "srcs",
+    srcs = glob(["**"]) + ["//src/test/java/com/google/devtools/build/lib/bazel/repository/downloader:srcs"],
+    visibility = ["//src/test/java/com/google/devtools/build/lib:__pkg__"],
+)
+
 java_test(
     name = "RepositoryTests",
     srcs = glob([
@@ -28,6 +34,7 @@ java_test(
         "//third_party:guava-testlib",
         "//third_party:jsr305",
         "//third_party:junit4",
+        "//third_party:maven",
         "//third_party:mockito",
         "//third_party:truth",
     ],

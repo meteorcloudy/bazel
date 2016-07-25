@@ -397,7 +397,10 @@ public class Package {
   public Map<String, String> getAllMakeVariables(String platform) {
     ImmutableMap.Builder<String, String> map = ImmutableMap.builder();
     for (String var : makeEnv.getBindings().keySet()) {
-      map.put(var, makeEnv.lookup(var, platform));
+      String value = makeEnv.lookup(var, platform);
+      if (value != null) {
+        map.put(var, value);
+      }
     }
     return map.build();
   }
@@ -1205,9 +1208,13 @@ public class Package {
       }
     }
 
-    void addRule(Rule rule) throws NameConflictException {
+    /**
+     * Same as {@link #addRule}, except with no name conflict checks.
+     *
+     * <p>Don't call this function unless you know what you're doing.
+     */
+    void addRuleUnchecked(Rule rule) {
       Preconditions.checkArgument(rule.getPackage() == pkg);
-      checkForConflicts(rule);
       // Now, modify the package:
       for (OutputFile outputFile : rule.getOutputFiles()) {
         targets.put(outputFile.getName(), outputFile);
@@ -1223,6 +1230,11 @@ public class Package {
       if (rule.containsErrors()) {
         this.setContainsErrors();
       }
+    }
+
+    void addRule(Rule rule) throws NameConflictException {
+      checkForConflicts(rule);
+      addRuleUnchecked(rule);
     }
 
     private Builder beforeBuild() {

@@ -42,6 +42,7 @@ import com.google.devtools.build.lib.packages.Attribute;
 import com.google.devtools.build.lib.packages.Attribute.ConfigurationTransition;
 import com.google.devtools.build.lib.packages.AttributeMap;
 import com.google.devtools.build.lib.skylarkinterface.Param;
+import com.google.devtools.build.lib.skylarkinterface.ParamType;
 import com.google.devtools.build.lib.skylarkinterface.SkylarkSignature;
 import com.google.devtools.build.lib.syntax.BuiltinFunction;
 import com.google.devtools.build.lib.syntax.Environment;
@@ -79,48 +80,54 @@ public class SkylarkRuleImplementationFunctions {
   /**
    * A Skylark built-in function to create and register a SpawnAction using a
    * dictionary of parameters:
-   * createSpawnAction(
-   *         inputs = [input1, input2, ...],
-   *         outputs = [output1, output2, ...],
-   *         executable = executable,
-   *         arguments = [argument1, argument2, ...],
-   *         mnemonic = 'Mnemonic',
-   *         command = 'command',
-   *     )
+   * action(
+   *     inputs = [input1, input2, ...],
+   *     outputs = [output1, output2, ...],
+   *     executable = executable,
+   *     arguments = [argument1, argument2, ...],
+   *     mnemonic = 'Mnemonic',
+   *     command = 'command',
+   * )
    */
   @SkylarkSignature(
     name = "action",
-    doc =
-        "Creates an action that runs an executable or a shell command. You must specify either "
-            + "<code>command</code> or <code>executable</code>.\n"
-            + "Actions and genrules are very similar, but have different use cases. Actions are "
-            + "used inside rules, and genrules are used inside macros. Genrules also have make "
-            + "variable expansion.",
+    doc = "Creates an action that runs an executable or a shell command. You must specify either "
+        + "<code>command</code> or <code>executable</code>.\n"
+        + "Actions and genrules are very similar, but have different use cases. Actions are "
+        + "used inside rules, and genrules are used inside macros. Genrules also have make "
+        + "variable expansion.",
     objectType = SkylarkRuleContext.class,
     returnType = Runtime.NoneType.class,
-    mandatoryPositionals = {
-      @Param(name = "self", type = SkylarkRuleContext.class, doc = "This RuleContext.")
-    },
-    mandatoryNamedOnly = {
+    parameters = {
+      @Param(name = "self", type = SkylarkRuleContext.class, doc = "This RuleContext."),
       @Param(
         name = "outputs",
         type = SkylarkList.class,
         generic1 = Artifact.class,
+        named = true,
+        positional = false,
         doc = "list of the output files of the action"
-      )
-    },
-    optionalNamedOnly = {
+      ),
       @Param(
         name = "inputs",
         type = SkylarkList.class,
         generic1 = Artifact.class,
         defaultValue = "[]",
+        named = true,
+        positional = false,
         doc = "list of the input files of the action"
       ),
       @Param(
         name = "executable",
-        type = Object.class, // File or PathFragment or None
+        type = Object.class,
+        allowedTypes = {
+            @ParamType(type = Artifact.class),
+            @ParamType(type = PathFragment.class),
+            @ParamType(type = Runtime.NoneType.class),
+        },
         defaultValue = "None",
+        named = true,
+        positional = false,
         doc = "the executable file to be called by the action"
       ),
       @Param(
@@ -128,6 +135,8 @@ public class SkylarkRuleImplementationFunctions {
         type = SkylarkList.class,
         generic1 = String.class,
         defaultValue = "[]",
+        named = true,
+        positional = false,
         doc = "command line arguments of the action"
       ),
       @Param(
@@ -135,30 +144,41 @@ public class SkylarkRuleImplementationFunctions {
         type = String.class,
         noneable = true,
         defaultValue = "None",
+        named = true,
+        positional = false,
         doc = "a one-word description of the action, e.g. CppCompile or GoLink"
       ),
       @Param(
         name = "command",
-        type = Object.class, // string or ListOf(string) or NoneType
+        type = Object.class,
+        allowedTypes = {
+            @ParamType(type = String.class),
+            @ParamType(type = SkylarkList.class, generic1 = String.class),
+            @ParamType(type = Runtime.NoneType.class),
+        },
         defaultValue = "None",
-        doc =
-            "shell command to execute. It is usually preferable to "
-                + "use <code>executable</code> instead. "
-                + "Arguments are available with <code>$1</code>, <code>$2</code>, etc."
+        named = true,
+        positional = false,
+        doc = "shell command to execute. It is usually preferable to "
+            + "use <code>executable</code> instead. "
+            + "Arguments are available with <code>$1</code>, <code>$2</code>, etc."
       ),
       @Param(
         name = "progress_message",
         type = String.class,
         noneable = true,
         defaultValue = "None",
-        doc =
-            "progress message to show to the user during the build, "
-                + "e.g. \"Compiling foo.cc to create foo.o\""
+        named = true,
+        positional = false,
+        doc = "progress message to show to the user during the build, "
+            + "e.g. \"Compiling foo.cc to create foo.o\""
       ),
       @Param(
         name = "use_default_shell_env",
         type = Boolean.class,
         defaultValue = "False",
+        named = true,
+        positional = false,
         doc = "whether the action should use the built in shell environment or not"
       ),
       @Param(
@@ -166,6 +186,8 @@ public class SkylarkRuleImplementationFunctions {
         type = SkylarkDict.class,
         noneable = true,
         defaultValue = "None",
+        named = true,
+        positional = false,
         doc = "sets the dictionary of environment variables"
       ),
       @Param(
@@ -173,18 +195,20 @@ public class SkylarkRuleImplementationFunctions {
         type = SkylarkDict.class,
         noneable = true,
         defaultValue = "None",
-        doc =
-            "information for scheduling the action."
-                + " See [tags](/docs/be/common-definitions.html#common.tags) for useful keys."
+        named = true,
+        positional = false,
+        doc = "information for scheduling the action. See "
+            + "<a href=\"/docs/be/common-definitions.html#common.tags\">tags</a> for useful keys."
       ),
       @Param(
         name = "input_manifests",
         type = SkylarkDict.class,
         noneable = true,
         defaultValue = "None",
-        doc =
-            "sets the map of input manifests files; "
-                + "they are typically generated by resolve_command"
+        named = true,
+        positional = false,
+        doc = "sets the map of input manifests files; "
+            + "they are typically generated by resolve_command"
       )
     },
     useLocation = true
@@ -331,15 +355,17 @@ public class SkylarkRuleImplementationFunctions {
 
   @SkylarkSignature(name = "expand_location",
       doc =
-      "Expands the given string so that all labels are replaced with the location "
-      + "of their target file(s). Currently, the algorithm uses output, srcs, deps, "
-      + "tools and data attributes for looking up mappings from label to locations.",
+      "Expands all <code>$(location ...)</code> templates in the given string by replacing "
+      + "<code>$(location //x)</code> with the path of the output file of target //x. "
+      + "Expansion only works for labels that point to direct dependencies of this rule or that "
+      + "are explicitly listed in the optional argument <code>targets</code>.<br/>"
+      + "<code>$(location ...)</code> will cause an error if the referenced target has multiple "
+      + "outputs. In this case, please use <code>$(locations ...)</code> since it produces a space-"
+      + "separated list of output paths. It can be safely used for a single output file, too.",
       objectType = SkylarkRuleContext.class, returnType = String.class,
-      mandatoryPositionals = {
+      parameters = {
           @Param(name = "self", type = SkylarkRuleContext.class, doc = "this context"),
           @Param(name = "input", type = String.class, doc = "string to be expanded"),
-      },
-      optionalPositionals = {
           @Param(name = "targets", type = SkylarkList.class,
               generic1 = AbstractConfiguredTarget.class, defaultValue = "[]",
               doc = "list of targets for additional lookup information"),
@@ -382,11 +408,10 @@ public class SkylarkRuleImplementationFunctions {
       doc = "Creates a file write action.",
       objectType = SkylarkRuleContext.class,
       returnType = Runtime.NoneType.class,
-      mandatoryPositionals = {
+      parameters = {
         @Param(name = "self", type = SkylarkRuleContext.class, doc = "this context"),
         @Param(name = "output", type = Artifact.class, doc = "the output file"),
-        @Param(name = "content", type = String.class, doc = "the contents of the file")},
-      optionalPositionals = {
+        @Param(name = "content", type = String.class, doc = "the contents of the file"),
         @Param(name = "executable", type = Boolean.class, defaultValue = "False",
             doc = "whether the output file should be executable (default is False)")})
   private static final BuiltinFunction createFileWriteAction =
@@ -406,15 +431,12 @@ public class SkylarkRuleImplementationFunctions {
       "Creates an empty action that neither executes a command nor produces any "
       + "output, but that is useful for inserting 'extra actions'.",
       objectType = SkylarkRuleContext.class, returnType = Runtime.NoneType.class,
-      mandatoryPositionals = {
+      parameters = {
           @Param(name = "self", type = SkylarkRuleContext.class, doc = "this context"),
-      },
-      mandatoryNamedOnly = {
-          @Param(name = "mnemonic", type = String.class, defaultValue = "None",
+          @Param(name = "mnemonic", type = String.class, named = true, positional = false,
           doc = "a one-word description of the action, e.g. CppCompile or GoLink"),
-      },
-      optionalNamedOnly = {
           @Param(name = "inputs", type = SkylarkList.class, generic1 = Artifact.class,
+              named = true, positional = false,
               defaultValue = "[]", doc = "list of the input files of the action"),
       })
   private static final BuiltinFunction createEmptyAction = new BuiltinFunction("empty_action") {
@@ -454,17 +476,19 @@ public class SkylarkRuleImplementationFunctions {
       doc = "Creates a template expansion action.",
       objectType = SkylarkRuleContext.class,
       returnType = TemplateExpansionAction.class,
-      mandatoryPositionals = {
-        @Param(name = "self", type = SkylarkRuleContext.class, doc = "this context")},
-      mandatoryNamedOnly = {
+      parameters = {
+        @Param(name = "self", type = SkylarkRuleContext.class, doc = "this context"),
         @Param(name = "template", type = Artifact.class,
+            named = true, positional = false,
             doc = "the template file"),
         @Param(name = "output", type = Artifact.class,
+            named = true, positional = false,
             doc = "the output file"),
         @Param(name = "substitutions", type = SkylarkDict.class,
-            doc = "substitutions to make when expanding the template")},
-      optionalNamedOnly = {
-        @Param(name = "executable", type = Boolean.class,
+            named = true, positional = false,
+            doc = "substitutions to make when expanding the template"),
+        @Param(name = "executable", type = Boolean.class, defaultValue = "False",
+            named = true, positional = false,
             doc = "whether the output file should be executable (default is False)")})
   private static final BuiltinFunction createTemplateAction =
       new BuiltinFunction("template_action", Arrays.<Object>asList(false)) {
@@ -506,9 +530,8 @@ public class SkylarkRuleImplementationFunctions {
       doc = "Creates a runfiles object.",
       objectType = SkylarkRuleContext.class,
       returnType = Runfiles.class,
-      mandatoryPositionals = {
-        @Param(name = "self", type = SkylarkRuleContext.class, doc = "This context.")},
-      optionalPositionals = {
+      parameters = {
+        @Param(name = "self", type = SkylarkRuleContext.class, doc = "This context."),
         @Param(name = "files", type = SkylarkList.class, generic1 = Artifact.class,
             defaultValue = "[]", doc = "The list of files to be added to the runfiles."),
         // TODO(bazel-team): If we have a memory efficient support for lazy list containing
@@ -611,32 +634,41 @@ public class SkylarkRuleImplementationFunctions {
     + "all of them suitable for passing as the same-named arguments of the ctx.action method.",
     objectType = SkylarkRuleContext.class,
     returnType = Tuple.class,
-    mandatoryPositionals = {
-      @Param(name = "self", type = SkylarkRuleContext.class, doc = "this RuleContext")
-    },
-    optionalNamedOnly = {
+    parameters = {
+      @Param(name = "self", type = SkylarkRuleContext.class, doc = "this RuleContext"),
       @Param(
         name = "command",
         type = String.class, // string
         defaultValue = "''",
+        named = true,
+        positional = false,
         doc = "command to resolve"
       ),
       @Param(
         name = "attribute",
         type = String.class, // string
+        defaultValue = "None",
         noneable = true,
+        named = true,
+        positional = false,
         doc = "name of the associated attribute for which to issue an error, or None"
       ),
       @Param(
         name = "expand_locations",
         type = Boolean.class,
         defaultValue = "False",
-        doc = "shall we expand $(location) variables?"
+        named = true,
+        positional = false,
+        doc = "shall we expand $(location) variables? "
+            + "See <a href=\"#expand_location\">ctx.expand_location()</a> for more details."
       ),
       @Param(
         name = "make_variables",
         type = SkylarkDict.class, // dict(string, string)
         noneable = true,
+        defaultValue = "None",
+        named = true,
+        positional = false,
         doc = "make variables to expand, or None"
       ),
       @Param(
@@ -644,12 +676,16 @@ public class SkylarkRuleImplementationFunctions {
         defaultValue = "[]",
         type = SkylarkList.class,
         generic1 = TransitiveInfoCollection.class,
+        named = true,
+        positional = false,
         doc = "list of tools (list of targets)"
       ),
       @Param(
         name = "label_dict",
         type = SkylarkDict.class,
         defaultValue = "{}",
+        named = true,
+        positional = false,
         doc =
             "dictionary of resolved labels and the corresponding list of Files "
         + "(a dict of Label : list of Files)"
@@ -658,9 +694,11 @@ public class SkylarkRuleImplementationFunctions {
         name = "execution_requirements",
         type = SkylarkDict.class,
         defaultValue = "{}",
+        named = true,
+        positional = false,
         doc =
-            "information for scheduling the action to resolve this command."
-                + " See [tags](/docs/be/common-definitions.html#common.tags) for useful keys."
+            "information for scheduling the action to resolve this command. See "
+            + "<a href=\"/docs/be/common-definitions.html#common.tags\">tags</a> for useful keys."
       ),
     },
     useLocation = true, useEnvironment = true

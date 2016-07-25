@@ -32,7 +32,6 @@ import com.google.devtools.build.lib.analysis.actions.TemplateExpansionAction.Te
 import com.google.devtools.build.lib.analysis.config.BinTools;
 import com.google.devtools.build.lib.exec.util.TestExecutorBuilder;
 import com.google.devtools.build.lib.testutil.FoundationTestCase;
-import com.google.devtools.build.lib.testutil.TestConstants;
 import com.google.devtools.build.lib.util.io.FileOutErr;
 import com.google.devtools.build.lib.vfs.FileSystemUtils;
 import com.google.devtools.build.lib.vfs.Path;
@@ -69,11 +68,12 @@ public class TemplateExpansionActionTest extends FoundationTestCase {
     substitutions = Lists.newArrayList();
     substitutions.add(Substitution.of("%key%", "foo"));
     substitutions.add(Substitution.of("%value%", "bar"));
-    directories = new BlazeDirectories(
-        scratch.resolve("/install"),
-        scratch.resolve("/base"),
-        scratch.resolve("/workspace"),
-        TestConstants.PRODUCT_NAME);
+    directories =
+        new BlazeDirectories(
+            scratch.resolve("/install"),
+            scratch.resolve("/base"),
+            scratch.resolve("/workspace"),
+            "mock-product-name");
     binTools = BinTools.empty(directories);
   }
 
@@ -211,8 +211,8 @@ public class TemplateExpansionActionTest extends FoundationTestCase {
     // We have to overwrite the artifacts since we need our template in "inputs"
     createArtifacts(SPECIAL_CHARS + "%key%");
 
-    // scratch.overwriteFile appends a newline, so we need an additional %n here
-    String expected = String.format("%s%s%n", SPECIAL_CHARS, SPECIAL_CHARS);
+    // scratch.overwriteFile appends a newline, so we need an additional \n here
+    String expected = String.format("%s%s\n", SPECIAL_CHARS, SPECIAL_CHARS);
 
     executeTemplateExpansion(expected, ImmutableList.of(Substitution.of("%key%", SPECIAL_CHARS)));
   }

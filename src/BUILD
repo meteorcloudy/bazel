@@ -8,7 +8,7 @@ filegroup(
     srcs = select({
         ":darwin": ["//src/main/native:libunix.dylib"],
         ":darwin_x86_64": ["//src/main/native:libunix.dylib"],
-        ":windows": [],
+        ":windows": ["//src/main/native:windows_jni.dll"],
         "//conditions:default": ["//src/main/native:libunix.so"],
     }),
     visibility = [
@@ -26,9 +26,9 @@ filegroup(
         ":libunix",
         "//src/main/tools:build-runfiles",
         "//src/main/tools:process-wrapper",
-        "//src/main/tools:namespace-sandbox",
+        "//src/main/tools:linux-sandbox",
         "//src/main/tools:build_interface_so",
-        "//src/tools/xcode/xcodelocator:xcode-locator",
+        "//tools/osx:xcode-locator",
     ] + embedded_tools,
     outs = ["install_base_key" + suffix],
     cmd = select({
@@ -105,12 +105,12 @@ filegroup(
         "//src/tools/xcode/momcwrapper:momcwrapper",
         "//src/tools/xcode/swiftstdlibtoolwrapper:swiftstdlibtoolwrapper",
         "//src/tools/xcode/environment:environment_plist",
-        "//src/tools/xcode/xcodelocator:xcode-locator",
         "//src/tools/xcode/xcrunwrapper:xcrunwrapper",
         "//src/objc_tools/bundlemerge:bundlemerge_deploy.jar",
         "//src/objc_tools/plmerge:plmerge_deploy.jar",
         "//src/objc_tools/xcodegen:xcodegen_deploy.jar",
         "//src/tools/xcode/realpath:realpath",
+        "//tools/osx:xcode_locator.m",
     ] + select({
         ":iphonesdk": ["//src/tools/xcode/stdredirect:StdRedirect.dylib"],
         "//conditions:default": [":dummy_darwin_tool_src_tools_xcode_stdredirect_StdRedirect.dylib"],
@@ -130,9 +130,10 @@ genrule(
     srcs = [
         ":create_embedded_tools.sh",
         "//tools:embedded_tools_srcs",
+        "//third_party:gpl-srcs",
         "//third_party/iossim:srcs",
         "//third_party/java/jarjar:srcs",
-        "//third_party/java/jdk/langtools:srcs",
+        "//third_party/java/jdk/langtools:test-srcs",
         "//third_party/py/concurrent:srcs",
         "//third_party/py/gflags:srcs",
         "//src/java_tools/buildjar/java/com/google/devtools/build/buildjar/jarhelper:srcs",
@@ -182,9 +183,9 @@ genrule(
         "//src/main/tools:build-runfiles",
         "//src/main/tools:process-wrapper",
         "//src/main/tools:jdk-support",
-        "//src/main/tools:namespace-sandbox",
+        "//src/main/tools:linux-sandbox",
         "//src/main/tools:build_interface_so",
-        "//src/tools/xcode/xcodelocator:xcode-locator",
+        "//tools/osx:xcode-locator",
         ":java-version",
     ],
     outs = ["package" + suffix + ".zip"],
@@ -211,6 +212,7 @@ genrule(
     visibility = [
         "//scripts:__pkg__",  # For bash completion generation
         "//scripts/packages:__pkg__",  # For installer generation
+        "//src/java:__subpackages__",  # For command line reference generation
         "//src/test:__subpackages__",  # For integration tests
     ],
 ) for suffix in [
@@ -293,6 +295,13 @@ filegroup(
         "//src/objc_tools/bundlemerge:srcs",
         "//src/objc_tools/plmerge:srcs",
         "//src/objc_tools/xcodegen:srcs",
+        "//src/test/cpp:srcs",
+        "//src/test/java/com/google/devtools/build/android:srcs",
+        "//src/test/java/com/google/devtools/build/docgen:srcs",
+        "//src/test/java/com/google/devtools/build/lib:srcs",
+        "//src/test/java/com/google/devtools/build/skyframe:srcs",
+        "//src/test/java/com/google/devtools/common/options:srcs",
+        "//src/test/shell:srcs",
         "//src/tools/android/java/com/google/devtools/build/android:srcs",
         "//src/tools/generate_workspace:srcs",
         "//src/tools/xcode/actoolwrapper:srcs",
@@ -301,11 +310,13 @@ filegroup(
         "//src/tools/xcode/libtool:srcs",
         "//src/tools/xcode/momcwrapper:srcs",
         "//src/tools/xcode/realpath:srcs",
+        "//src/tools/singlejar:srcs",
         "//src/tools/xcode/stdredirect:srcs",
         "//src/tools/xcode/swiftstdlibtoolwrapper:srcs",
-        "//src/tools/xcode/xcodelocator:srcs",
         "//src/tools/xcode/xcrunwrapper:srcs",
         "//src/tools/xcode-common:srcs",
+        "//src/tools/remote_worker:srcs",
+        "//tools/osx:srcs",
     ],
     visibility = ["//:__pkg__"],
 )

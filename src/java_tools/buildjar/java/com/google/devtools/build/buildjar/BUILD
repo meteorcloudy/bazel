@@ -17,15 +17,25 @@ java_library(
         "InvalidCommandLineException.java",
         "OptionsParser.java",
     ],
+    deps = [
+        ":JarOwner",
+        "//third_party:guava",
+    ],
 )
 
 java_library(
     name = "javac",
-    srcs = glob([
-        "javac/*.java",
-    ]),
+    srcs = glob(
+        [
+            "javac/*.java",
+        ],
+        exclude = [
+            "javac/JavacOptions.java",
+        ],
+    ),
     deps = [
         ":invalid_command_line_exception",
+        ":javac_options",
         "//src/java_tools/buildjar/java/com/google/devtools/build/buildjar/javac/plugins",
         "//third_party:guava",
         "//third_party:jsr305",
@@ -40,11 +50,14 @@ java_library(
         ["*.java"],
         exclude = [
             "InvalidCommandLineException.java",
+            "JarOwner.java",
         ],
     ),
     deps = [
+        ":JarOwner",
         ":invalid_command_line_exception",
         ":javac",
+        ":javac_options",
         "//src/java_tools/buildjar/java/com/google/devtools/build/buildjar/jarhelper",
         "//src/java_tools/buildjar/java/com/google/devtools/build/buildjar/javac/plugins",
         "//src/java_tools/buildjar/java/com/google/devtools/build/buildjar/javac/plugins:classloader",
@@ -69,8 +82,13 @@ java_library(
     srcs = [
         "javac/JavacOptions.java",
     ],
-    visibility = ["//java/com/google/devtools/build/buildjar:__pkg__"],
+    visibility = [
+        "//java/com/google/devtools/build/buildjar:__pkg__",
+        "//src/java_tools/buildjar/java/com/google/devtools/build/java/bazel:__pkg__",
+        "//src/java_tools/buildjar/java/com/google/devtools/build/java/turbine/javac:__pkg__",
+    ],
     deps = [
+        "//third_party:auto_value",
         "//third_party:guava",
     ],
 )
@@ -86,11 +104,27 @@ java_library(
     deps = [],
 )
 
+java_library(
+    name = "JarOwner",
+    srcs = ["JarOwner.java"],
+    visibility = [
+        "//src/java_tools/buildjar/java/com/google/devtools/build/buildjar:__subpackages__",
+        "//src/java_tools/buildjar/java/com/google/devtools/build/java/turbine:__subpackages__",
+        "//src/java_tools/buildjar/javatests/com/google/devtools/build/java/turbine:__subpackages__",
+    ],
+    deps = [
+        "//third_party:auto_value",
+        "//third_party:guava",
+        "//third_party:jsr305",
+    ],
+)
+
 load("//tools/build_rules:java_rules_skylark.bzl", "bootstrap_java_library", "bootstrap_java_binary")
 
 bootstrap_java_library(
     name = "skylark-deps",
     jars = [
+        "//third_party:auto_value-jars",
         "//third_party:error_prone-jars",
         "//third_party:guava-jars",
         "//third_party:jsr305-jars",
@@ -113,13 +147,26 @@ bootstrap_java_binary(
     name = "bootstrap",
     srcs = glob(
         ["**/*.java"],
-        exclude = ["java/com/google/devtools/build/buildjar/javac/testing/**"],
+        exclude = [
+            "java/com/google/devtools/build/buildjar/javac/testing/**",
+            "JarOwner.java",
+        ],
     ),
     main_class = "com.google.devtools.build.buildjar.BazelJavaBuilder",
     deps = [
         ":skylark-deps",
         "//src/java_tools/buildjar/java/com/google/devtools/build/buildjar/jarhelper:bootstrap_jarhelper",
         "//src/java_tools/buildjar/java/com/google/devtools/build/buildjar/javac/plugins:bootstrap_plugins",
+    ],
+)
+
+bootstrap_java_library(
+    name = "bootstrap_JarOwner",
+    srcs = ["JarOwner.java"],
+    jars = [
+        "//third_party:jsr305-jars",
+        "//third_party:auto_value-jars",
+        "//third_party:guava-jars",
     ],
 )
 

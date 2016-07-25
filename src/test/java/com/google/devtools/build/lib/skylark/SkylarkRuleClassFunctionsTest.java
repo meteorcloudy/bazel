@@ -166,11 +166,28 @@ public class SkylarkRuleClassFunctionsTest extends SkylarkTestCase {
   }
 
   @Test
+  public void testAttrAllowedSingleFileTypesWrongType() throws Exception {
+    checkErrorContains(
+        "allow_single_file should be a boolean or a string list",
+        "attr.label(allow_single_file = 18)");
+  }
+
+  @Test
   public void testAttrWithList() throws Exception {
     Attribute attr = evalAttributeDefinition("attr.label_list(allow_files = ['.xml'])")
         .build("a1");
     assertTrue(attr.getAllowedFileTypesPredicate().apply("a.xml"));
     assertFalse(attr.getAllowedFileTypesPredicate().apply("a.txt"));
+    assertFalse(attr.isSingleArtifact());
+  }
+
+  @Test
+  public void testAttrSingleFileWithList() throws Exception {
+    Attribute attr = evalAttributeDefinition("attr.label(allow_single_file = ['.xml'])")
+        .build("a1");
+    assertTrue(attr.getAllowedFileTypesPredicate().apply("a.xml"));
+    assertFalse(attr.getAllowedFileTypesPredicate().apply("a.txt"));
+    assertTrue(attr.isSingleArtifact());
   }
 
   @Test
@@ -226,7 +243,7 @@ public class SkylarkRuleClassFunctionsTest extends SkylarkTestCase {
   @Test
   public void testLabelListWithAspectsError() throws Exception {
     checkErrorContains(
-        "Illegal argument: expected type aspect for 'aspects' element but got type int instead",
+        "Illegal argument: expected type Aspect for 'aspects' element but got type int instead",
         "def _impl(target, ctx):",
         "   pass",
         "my_aspect = aspect(implementation = _impl)",
@@ -369,16 +386,37 @@ public class SkylarkRuleClassFunctionsTest extends SkylarkTestCase {
   }
 
   @Test
+  public void testAttrAllowEmpty() throws Exception {
+    Attribute attr = evalAttributeDefinition("attr.string_list(allow_empty=False)").build("a1");
+    assertTrue(attr.isNonEmpty());
+    assertFalse(attr.isMandatory());
+  }
+
+  @Test
   public void testAttrBadKeywordArguments() throws Exception {
     checkErrorContains(
         "unexpected keyword 'bad_keyword' in call to string", "attr.string(bad_keyword = '')");
   }
 
   @Test
-  public void testAttrCfg() throws Exception {
+  public void testAttrCfg_deprecated() throws Exception {
     Attribute attr = evalAttributeDefinition("attr.label(cfg = HOST_CFG, allow_files = True)")
         .build("a1");
     assertEquals(ConfigurationTransition.HOST, attr.getConfigurationTransition());
+  }
+
+  @Test
+  public void testAttrCfg() throws Exception {
+    Attribute attr = evalAttributeDefinition("attr.label(cfg = 'host', allow_files = True)")
+        .build("a1");
+    assertEquals(ConfigurationTransition.HOST, attr.getConfigurationTransition());
+  }
+
+  @Test
+  public void testAttrCfgData() throws Exception {
+    Attribute attr = evalAttributeDefinition("attr.label(cfg = 'data', allow_files = True)")
+        .build("a1");
+    assertEquals(ConfigurationTransition.DATA, attr.getConfigurationTransition());
   }
 
   @Test
@@ -599,6 +637,9 @@ public class SkylarkRuleClassFunctionsTest extends SkylarkTestCase {
     checkTextMessage("struct(name='a\"b').to_proto()", "name: \"a\\\"b\"");
     checkTextMessage("struct(name='a\\'b').to_proto()", "name: \"a'b\"");
     checkTextMessage("struct(name='a\\nb').to_proto()", "name: \"a\\nb\"");
+
+    // struct(name="a\\\"b") -> name: "a\\\"b"
+    checkTextMessage("struct(name='a\\\\\\\"b').to_proto()", "name: \"a\\\\\\\"b\"");
   }
 
   @Test

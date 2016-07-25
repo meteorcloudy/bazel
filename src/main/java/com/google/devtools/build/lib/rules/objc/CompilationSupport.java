@@ -64,7 +64,6 @@ import com.google.devtools.build.lib.analysis.FilesToRunProvider;
 import com.google.devtools.build.lib.analysis.PrerequisiteArtifacts;
 import com.google.devtools.build.lib.analysis.RuleConfiguredTarget.Mode;
 import com.google.devtools.build.lib.analysis.RuleContext;
-import com.google.devtools.build.lib.analysis.actions.ActionConstructionContext;
 import com.google.devtools.build.lib.analysis.actions.CommandLine;
 import com.google.devtools.build.lib.analysis.actions.CustomCommandLine;
 import com.google.devtools.build.lib.analysis.actions.FileWriteAction;
@@ -73,6 +72,7 @@ import com.google.devtools.build.lib.analysis.actions.SpawnAction;
 import com.google.devtools.build.lib.analysis.config.BuildConfiguration;
 import com.google.devtools.build.lib.collect.nestedset.NestedSet;
 import com.google.devtools.build.lib.collect.nestedset.NestedSetBuilder;
+import com.google.devtools.build.lib.collect.nestedset.Order;
 import com.google.devtools.build.lib.concurrent.ThreadSafety.Immutable;
 import com.google.devtools.build.lib.packages.BuildType;
 import com.google.devtools.build.lib.packages.ImplicitOutputsFunction.SafeImplicitOutputsFunction;
@@ -81,6 +81,7 @@ import com.google.devtools.build.lib.packages.TargetUtils;
 import com.google.devtools.build.lib.rules.apple.AppleConfiguration;
 import com.google.devtools.build.lib.rules.apple.AppleToolchain;
 import com.google.devtools.build.lib.rules.apple.Platform;
+import com.google.devtools.build.lib.rules.apple.Platform.PlatformType;
 import com.google.devtools.build.lib.rules.cpp.CppModuleMap;
 import com.google.devtools.build.lib.rules.cpp.CppModuleMapAction;
 import com.google.devtools.build.lib.rules.cpp.LinkerInputs;
@@ -89,7 +90,6 @@ import com.google.devtools.build.lib.rules.test.InstrumentedFilesCollector;
 import com.google.devtools.build.lib.rules.test.InstrumentedFilesCollector.InstrumentationSpec;
 import com.google.devtools.build.lib.rules.test.InstrumentedFilesCollector.LocalMetadataCollector;
 import com.google.devtools.build.lib.rules.test.InstrumentedFilesProvider;
-import com.google.devtools.build.lib.shell.ShellUtils;
 import com.google.devtools.build.lib.util.FileTypeSet;
 import com.google.devtools.build.lib.util.Preconditions;
 import com.google.devtools.build.lib.vfs.FileSystemUtils;
@@ -131,7 +131,7 @@ public final class CompilationSupport {
   // These are added by Xcode when building, because the simulator is built on OSX
   // frameworks so we aim compile to match the OSX objc runtime.
   @VisibleForTesting
-  static final ImmutableList<String> IOS_SIMULATOR_COMPILE_FLAGS =
+  static final ImmutableList<String> SIMULATOR_COMPILE_FLAGS =
       ImmutableList.of(
           "-fexceptions", "-fasm-blocks", "-fobjc-abi-version=2", "-fobjc-legacy-dispatch");
 
@@ -174,20 +174,19 @@ public final class CompilationSupport {
         }
       };
 
-  /**
-   * Predicate to remove '.inc' files from an iterable.
-   */
-  private static final Predicate<Artifact> NON_INC_FILES =
+  /** Predicate that matches all artifacts that can be used in a Clang module map. */
+  private static final Predicate<Artifact> MODULE_MAP_HEADER =
       new Predicate<Artifact>() {
         @Override
         public boolean apply(Artifact artifact) {
-          return !artifact.getFilename().endsWith(".inc");
+          // The current clang (clang-600.0.57) on Darwin doesn't support 'textual', so we can't
+          // have '.inc' files in the module map (since they're implictly textual).
+          // TODO(bazel-team): Use HEADERS file type once clang-700 is the base clang we support.
+          return artifact.getFilename().endsWith(".h");
         }
       };
 
-  /**
-   * Selects cc libraries that have alwayslink=1.
-   */
+  /** Selects cc libraries that have alwayslink=1. */
   private static final Predicate<Artifact> ALWAYS_LINKED_CC_LIBRARY =
       new Predicate<Artifact>() {
         @Override
@@ -498,6 +497,7 @@ public final class CompilationSupport {
         .add(CLANG);
     if (ObjcRuleClasses.CPP_SOURCES.matches(sourceFile.getExecPath())) {
       commandLine.add("-stdlib=libc++");
+      commandLine.add("-std=gnu++11");
     }
 
     if (compilationArtifacts.hasSwiftSources()) {
@@ -566,7 +566,7 @@ public final class CompilationSupport {
     // TODO(bazel-team): Remote private headers from inputs once they're added to the provider.
     ruleContext.registerAction(
         ObjcRuleClasses.spawnAppleEnvActionBuilder(
-                ruleContext, appleConfiguration.getSingleArchPlatform())
+                appleConfiguration, appleConfiguration.getSingleArchPlatform())
             .setMnemonic("ObjcCompile")
             .setExecutable(xcrunwrapper(ruleContext))
             .setCommandLine(commandLine.build())
@@ -649,7 +649,7 @@ public final class CompilationSupport {
         .add("-enable-objc-interop")
         .add(objcConfiguration.getSwiftCoptsForCompilationMode());
 
-    if (objcConfiguration.generateDebugSymbols() || objcConfiguration.generateDsym()) {
+    if (objcConfiguration.generateDsym()) {
       commandLine.add("-g");
     }
 
@@ -689,13 +689,15 @@ public final class CompilationSupport {
       PathFragment moduleMapPath = intermediateArtifacts.moduleMap().getArtifact().getExecPath();
       commandLine.add("-I").add(moduleMapPath.getParentDirectory().toString());
       commandLine.add("-import-underlying-module");
+
+      inputHeaders.addAll(objcProvider.get(MODULE_MAP));
     }
 
     commandLine.add(commonFrameworkFlags(objcProvider, appleConfiguration));
 
     ruleContext.registerAction(
         ObjcRuleClasses.spawnAppleEnvActionBuilder(
-                ruleContext, appleConfiguration.getSingleArchPlatform())
+                appleConfiguration, appleConfiguration.getSingleArchPlatform())
             .setMnemonic("SwiftCompile")
             .setExecutable(xcrunwrapper(ruleContext))
             .setCommandLine(commandLine.build())
@@ -703,7 +705,6 @@ public final class CompilationSupport {
             .addInputs(otherSwiftSources)
             .addInputs(inputHeaders.build())
             .addTransitiveInputs(objcProvider.get(HEADER))
-            .addTransitiveInputs(objcProvider.get(MODULE_MAP))
             .addOutput(objFile)
             .addOutput(intermediateArtifacts.swiftModuleFile(sourceFile))
             .build(ruleContext));
@@ -731,7 +732,7 @@ public final class CompilationSupport {
         .add("-target").add(swiftTarget(appleConfiguration))
         .add(objcConfiguration.getSwiftCoptsForCompilationMode());
 
-    if (objcConfiguration.generateDebugSymbols() || objcConfiguration.generateDsym()) {
+    if (objcConfiguration.generateDsym()) {
       commandLine.add("-g");
     }
 
@@ -765,7 +766,7 @@ public final class CompilationSupport {
     commandLine.add(commonFrameworkFlags(objcProvider, appleConfiguration));
 
     ruleContext.registerAction(ObjcRuleClasses.spawnAppleEnvActionBuilder(
-            ruleContext, appleConfiguration.getSingleArchPlatform())
+            appleConfiguration, appleConfiguration.getSingleArchPlatform())
         .setMnemonic("SwiftModuleMerge")
         .setExecutable(xcrunwrapper(ruleContext))
         .setCommandLine(commandLine.build())
@@ -779,24 +780,22 @@ public final class CompilationSupport {
 
   private void registerArchiveActions(ImmutableList.Builder<Artifact> objFiles, Artifact archive) {
     for (Action action :
-        archiveActions(ruleContext, objFiles.build(), archive,
-            intermediateArtifacts.archiveObjList())) {
+        archiveActions(objFiles.build(), archive, intermediateArtifacts.archiveObjList())) {
       ruleContext.registerAction(action);
     }
   }
 
   private Iterable<Action> archiveActions(
-      ActionConstructionContext context,
       Iterable<Artifact> objFiles,
       Artifact archive,
       Artifact objList) {
 
     ImmutableList.Builder<Action> actions = new ImmutableList.Builder<>();
 
-    actions.add(objFilelistAction(context, objFiles, objList));
+    actions.add(objFilelistAction(objFiles, objList));
 
     actions.add(ObjcRuleClasses.spawnAppleEnvActionBuilder(
-            ruleContext, appleConfiguration.getSingleArchPlatform())
+            appleConfiguration, appleConfiguration.getSingleArchPlatform())
         .setMnemonic("ObjcLink")
         .setExecutable(libtool(ruleContext))
         .setCommandLine(new CustomCommandLine.Builder()
@@ -809,17 +808,17 @@ public final class CompilationSupport {
         .addInputs(objFiles)
         .addInput(objList)
         .addOutput(archive)
-        .build(context));
+        .build(ruleContext));
 
     return actions.build();
   }
 
-  private Action objFilelistAction(ActionConstructionContext context,
-      Iterable<Artifact> objFiles, Artifact objList) {
+  private Action objFilelistAction(Iterable<Artifact> objFiles, Artifact objList) {
+    ImmutableSet<Artifact> dedupedObjFiles = ImmutableSet.copyOf(objFiles);
     return new FileWriteAction(
-        context.getActionOwner(),
+        ruleContext.getActionOwner(),
         objList,
-        Artifact.joinExecPaths("\n", objFiles),
+        Artifact.joinExecPaths("\n", dedupedObjFiles),
         /*makeExecutable=*/ false);
   }
 
@@ -836,7 +835,7 @@ public final class CompilationSupport {
     ImmutableList<Artifact> objcLibraries = objcLibraries(objcProvider);
     ImmutableList<Artifact> ccLibraries = ccLibraries(objcProvider);
     ruleContext.registerAction(ObjcRuleClasses.spawnAppleEnvActionBuilder(
-            ruleContext, appleConfiguration.getSingleArchPlatform())
+            appleConfiguration, appleConfiguration.getSingleArchPlatform())
         .setMnemonic("ObjcLink")
         .setExecutable(libtool(ruleContext))
         .setCommandLine(new CustomCommandLine.Builder()
@@ -854,6 +853,15 @@ public final class CompilationSupport {
         .addOutput(outputArchive)
         .build(ruleContext));
     return this;
+  }
+
+  private NestedSet<Artifact> getGcovForObjectiveCIfNeeded() {
+    if (ruleContext.getConfiguration().isCodeCoverageEnabled()
+        && ruleContext.attributes().has(IosTest.OBJC_GCOV_ATTR, BuildType.LABEL)) {
+      return PrerequisiteArtifacts.nestedSet(ruleContext, IosTest.OBJC_GCOV_ATTR, Mode.HOST);
+    } else {
+      return NestedSetBuilder.emptySet(Order.STABLE_ORDER);
+    }
   }
 
   /**
@@ -878,14 +886,15 @@ public final class CompilationSupport {
         INSTRUMENTATION_SPEC,
         new ObjcCoverageMetadataCollector(),
         oFiles.build(),
+        getGcovForObjectiveCIfNeeded(),
         !TargetUtils.isTestRule(ruleContext.getTarget()));
   }
 
   /**
    * Registers any actions necessary to link this rule and its dependencies.
    *
-   * <p>Dsym bundle and breakpad files are generated if
-   * {@link ObjcConfiguration#generateDebugSymbols()} is set.
+   * <p>Dsym bundle is generated if
+   * {@link ObjcConfiguration#generateDsym()} is set.
    *
    * <p>When Bazel flags {@code --compilation_mode=opt} and {@code --objc_enable_binary_stripping}
    * are specified, additional optimizations will be performed on the linked binary: all-symbol
@@ -910,13 +919,9 @@ public final class CompilationSupport {
       DsymOutputType dsymOutputType) {
     Optional<Artifact> dsymBundleZip;
     Optional<Artifact> linkmap;
-    if (objcConfiguration.generateDebugSymbols() || objcConfiguration.generateDsym()) {
+    if (objcConfiguration.generateDsym()) {
       registerDsymActions(dsymOutputType);
       dsymBundleZip = Optional.of(intermediateArtifacts.tempDsymBundleZip(dsymOutputType));
-
-      if (objcConfiguration.generateDebugSymbols()) {
-        registerBreakpadAction(intermediateArtifacts.dsymSymbol(dsymOutputType));
-      }
     } else {
       dsymBundleZip = Optional.absent();
     }
@@ -983,11 +988,8 @@ public final class CompilationSupport {
    */
   private void registerGenerateModuleMapAction(
       CppModuleMap moduleMap, Iterable<Artifact> publicHeaders, Iterable<Artifact> privateHeaders) {
-    // The current clang (clang-600.0.57) on Darwin doesn't support 'textual', so we can't have
-    // '.inc' files in the module map (since they're implictly textual).
-    // TODO(bazel-team): Remove filtering once clang-700 is the base clang we support.
-    publicHeaders = Iterables.filter(publicHeaders, NON_INC_FILES);
-    privateHeaders = Iterables.filter(privateHeaders, NON_INC_FILES);
+    publicHeaders = Iterables.filter(publicHeaders, MODULE_MAP_HEADER);
+    privateHeaders = Iterables.filter(privateHeaders, MODULE_MAP_HEADER);
     ruleContext.registerAction(
         new CppModuleMapAction(
             ruleContext.getActionOwner(),
@@ -1016,7 +1018,7 @@ public final class CompilationSupport {
     // When compilation_mode=opt and objc_enable_binary_stripping are specified, the unstripped
     // binary containing debug symbols is generated by the linker, which also needs the debug
     // symbols for dead-code removal. The binary is also used to generate dSYM bundle if
-    // --objc_generate_debug_symbol is specified. A symbol strip action is later registered to strip
+    // --apple_generate_dsym is specified. A symbol strip action is later registered to strip
     // the symbol table from the unstripped binary.
     Artifact binaryToLink =
         objcConfiguration.shouldStripBinary()
@@ -1038,7 +1040,7 @@ public final class CompilationSupport {
             linkmap);
     ruleContext.registerAction(
         ObjcRuleClasses.spawnAppleEnvActionBuilder(
-                ruleContext, appleConfiguration.getSingleArchPlatform())
+                appleConfiguration, appleConfiguration.getSingleArchPlatform())
             .setMnemonic("ObjcLink")
             .setShellCommand(ImmutableList.of("/bin/bash", "-c"))
             .setCommandLine(new SingleArgCommandLine(commandLine))
@@ -1073,7 +1075,7 @@ public final class CompilationSupport {
 
       ruleContext.registerAction(
           ObjcRuleClasses.spawnAppleEnvActionBuilder(
-                  ruleContext, appleConfiguration.getSingleArchPlatform())
+                  appleConfiguration, appleConfiguration.getSingleArchPlatform())
               .setMnemonic("ObjcBinarySymbolStrip")
               .setExecutable(xcrunwrapper(ruleContext))
               .setCommandLine(symbolStripCommandLine(stripArgs, binaryToLink, strippedBinary))
@@ -1154,7 +1156,8 @@ public final class CompilationSupport {
     if (objcProvider.is(USES_CPP)) {
       commandLine
           .add(CLANG_PLUSPLUS)
-          .add("-stdlib=libc++");
+          .add("-stdlib=libc++")
+          .add("-std=gnu++11");
     } else {
       commandLine.add(CLANG);
     }
@@ -1166,11 +1169,21 @@ public final class CompilationSupport {
       commandLine.add("-dead_strip").add("-no_dead_strip_inits_and_terms");
     }
 
+    Iterable<Artifact> ccLibrariesToForceLoad =
+        Iterables.filter(ccLibraries, ALWAYS_LINKED_CC_LIBRARY);
+
+    ImmutableSet<Artifact> forceLinkArtifacts = ImmutableSet.<Artifact>builder()
+        .addAll(objcProvider.get(FORCE_LOAD_LIBRARY))
+        .addAll(ccLibrariesToForceLoad).build();
+
     Artifact inputFileList = intermediateArtifacts.linkerObjList();
-    ruleContext.registerAction(
-        objFilelistAction(ruleContext,
-            Iterables.concat(bazelBuiltLibraries, objcProvider.get(IMPORTED_LIBRARY), ccLibraries),
-            inputFileList));
+    Iterable<Artifact> objFiles =
+        Iterables.concat(bazelBuiltLibraries, objcProvider.get(IMPORTED_LIBRARY), ccLibraries);
+    // Clang loads archives specified in filelists and also specified as -force_load twice,
+    // resulting in duplicate symbol errors unless they are deduped.
+    objFiles = Iterables.filter(objFiles, Predicates.not(Predicates.in(forceLinkArtifacts)));
+
+    ruleContext.registerAction(objFilelistAction(objFiles, inputFileList));
     
     if (objcConfiguration.shouldPrioritizeStaticLibs()) {
       commandLine.add("-filelist").add(inputFileList.getExecPathString());
@@ -1198,13 +1211,9 @@ public final class CompilationSupport {
       commandLine.add("-filelist").add(inputFileList.getExecPathString());
     }
 
-    Iterable<Artifact> ccLibrariesToForceLoad =
-        Iterables.filter(ccLibraries, ALWAYS_LINKED_CC_LIBRARY);
-
     commandLine
         .addExecPath("-o", linkedBinary)
-        .addBeforeEach("-force_load", Artifact.toExecPaths(objcProvider.get(FORCE_LOAD_LIBRARY)))
-        .addBeforeEach("-force_load", Artifact.toExecPaths(ccLibrariesToForceLoad))
+        .addBeforeEachExecPath("-force_load", forceLinkArtifacts)
         .add(extraLinkArgs)
         .add(objcProvider.get(ObjcProvider.LINKOPT));
 
@@ -1342,7 +1351,7 @@ public final class CompilationSupport {
             commandLine,
             ParameterFile.ParameterFileType.UNQUOTED, ISO_8859_1));
         ruleContext.registerAction(ObjcRuleClasses.spawnAppleEnvActionBuilder(
-                ruleContext, appleConfiguration.getSingleArchPlatform())
+                appleConfiguration, appleConfiguration.getSingleArchPlatform())
             .setMnemonic("DummyPruner")
             .setExecutable(pruner)
             .addInput(dummyArchive)
@@ -1488,23 +1497,6 @@ public final class CompilationSupport {
     return this;
   }
 
-  private void registerBreakpadAction(Artifact debugSymbolFile) {
-    Artifact dumpsyms = ruleContext.getPrerequisiteArtifact("$dumpsyms", Mode.HOST);
-    Artifact breakpadFile = intermediateArtifacts.breakpadSym();
-    ruleContext.registerAction(ObjcRuleClasses.spawnOnDarwinActionBuilder()
-        .setMnemonic("GenBreakpad")
-        .setProgressMessage("Generating breakpad file: " + ruleContext.getLabel())
-        .setShellCommand(ImmutableList.of("/bin/bash", "-c"))
-        .addInput(dumpsyms)
-        .addInput(debugSymbolFile)
-        .addArgument(String.format("%s %s > %s",
-            ShellUtils.shellEscape(dumpsyms.getExecPathString()),
-            ShellUtils.shellEscape(debugSymbolFile.getExecPathString()),
-            ShellUtils.shellEscape(breakpadFile.getExecPathString())))
-        .addOutput(breakpadFile)
-        .build(ruleContext));
-  }
-
   private PathFragment removeSuffix(PathFragment path, String suffix) {
     String name = path.getBaseName();
     Preconditions.checkArgument(
@@ -1566,18 +1558,31 @@ public final class CompilationSupport {
   /**
    * Returns a list of clang flags used for all link and compile actions executed through clang.
    */
-  private static List<String> commonLinkAndCompileFlagsForClang(
+  private List<String> commonLinkAndCompileFlagsForClang(
       ObjcProvider provider, ObjcConfiguration objcConfiguration,
       AppleConfiguration appleConfiguration) {
     ImmutableList.Builder<String> builder = new ImmutableList.Builder<>();
     Platform platform = appleConfiguration.getSingleArchPlatform();
-    if (platform == Platform.IOS_SIMULATOR) {
-      builder.add("-mios-simulator-version-min=" + objcConfiguration.getMinimumOs());
-    } else {
-      builder.add("-miphoneos-version-min=" + objcConfiguration.getMinimumOs());
+    switch (platform) {
+      case IOS_SIMULATOR:
+        builder.add("-mios-simulator-version-min=" + objcConfiguration.getMinimumOs());
+        break;
+      case IOS_DEVICE:
+        builder.add("-miphoneos-version-min=" + objcConfiguration.getMinimumOs());
+        break;
+      case WATCHOS_SIMULATOR:
+        builder.add("-mwatchos-simulator-version-min="
+            + appleConfiguration.getSdkVersionForPlatform(platform));
+        break;
+      case WATCHOS_DEVICE:
+        builder.add("-mwatchos-version-min="
+            + appleConfiguration.getSdkVersionForPlatform(platform));
+        break;
+      default:
+        throw new IllegalArgumentException("Unhandled platform " + platform);
     }
 
-    if (objcConfiguration.generateDebugSymbols() || objcConfiguration.generateDsym()) {
+    if (objcConfiguration.generateDsym()) {
       builder.add("-g");
     }
 
@@ -1594,7 +1599,8 @@ public final class CompilationSupport {
    */
   static Iterable<String> commonFrameworkFlags(
       ObjcProvider provider, AppleConfiguration appleConfiguration) {
-    return Interspersing.beforeEach("-F", commonFrameworkNames(provider, appleConfiguration));
+    return Interspersing.beforeEach("-F",
+        commonFrameworkNames(provider, appleConfiguration));
   }
 
   /**
@@ -1604,18 +1610,18 @@ public final class CompilationSupport {
       ObjcProvider provider, AppleConfiguration appleConfiguration) {
     Platform platform = appleConfiguration.getSingleArchPlatform();
 
-    return new ImmutableList.Builder<String>()
-        .add(AppleToolchain.sdkFrameworkDir(platform, appleConfiguration))
+    ImmutableList.Builder<String> frameworkNames = new ImmutableList.Builder<String>()
+        .add(AppleToolchain.sdkFrameworkDir(platform, appleConfiguration));
+    if (platform.getType() == PlatformType.IOS) {
         // As of sdk8.1, XCTest is in a base Framework dir
-        .add(AppleToolchain.platformDeveloperFrameworkDir(appleConfiguration))
+      frameworkNames.add(AppleToolchain.platformDeveloperFrameworkDir(appleConfiguration));
+    }
+    return frameworkNames
         // Add custom (non-SDK) framework search paths. For each framework foo/bar.framework,
         // include "foo" as a search path.
         .addAll(PathFragment.safePathStrings(uniqueParentDirectories(provider.get(FRAMEWORK_DIR))))
-        .addAll(
-            Interspersing.beforeEach(
-                "-F",
-                PathFragment.safePathStrings(
-                    uniqueParentDirectories(provider.get(FRAMEWORK_SEARCH_PATH_ONLY)))))
+        .addAll(PathFragment.safePathStrings(
+            uniqueParentDirectories(provider.get(FRAMEWORK_SEARCH_PATH_ONLY))))
         .build();
   }
 
@@ -1632,9 +1638,11 @@ public final class CompilationSupport {
       AppleConfiguration configuration) {
     switch (configuration.getSingleArchPlatform()) {
       case IOS_DEVICE:
+      case WATCHOS_DEVICE:
         return ImmutableList.of();
       case IOS_SIMULATOR:
-        return IOS_SIMULATOR_COMPILE_FLAGS;
+      case WATCHOS_SIMULATOR:
+        return SIMULATOR_COMPILE_FLAGS;
       default:
         throw new AssertionError();
     }

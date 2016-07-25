@@ -26,9 +26,9 @@ JAR=$1
 shift
 JAVAP=$1
 shift
-IJAR=$TEST_SRCDIR/$1
+IJAR=$1
 shift
-LANGTOOLS8=$TEST_SRCDIR/$1
+LANGTOOLS8=$1
 shift
 UNZIP=$1
 shift
@@ -40,6 +40,11 @@ shift
 ## Test framework
 source ${DIR}/testenv.sh || { echo "testenv.sh not found!" >&2; exit 1; }
 
+function cleanup() {
+  rm -fr "$TEST_TMPDIR"/*
+}
+
+trap cleanup EXIT
 
 ## Tools
 # Ensure that tooling path is absolute if not in PATH.

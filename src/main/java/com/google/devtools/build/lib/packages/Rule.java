@@ -37,7 +37,6 @@ import com.google.devtools.build.lib.syntax.GlobList;
 import com.google.devtools.build.lib.syntax.Type;
 import com.google.devtools.build.lib.util.BinaryPredicate;
 import com.google.devtools.build.lib.util.Preconditions;
-
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -71,15 +70,12 @@ public final class Rule implements Target, DependencyFilter.AttributeInfoProvide
   private final RuleClass ruleClass;
 
   private final AttributeContainer attributes;
-  private final RawAttributeMapper attributeMap;
 
   private RuleVisibility visibility;
 
   private boolean containsErrors;
 
   private final Location location;
-
-  private final String workspaceName;
 
   // Initialized in the call to populateOutputFiles.
   private List<OutputFile> outputFiles;
@@ -92,9 +88,7 @@ public final class Rule implements Target, DependencyFilter.AttributeInfoProvide
     this.ruleClass = Preconditions.checkNotNull(ruleClass);
     this.location = Preconditions.checkNotNull(location);
     this.attributes = attributeContainer;
-    this.attributeMap = new RawAttributeMapper(pkg, ruleClass, label, attributes);
     this.containsErrors = false;
-    this.workspaceName = pkg.getWorkspaceName();
   }
 
   void setVisibility(RuleVisibility visibility) {
@@ -115,13 +109,6 @@ public final class Rule implements Target, DependencyFilter.AttributeInfoProvide
 
   void setContainsErrors() {
     this.containsErrors = true;
-  }
-
-  /**
-   * Returns the name of the workspace that this rule is in.
-   */
-  public String getWorkspaceName() {
-    return workspaceName;
   }
 
   @Override
@@ -205,7 +192,7 @@ public final class Rule implements Target, DependencyFilter.AttributeInfoProvide
    */
   public boolean hasConfigurableAttributes() {
     for (Attribute attribute : getAttributes()) {
-      if (attributeMap.isConfigurable(attribute.getName(), attribute.getType())) {
+      if (AbstractAttributeMapper.isConfigurable(this, attribute.getName(), attribute.getType())) {
         return true;
       }
     }
@@ -216,7 +203,10 @@ public final class Rule implements Target, DependencyFilter.AttributeInfoProvide
    * Returns true if the given attribute is configurable.
    */
   public boolean isConfigurableAttribute(String attributeName) {
-    return attributeMap.isConfigurable(attributeName, attributeMap.getAttributeType(attributeName));
+    Attribute attribute = ruleClass.getAttributeByNameMaybe(attributeName);
+    return attribute != null
+        ? AbstractAttributeMapper.isConfigurable(this, attributeName, attribute.getType())
+        : false;
   }
 
   /**
@@ -227,7 +217,7 @@ public final class Rule implements Target, DependencyFilter.AttributeInfoProvide
    */
   @Deprecated
   public Attribute getAttributeDefinition(String attrName) {
-    return attributeMap.getAttributeDefinition(attrName);
+    return ruleClass.getAttributeByNameMaybe(attrName);
   }
 
   /**
@@ -318,14 +308,14 @@ public final class Rule implements Target, DependencyFilter.AttributeInfoProvide
    * with the given name.
    */
   public boolean isAttributeValueExplicitlySpecified(String attrName) {
-    return attributeMap.isAttributeValueExplicitlySpecified(attrName);
+    return attributes.isAttributeValueExplicitlySpecified(attrName);
   }
 
   /**
    * Returns the location of the attribute definition for this rule, if known;
    * or the location of the whole rule otherwise. "attrName" need not be a
    * valid attribute name for this rule.
-   * 
+   *
    * <p>This method ignores whether the present rule was created by a macro or not.
    */
   public Location getAttributeLocationWithoutMacro(String attrName) {
@@ -480,6 +470,7 @@ public final class Rule implements Target, DependencyFilter.AttributeInfoProvide
   private void populateImplicitOutputFiles(EventHandler eventHandler, Package.Builder pkgBuilder)
       throws InterruptedException {
     try {
+      RawAttributeMapper attributeMap = RawAttributeMapper.of(this);
       for (String out : ruleClass.getImplicitOutputsFunction().getImplicitOutputs(attributeMap)) {
         try {
           addOutputFile(pkgBuilder.createLabel(out), eventHandler);

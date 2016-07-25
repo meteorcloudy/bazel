@@ -49,7 +49,7 @@ import com.google.devtools.build.lib.rules.cpp.CppOptions;
 import com.google.devtools.build.lib.rules.java.JavaCompilationArgsProvider;
 import com.google.devtools.build.lib.rules.java.JavaConfiguration;
 import com.google.devtools.build.lib.rules.java.JavaSemantics;
-import com.google.devtools.build.lib.syntax.Type;
+import com.google.devtools.build.lib.rules.java.ProguardHelper;
 import com.google.devtools.build.lib.util.FileType;
 
 import java.util.ArrayList;
@@ -98,6 +98,8 @@ public final class AndroidRuleClasses {
       fromTemplates("%{name}_files/resource_files.zip");
   public static final SafeImplicitOutputsFunction ANDROID_RESOURCES_SHRUNK_ZIP =
       fromTemplates("%{name}_files/resource_files_shrunk.zip");
+  public static final SafeImplicitOutputsFunction ANDROID_RESOURCE_SHRINKER_LOG =
+      fromTemplates("%{name}_files/resource_shrinker_log.txt");
   public static final SafeImplicitOutputsFunction ANDROID_INCREMENTAL_RESOURCES_APK =
       fromTemplates("%{name}_files/incremental.ap_");
   public static final SafeImplicitOutputsFunction ANDROID_BINARY_APK =
@@ -122,8 +124,10 @@ public final class AndroidRuleClasses {
       fromTemplates("%{name}_symbols/local-R.txt");
   public static final ImplicitOutputsFunction ANDROID_PROCESSED_MANIFEST =
       fromTemplates("%{name}_processed_manifest/AndroidManifest.xml");
-  public static final SafeImplicitOutputsFunction STUB_APPLICATON_MANIFEST =
-      fromTemplates("%{name}_files/stub/AndroidManifest.xml");
+  public static final SafeImplicitOutputsFunction MOBILE_INSTALL_STUB_APPLICATON_MANIFEST =
+      fromTemplates("%{name}_files/mobile_install/AndroidManifest.xml");
+  public static final SafeImplicitOutputsFunction INSTANT_RUN_STUB_APPLICATON_MANIFEST =
+      fromTemplates("%{name}_files/instant_run/AndroidManifest.xml");
   public static final SafeImplicitOutputsFunction FULL_DEPLOY_MARKER =
       fromTemplates("%{name}_files/full_deploy_marker");
   public static final SafeImplicitOutputsFunction INCREMENTAL_DEPLOY_MARKER =
@@ -146,7 +150,7 @@ public final class AndroidRuleClasses {
   // This needs to be in its own directory because ApkBuilder only has a function (-rf) for source
   // folders but not source files, and it's easiest to guarantee that nothing gets put beside this
   // file in the ApkBuilder invocation in this manner
-  public static final SafeImplicitOutputsFunction STUB_APPLICATION_DATA =
+  public static final SafeImplicitOutputsFunction MOBILE_INSTALL_STUB_APPLICATION_DATA =
       fromTemplates("%{name}_files/stub_application_data/stub_application_data.txt");
   public static final SafeImplicitOutputsFunction DEX_MANIFEST =
       fromTemplates("%{name}_files/dexmanifest.txt");
@@ -163,11 +167,11 @@ public final class AndroidRuleClasses {
       "//tools/android:incremental_stub_application";
   public static final String DEFAULT_INCREMENTAL_SPLIT_STUB_APPLICATION =
       "//tools/android:incremental_split_stub_application";
-  public static final String DEFAULT_RESOURCES_PROCESSOR =
-      "//tools/android:resources_processor";
-  public static final String DEFAULT_RESOURCE_SHRINKER =
-      "//tools/android:resource_shrinker";
   public static final String DEFAULT_AAR_GENERATOR = "//tools/android:aar_generator";
+  public static final String DEFAULT_MANIFEST_MERGER = "//tools/android:manifest_merger";
+  public static final String DEFAULT_RCLASS_GENERATOR = "//tools/android:rclass_generator";
+  public static final String DEFAULT_RESOURCES_PROCESSOR = "//tools/android:resources_processor";
+  public static final String DEFAULT_RESOURCE_SHRINKER = "//tools/android:resource_shrinker";
   public static final String DEFAULT_SDK = "//tools/android:sdk";
 
   /**
@@ -222,6 +226,10 @@ public final class AndroidRuleClasses {
 
           if (androidOptions.fatApkCpus.isEmpty()) {
             BuildOptions splitOptions = buildOptions.clone();
+            splitOptions.get(CppOptions.class).cppCompiler = androidOptions.cppCompiler;
+            // getSplitPrerequisites() will complain if cpu is null after this transition,
+            // so default to android_cpu.
+            splitOptions.get(BuildConfiguration.Options.class).cpu = androidOptions.cpu;
             setCrosstoolToAndroid(splitOptions, buildOptions);
             return ImmutableList.of(splitOptions);
           }
@@ -254,42 +262,42 @@ public final class AndroidRuleClasses {
       "proto_library" // TODO(gregce): remove this line when no such dependencies exist
   };
 
+  public static final boolean hasProguardSpecs(AttributeMap rule) {
+    // The below is a hack to support configurable attributes (proguard_specs seems like
+    // too valuable an attribute to make nonconfigurable, and we don't currently
+    // have the ability to know the configuration when determining implicit outputs).
+    // An IllegalArgumentException gets triggered if the attribute instance is configurable.
+    // We assume, heuristically, that means every configurable value is a non-empty list.
+    //
+    // TODO(bazel-team): find a stronger approach for this. One simple approach is to somehow
+    // receive 'rule' as an AggregatingAttributeMapper instead of a RawAttributeMapper,
+    // check that all possible values are non-empty, and simply don't support configurable
+    // instances that mix empty and non-empty lists. A more ambitious approach would be
+    // to somehow determine implicit outputs after the configuration is known. A third
+    // approach is to refactor the Android rule logic to avoid these dependencies in the
+    // first place.
+    try {
+      return !rule.get("proguard_specs", LABEL_LIST).isEmpty();
+    } catch (IllegalArgumentException e) {
+      // We assume at this point the attribute instance is configurable.
+      return true;
+    }
+  }
+
   public static final SafeImplicitOutputsFunction ANDROID_BINARY_IMPLICIT_OUTPUTS =
       new SafeImplicitOutputsFunction() {
 
         @Override
         public Iterable<String> getImplicitOutputs(AttributeMap rule) {
-          boolean mapping = rule.get("proguard_generate_mapping", Type.BOOLEAN);
           List<SafeImplicitOutputsFunction> functions = Lists.newArrayList();
           functions.add(AndroidRuleClasses.ANDROID_BINARY_APK);
           functions.add(AndroidRuleClasses.ANDROID_BINARY_UNSIGNED_APK);
           functions.add(AndroidRuleClasses.ANDROID_BINARY_DEPLOY_JAR);
 
-          // The below is a hack to support configurable attributes (proguard_specs seems like
-          // too valuable an attribute to make nonconfigurable, and we don't currently
-          // have the ability to know the configuration when determining implicit outputs).
-          // An IllegalArgumentException gets triggered if the attribute instance is configurable.
-          // We assume, heuristically, that means every configurable value is a non-empty list.
-          //
-          // TODO(bazel-team): find a stronger approach for this. One simple approach is to somehow
-          // receive 'rule' as an AggregatingAttributeMapper instead of a RawAttributeMapper,
-          // check that all possible values are non-empty, and simply don't support configurable
-          // instances that mix empty and non-empty lists. A more ambitious approach would be
-          // to somehow determine implicit outputs after the configuration is known. A third
-          // approach is to refactor the Android rule logic to avoid these dependencies in the
-          // first place.
-          boolean hasProguardSpecs;
-          try {
-            hasProguardSpecs = !rule.get("proguard_specs", LABEL_LIST).isEmpty();
-          } catch (IllegalArgumentException e) {
-            // We assume at this point the attribute instance is configurable.
-            hasProguardSpecs = true;
-          }
-
-          if (hasProguardSpecs) {
+          if (hasProguardSpecs(rule)) {
             functions.add(AndroidRuleClasses.ANDROID_BINARY_PROGUARD_JAR);
             functions.add(JavaSemantics.JAVA_BINARY_PROGUARD_CONFIG);
-            if (mapping) {
+            if (ProguardHelper.genProguardMapping(rule)) {
               functions.add(JavaSemantics.JAVA_BINARY_PROGUARD_MAP);
             }
           }
@@ -392,12 +400,16 @@ public final class AndroidRuleClasses {
     @Override
     public RuleClass build(RuleClass.Builder builder, RuleDefinitionEnvironment env) {
       return builder
+          .add(attr("$android_aar_generator", LABEL).cfg(HOST).exec().value(
+              env.getToolsLabel(DEFAULT_AAR_GENERATOR)))
+          .add(attr("$android_manifest_merger", LABEL).cfg(HOST).exec().value(
+              env.getToolsLabel(DEFAULT_MANIFEST_MERGER)))
+          .add(attr("$android_rclass_generator", LABEL).cfg(HOST).exec().value(
+              env.getToolsLabel(DEFAULT_RCLASS_GENERATOR)))
           .add(attr("$android_resources_processor", LABEL).cfg(HOST).exec().value(
               env.getToolsLabel(DEFAULT_RESOURCES_PROCESSOR)))
           .add(attr("$android_resource_shrinker", LABEL).cfg(HOST).exec().value(
               env.getToolsLabel(DEFAULT_RESOURCE_SHRINKER)))
-          .add(attr("$android_aar_generator", LABEL).cfg(HOST).exec().value(
-              env.getToolsLabel(DEFAULT_AAR_GENERATOR)))
           .build();
     }
 

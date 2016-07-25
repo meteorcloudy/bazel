@@ -16,12 +16,28 @@ filegroup(
         "//third_party/java/jdk/langtools:srcs",
         "//third_party/java/jdk/javabuilder:srcs",
         "//third_party/javascript/bootstrap:srcs",
+        "//third_party/checker_framework_dataflow:srcs",
+        "//third_party/checker_framework_javacutil:srcs",
+        "//third_party/jformatstring:srcs",
         "//third_party/protobuf:srcs",
         "//third_party/py/concurrent:srcs",
         "//third_party/py/gflags:srcs",
         "//third_party/py/mock:srcs",
         "//third_party/py/six:srcs",
         "//third_party/zlib:srcs",
+        "//third_party/nanopb:srcs",
+    ],
+)
+
+# Filegroup to ship the sources to the Bazel embededded tools
+# This filegroup should contains all GPL with classpath exception
+# and LGPL code that we use in Bazel.
+filegroup(
+    name = "gpl-srcs",
+    srcs = [
+        "//third_party/checker_framework_dataflow:srcs",
+        "//third_party/checker_framework_javacutil:srcs",
+        "//third_party/jformatstring:srcs",
     ],
 )
 
@@ -204,6 +220,12 @@ java_import(
     jars = ["auto/auto-value-1.2.jar"],
 )
 
+# For bootstrapping JavaBuilder
+filegroup(
+    name = "auto_value-jars",
+    srcs = ["auto/auto-value-1.2.jar"],
+)
+
 java_library(
     name = "dagger",
     exported_plugins = [":dagger_plugin"],
@@ -227,17 +249,17 @@ java_plugin(
 
 java_import(
     name = "dagger_api",
-    jars = ["dagger/dagger-2.4.jar"],
+    jars = ["dagger/dagger-2.5.jar"],
 )
 
 java_import(
     name = "dagger_compiler",
-    jars = ["dagger/dagger-compiler-2.4.jar"],
+    jars = ["dagger/dagger-compiler-2.5.jar"],
 )
 
 java_import(
     name = "dagger_producers",
-    jars = ["dagger/dagger-producers-2.4.jar"],
+    jars = ["dagger/dagger-producers-2.5.jar"],
 )
 
 java_import(
@@ -258,25 +280,25 @@ java_import(
 java_import(
     name = "hazelcast",
     jars = [
-        "hazelcast/hazelcast-3.5.4.jar",
-        "hazelcast/hazelcast-client-3.5.4.jar",
+        "hazelcast/hazelcast-3.6.4.jar",
+        "hazelcast/hazelcast-client-3.6.4.jar",
     ],
 )
 
 java_import(
     name = "error_prone",
     jars = [
-        "error_prone/error_prone_core-2.0.9-20160129.jar",
-        "error_prone/error_prone_annotations-2.0.9-20160129.jar",
-        "error_prone/error_prone_annotation-2.0.9-20160129.jar",
+        "error_prone/error_prone_core-2.0.11.jar",
+        "error_prone/error_prone_annotations-2.0.11.jar",
+        "error_prone/error_prone_annotation-2.0.11.jar",
     ],
     exports = [
-        ":checker_framework_dataflow",
         ":guava",
         ":jcip_annotations",
-        ":jformatstring",
         ":jsr305",
         ":pcollections",
+        "//third_party/checker_framework_dataflow",
+        "//third_party/jformatstring",
     ],
 )
 
@@ -294,48 +316,25 @@ java_import(
     ],
 )
 
-java_import(
-    name = "jformatstring",
-    jars = [
-        "jformatstring/jFormatString-3.0.0.jar",
-    ],
-)
-
-java_import(
-    name = "checker_framework_dataflow",
-    jars = [
-        "checker_framework_dataflow/dataflow-1.8.10.jar",
-    ],
-)
-
 # For bootstrapping JavaBuilder
 filegroup(
     name = "error_prone-jars",
     srcs = [
-        "checker_framework_dataflow/dataflow-1.8.10.jar",
-        "error_prone/error_prone_annotation-2.0.9-20160129.jar",
-        "error_prone/error_prone_annotations-2.0.9-20160129.jar",
-        "error_prone/error_prone_core-2.0.9-20160129.jar",
+        "error_prone/error_prone_annotation-2.0.11.jar",
+        "error_prone/error_prone_annotations-2.0.11.jar",
+        "error_prone/error_prone_core-2.0.11.jar",
         "guava/guava-19.0.jar",
         "jcip_annotations/jcip-annotations-1.0-1.jar",
-        "jformatstring/jFormatString-3.0.0.jar",
         "jsr305/jsr-305.jar",
         "pcollections/pcollections-2.1.2.jar",
+        "//third_party/checker_framework_dataflow:bootstrap",
+        "//third_party/jformatstring:bootstrap",
     ],
 )
 
 java_import(
     name = "guava",
     jars = ["guava/guava-19.0.jar"],
-)
-
-java_import(
-    name = "guice",
-    jars = [
-        "guice/guice-4.0-no_aop.jar",
-        "guice/guice-multibindings-4.0.jar",
-        "jsr330_inject/javax.inject.jar",
-    ],
 )
 
 # For bootstrapping JavaBuilder

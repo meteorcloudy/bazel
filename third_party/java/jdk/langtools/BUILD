@@ -4,14 +4,23 @@ licenses(["restricted"])  # GNU GPL v2 with Classpath exception
 
 filegroup(
     name = "srcs",
+    srcs = glob(["**"]),
+)
+
+filegroup(
+    name = "test-srcs",
     srcs = select({
         "//tools/jdk:jdk7": [
             "BUILD",
+            "LICENSE",
             "javac7.jar",
+            "javac7.srcjar",
         ],
         "//conditions:default": [
             "BUILD",
+            "LICENSE",
             "javac.jar",
+            "javac.srcjar",
         ],
     }),
 )

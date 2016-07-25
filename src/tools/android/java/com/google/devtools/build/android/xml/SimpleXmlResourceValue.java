@@ -13,25 +13,22 @@
 // limitations under the License.
 package com.google.devtools.build.android.xml;
 
+import com.android.resources.ResourceType;
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.devtools.build.android.AndroidDataWritingVisitor;
+import com.google.devtools.build.android.AndroidDataWritingVisitor.StartTag;
+import com.google.devtools.build.android.AndroidResourceClassWriter;
 import com.google.devtools.build.android.FullyQualifiedName;
 import com.google.devtools.build.android.XmlResourceValue;
 import com.google.devtools.build.android.XmlResourceValues;
 import com.google.devtools.build.android.proto.SerializeFormat;
 import com.google.devtools.build.android.proto.SerializeFormat.DataValueXml.Builder;
-
-import com.android.resources.ResourceType;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Path;
 import java.util.Arrays;
-import java.util.Map.Entry;
 import java.util.Objects;
-
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.xml.namespace.QName;
@@ -175,11 +172,6 @@ public class SimpleXmlResourceValue implements XmlResourceValue {
     return withAttributes(Type.ITEM, ImmutableMap.of("type", resourceType.getName()));
   }
 
-  @Deprecated
-  public static XmlResourceValue of(Type valueType, @Nullable String value) {
-    return of(valueType, ImmutableMap.<String, String>of(), value);
-  }
-
   public static XmlResourceValue of(
       Type valueType, ImmutableMap<String, String> attributes, @Nullable String value) {
     return new SimpleXmlResourceValue(valueType, attributes, value);
@@ -195,52 +187,49 @@ public class SimpleXmlResourceValue implements XmlResourceValue {
   @Override
   public void write(
       FullyQualifiedName key, Path source, AndroidDataWritingVisitor mergedDataWriter) {
-    StringBuilder xmlString =
-        new StringBuilder("<")
-            .append(valueType.tagName.getLocalPart())
-            .append(" name=\"")
-            .append(key.name())
-            .append("\"");
-    for (Entry<String, String> entry : attributes.entrySet()) {
-      xmlString
-          .append(" ")
-          .append(entry.getKey())
-          .append("=\"")
-          .append(entry.getValue())
-          .append("\"");
-    }
+
+    StartTag startTag =
+        mergedDataWriter
+            .define(key)
+            .derivedFrom(source)
+            .startTag(valueType.tagName)
+            .named(key)
+            .addAttributesFrom(attributes.entrySet());
+
     if (value != null) {
-      xmlString
-          .append(">")
-          .append(value)
-          .append("</")
-          .append(valueType.tagName.getLocalPart())
-          .append(">");
+      startTag.closeTag().addCharactersOf(value).endTag().save();
     } else {
-      xmlString.append("/>");
+      startTag.closeUnaryTag().save();
     }
-    mergedDataWriter.writeToValuesXml(
-        key, ImmutableList.of(String.format("<!-- %s -->", source), xmlString.toString()));
   }
 
+  @SuppressWarnings("deprecation")
   public static XmlResourceValue from(SerializeFormat.DataValueXml proto) {
     return of(
         Type.valueOf(proto.getValueType()),
-        ImmutableMap.copyOf(proto.getMappedStringValue()),
+        ImmutableMap.copyOf(proto.getAttribute()),
         proto.hasValue() ? proto.getValue() : null);
   }
 
   @Override
-  public int serializeTo(Path source, OutputStream output) throws IOException {
+  public void writeResourceToClass(FullyQualifiedName key,
+      AndroidResourceClassWriter resourceClassWriter) {
+    resourceClassWriter.writeSimpleResource(key.type(), key.name());
+  }
+
+  @Override
+  public int serializeTo(Path source, Namespaces namespaces, OutputStream output)
+      throws IOException {
     SerializeFormat.DataValue.Builder builder =
         XmlResourceValues.newSerializableDataValueBuilder(source);
     Builder xmlValueBuilder =
         builder
             .getXmlValueBuilder()
+            .putAllNamespace(namespaces.asMap())
             .setType(SerializeFormat.DataValueXml.XmlType.SIMPLE)
             // TODO(corysmith): Find a way to avoid writing strings to the serialized format
             // it's inefficient use of space and costs more when deserializing.
-            .putAllMappedStringValue(attributes);
+            .putAllAttribute(attributes);
     if (value != null) {
       xmlValueBuilder.setValue(value);
     }

@@ -256,14 +256,6 @@ public final class CommandEnvironment {
   }
 
   /**
-   * The directory in which blaze stores the server state - that is, the socket
-   * file and a log.
-   */
-  public Path getServerDirectory() {
-    return getOutputBase().getChild("server");
-  }
-
-  /**
    * Returns the execution root directory associated with this Blaze server
    * process. This is where all input and output files visible to the actual
    * build reside.
@@ -397,7 +389,7 @@ public final class CommandEnvironment {
    * @throws AbruptExitException if this command is unsuitable to be run as specified
    */
   void beforeCommand(Command command, OptionsParser optionsParser,
-      CommonCommandOptions options, long execStartTimeNanos)
+      CommonCommandOptions options, long execStartTimeNanos, long waitTimeInMs)
       throws AbruptExitException {
     commandStartTime -= options.startupTime;
 
@@ -473,8 +465,9 @@ public final class CommandEnvironment {
       module.handleOptions(optionsParser);
     }
 
-    eventBus.post(
-        new CommandStartEvent(command.name(), commandId, getClientEnv(), workingDirectory));
+    eventBus.post(new CommandStartEvent(
+        command.name(), commandId, getClientEnv(), workingDirectory, getDirectories(),
+        waitTimeInMs + options.waitTime));
   }
 
   /** Returns the name of the file system we are writing output to. */

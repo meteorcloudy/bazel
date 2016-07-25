@@ -38,7 +38,6 @@ import com.google.devtools.build.lib.exec.ExecutionOptions;
 import com.google.devtools.build.lib.exec.SingleBuildFileCache;
 import com.google.devtools.build.lib.rules.apple.AppleConfiguration;
 import com.google.devtools.build.lib.testutil.BlazeTestUtils;
-import com.google.devtools.build.lib.testutil.TestConstants;
 import com.google.devtools.build.lib.testutil.TestFileOutErr;
 import com.google.devtools.build.lib.testutil.TestUtils;
 import com.google.devtools.build.lib.util.BlazeClock;
@@ -68,7 +67,7 @@ public class StandaloneSpawnStrategyTest {
   private FileSystem fileSystem;
 
   private Path createTestRoot() throws IOException {
-    fileSystem = FileSystems.initDefaultAsNative();
+    fileSystem = FileSystems.getNativeFileSystem();
     Path testRoot = fileSystem.getPath(TestUtils.tmpDir());
     try {
       FileSystemUtils.deleteTreesBelow(testRoot);
@@ -82,34 +81,36 @@ public class StandaloneSpawnStrategyTest {
   @Before
   public final void setUp() throws Exception {
     Path testRoot = createTestRoot();
-    Path workspaceDir = testRoot.getRelative(TestConstants.WORKSPACE_NAME);
+    Path workspaceDir = testRoot.getRelative("workspace-name");
     workspaceDir.createDirectory();
 
     // setup output base & directories
     Path outputBase = testRoot.getRelative("outputBase");
     outputBase.createDirectory();
 
-    BlazeDirectories directories = new BlazeDirectories(outputBase, outputBase, workspaceDir,
-        TestConstants.PRODUCT_NAME);
+    BlazeDirectories directories =
+        new BlazeDirectories(outputBase, outputBase, workspaceDir, "mock-product-name");
     BlazeTestUtils.getIntegrationBinTools(directories);
     OptionsParser optionsParser = OptionsParser.newOptionsParser(ExecutionOptions.class);
     optionsParser.parse("--verbose_failures");
 
     EventBus bus = new EventBus();
 
-    this.executor = new BlazeExecutor(
-        directories.getExecRoot(),
-        directories.getOutputPath(),
-        reporter, bus,
-        BlazeClock.instance(),
-        optionsParser,
-        /* verboseFailures */ false,
-        /* showSubcommands */ false,
-        ImmutableList.<ActionContext>of(),
-        ImmutableMap.<String, SpawnActionContext>of("",
-            new StandaloneSpawnStrategy(directories.getExecRoot(), false,
-                TestConstants.PRODUCT_NAME)),
-        ImmutableList.<ActionContextProvider>of());
+    this.executor =
+        new BlazeExecutor(
+            directories.getExecRoot(),
+            directories.getOutputPath(),
+            reporter,
+            bus,
+            BlazeClock.instance(),
+            optionsParser,
+            /* verboseFailures */ false,
+            /* showSubcommands */ false,
+            ImmutableList.<ActionContext>of(),
+            ImmutableMap.<String, SpawnActionContext>of(
+                "",
+                new StandaloneSpawnStrategy(directories.getExecRoot(), false, "mock-product-name")),
+            ImmutableList.<ActionContextProvider>of());
 
     executor.getExecRoot().createDirectory();
   }

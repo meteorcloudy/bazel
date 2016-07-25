@@ -92,6 +92,15 @@ function test_basic_progress() {
   expect_log 'Analy.*pkg:true'
 }
 
+function test_noshow_progress() {
+  bazel test --experimental_ui --noshow_progress --curses=yes --color=yes \
+    pkg:true 2>$TEST_log || fail "bazel test failed"
+  # Info messages should still go through
+  expect_log 'Elapsed time'
+  # no progress indicator is shown
+  expect_not_log '\[[0-9,]* / [0-9,]*\]'
+}
+
 function test_basic_progress_no_curses() {
   bazel test --experimental_ui --curses=no --color=yes pkg:true 2>$TEST_log \
     || fail "bazel test failed"
@@ -122,6 +131,13 @@ function test_fail() {
   bazel test --experimental_ui --curses=yes --color=yes pkg:false >$TEST_log && fail "expected failure"
   # FAIL is written in red bold on the same line as the test target
   expect_log 'pkg:false.*'$'\x1b\[31m\x1b\[1m''.*FAIL'
+}
+
+function test_timestamp() {
+  bazel test --experimental_ui --show_timestamps pkg:true 2>$TEST_log \
+    || fail "bazel test failed"
+  # expect something that looks like HH:mm:ss
+  expect_log '[0-2][0-9]:[0-5][0-9]:[0-6][0-9]'
 }
 
 function test_info_spacing() {
@@ -206,9 +222,15 @@ function test_failure_scrollback_buffer_curses {
   bazel test --experimental_ui --curses=yes --color=yes \
     --nocache_test_results pkg:false pkg:slow 2>$TEST_log \
     && fail "expected failure"
-  # Some line starting with FAIL in red bold replaces a previous one
-  # (the old progress bar that is deleted
-  expect_log $'\x1b\[K\x1b\[31m\x1b\[1mFAIL:'
+  # Some line starts with FAIL in red bold.
+  expect_log '^'$'\(.*\x1b\[K\)*\x1b\[31m\x1b\[1mFAIL:'
+}
+
+function test_terminal_title {
+  bazel test --experimental_ui --progress_in_terminal_title pkg:true \
+    2>$TEST_log || fail "bazel test failed"
+  # The terminal title is changed
+  expect_log $'\x1b\]0;.*\x07'
 }
 
 function test_failure_scrollback_buffer {

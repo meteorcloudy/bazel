@@ -1,4 +1,4 @@
-#!/bin/sh -eu
+#!/bin/sh
 
 # Copyright 2015 The Bazel Authors. All rights reserved.
 #
@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set -eu
+
 # This script is used to create the directory tree embedded into the Bazel
 # binary that is used as the default source for the @bazel_tools repository.
 # It shuffles around files compiled in other rules, then zips them up.
@@ -27,6 +29,14 @@ mkdir -p "${PACKAGE_DIR}"
 trap "rm -fr \"${PACKAGE_DIR}\"" EXIT
 
 for i in $*; do
+
+  # xcrunwrapper should come from src/tools/xcode/.  Exclude an
+  # xcrunwrapper in tools/objc to avoid conflict.
+  if  [ "$i" = "tools/objc/xcrunwrapper.sh" ]
+  then
+    continue
+  fi
+
   case "$i" in
     *tools/jdk/BUILD*) OUTPUT_PATH=tools/jdk/BUILD ;;
     *JavaBuilder*_deploy.jar) OUTPUT_PATH=tools/jdk/JavaBuilder_deploy.jar ;;
@@ -65,5 +75,5 @@ touch "${PACKAGE_DIR}/tools/defaults/BUILD"
 for i in $(find "${PACKAGE_DIR}" -name BUILD.tools); do
   mv "$i" "$(dirname "$i")/BUILD"
 done
-find "${PACKAGE_DIR}" -exec touch -t 198001010000.00 '{}' ';'
+find "${PACKAGE_DIR}" -exec touch -t 198001010000.00 '{}' '+'
 (cd "${PACKAGE_DIR}" && find . -type f | sort | zip -qDX@ "${OUTPUT}")

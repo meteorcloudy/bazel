@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.google.devtools.build.android;
 
+import com.google.devtools.build.android.xml.Namespaces;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Path;
@@ -30,10 +31,8 @@ public interface XmlResourceValue {
    */
   void write(FullyQualifiedName key, Path source, AndroidDataWritingVisitor mergedDataWriter);
 
-  /**
-   * Serializes the resource value to the OutputStream and returns the bytes written.
-   */
-  int serializeTo(Path source, OutputStream out) throws IOException;
+  /** Serializes the resource value to the OutputStream and returns the bytes written. */
+  int serializeTo(Path source, Namespaces namespaces, OutputStream out) throws IOException;
   
   /**
    * Combines these xml values together and returns a single value.
@@ -43,4 +42,16 @@ public interface XmlResourceValue {
    * @throws IllegalArgumentException if either value cannot combine with the other.
    */
   XmlResourceValue combineWith(XmlResourceValue value);
+
+  /**
+   * Queue up writing the resource to the given {@link AndroidResourceClassWriter}.
+   * Each resource can generate one or more (in the case of styleable) fields and inner classes
+   * in the R class.
+   *
+   * @param key The FullyQualifiedName of the resource
+   * @param resourceClassWriter the R java class writer
+   */
+  void writeResourceToClass(
+      FullyQualifiedName key,
+      AndroidResourceClassWriter resourceClassWriter);
 }

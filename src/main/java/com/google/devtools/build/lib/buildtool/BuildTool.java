@@ -18,14 +18,12 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Throwables;
 import com.google.common.base.Verify;
-import com.google.common.collect.ImmutableMap;
 import com.google.devtools.build.lib.actions.BuildFailedException;
 import com.google.devtools.build.lib.actions.TestExecException;
 import com.google.devtools.build.lib.analysis.AnalysisPhaseCompleteEvent;
 import com.google.devtools.build.lib.analysis.BuildInfoEvent;
 import com.google.devtools.build.lib.analysis.BuildView;
 import com.google.devtools.build.lib.analysis.BuildView.AnalysisResult;
-import com.google.devtools.build.lib.analysis.ConfigurationsCreatedEvent;
 import com.google.devtools.build.lib.analysis.ConfiguredAttributeMapper;
 import com.google.devtools.build.lib.analysis.ConfiguredTarget;
 import com.google.devtools.build.lib.analysis.LicensesProvider;
@@ -74,11 +72,8 @@ import com.google.devtools.build.lib.syntax.Type;
 import com.google.devtools.build.lib.util.AbruptExitException;
 import com.google.devtools.build.lib.util.ExitCode;
 import com.google.devtools.build.lib.util.Preconditions;
-import com.google.devtools.build.lib.vfs.Path;
-import com.google.devtools.build.lib.vfs.PathFragment;
 
 import java.util.Collection;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
@@ -180,7 +175,6 @@ public final class BuildTool {
             env.getReporter(), runtime.getConfigurationFactory(), buildOptions,
             request.getMultiCpus(), request.getViewOptions().keepGoing);
 
-      env.getEventBus().post(new ConfigurationsCreatedEvent(configurations));
       env.throwPendingException();
       if (configurations.getTargetConfigurations().size() == 1) {
         // TODO(bazel-team): This is not optimal - we retain backwards compatibility in the case
@@ -204,9 +198,13 @@ public final class BuildTool {
 
       // Execution phase.
       if (needsExecutionPhase(request.getBuildOptions())) {
-        env.getSkyframeExecutor().injectTopLevelContext(request.getTopLevelArtifactContext());
-        executionTool.executeBuild(request.getId(), analysisResult, result,
-            configurations, transformPackageRoots(analysisResult.getPackageRoots()));
+        executionTool.executeBuild(
+            request.getId(),
+            analysisResult,
+            result,
+            configurations,
+            analysisResult.getPackageRoots(),
+            request.getTopLevelArtifactContext());
       }
 
       String delayedErrorMsg = analysisResult.getError();
@@ -299,15 +297,6 @@ public final class BuildTool {
                   Joiner.on(", ").join(missingEnvironments)));
         }
     }
-  }
-
-  private ImmutableMap<PathFragment, Path> transformPackageRoots(
-      ImmutableMap<PackageIdentifier, Path> packageRoots) {
-    ImmutableMap.Builder<PathFragment, Path> builder = ImmutableMap.builder();
-    for (Map.Entry<PackageIdentifier, Path> entry : packageRoots.entrySet()) {
-      builder.put(entry.getKey().getPathFragment(), entry.getValue());
-    }
-    return builder.build();
   }
 
   private void reportExceptionError(Exception e) {

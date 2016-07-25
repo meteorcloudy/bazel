@@ -48,16 +48,16 @@ if [ -z "${BAZEL-}" ]; then
   function bazel_build() {
     bootstrap_build ${BAZEL_ARGS-} \
                     --verbose_failures \
-                    --javacopt="-source ${JAVA_VERSION} -target ${JAVA_VERSION}" \
+                    --javacopt="-g -source ${JAVA_VERSION} -target ${JAVA_VERSION}" \
                     "${EMBED_LABEL_ARG[@]}" \
                     "${@}"
   }
 else
   function bazel_build() {
-    ${BAZEL} --bazelrc=${BAZELRC} build \
+    ${BAZEL} --bazelrc=${BAZELRC} ${BAZEL_DIR_STARTUP_OPTIONS} build \
            ${BAZEL_ARGS-} \
            --verbose_failures \
-           --javacopt="-source ${JAVA_VERSION} -target ${JAVA_VERSION}" \
+           --javacopt="-g -source ${JAVA_VERSION} -target ${JAVA_VERSION}" \
            "${EMBED_LABEL_ARG[@]}" \
            "${@}"
   }
@@ -89,13 +89,17 @@ function bootstrap_test() {
     STRATEGY=
   fi
   [ -x "${BAZEL_BIN}" ] || fail "syntax: bootstrap bazel-binary"
-  run ${BAZEL_BIN} --nomaster_bazelrc --bazelrc=${BAZELRC} clean \
+  run ${BAZEL_BIN} --nomaster_bazelrc --bazelrc=${BAZELRC} \
+      ${BAZEL_DIR_STARTUP_OPTIONS} \
+      clean \
       --expunge || return $?
-  run ${BAZEL_BIN} --nomaster_bazelrc --bazelrc=${BAZELRC} build \
+  run ${BAZEL_BIN} --nomaster_bazelrc --bazelrc=${BAZELRC} \
+      ${BAZEL_DIR_STARTUP_OPTIONS} \
+      build \
       ${EXTRA_BAZEL_ARGS-} ${STRATEGY} \
       --fetch --nostamp \
       --define "JAVA_VERSION=${JAVA_VERSION}" \
-      --javacopt="-source ${JAVA_VERSION} -target ${JAVA_VERSION}" \
+      --javacopt="-g -source ${JAVA_VERSION} -target ${JAVA_VERSION}" \
       ${BAZEL_TARGET} || return $?
   if [ -n "${BAZEL_SUM}" ]; then
     cat bazel-genfiles/src/java.version >${BAZEL_SUM}

@@ -48,15 +48,14 @@ import com.google.devtools.build.lib.pkgcache.LoadingFailedException;
 import com.google.devtools.build.lib.skyframe.SkyFunctions;
 import com.google.devtools.build.lib.skyframe.TargetPatternValue.TargetPatternKey;
 import com.google.devtools.build.lib.testutil.Suite;
-import com.google.devtools.build.lib.testutil.TestConstants;
 import com.google.devtools.build.lib.testutil.TestSpec;
 import com.google.devtools.build.lib.testutil.TestUtils;
 import com.google.devtools.build.lib.util.Pair;
 import com.google.devtools.build.lib.vfs.Path;
 import com.google.devtools.build.lib.vfs.PathFragment;
-import com.google.devtools.build.skyframe.NotifyingGraph.EventType;
-import com.google.devtools.build.skyframe.NotifyingGraph.Listener;
-import com.google.devtools.build.skyframe.NotifyingGraph.Order;
+import com.google.devtools.build.skyframe.NotifyingHelper.EventType;
+import com.google.devtools.build.skyframe.NotifyingHelper.Listener;
+import com.google.devtools.build.skyframe.NotifyingHelper.Order;
 import com.google.devtools.build.skyframe.SkyKey;
 import com.google.devtools.build.skyframe.TrackingAwaiter;
 
@@ -478,7 +477,15 @@ public class BuildViewTest extends BuildViewTestBase {
     assertContainsEvent("and referenced by '//foo:bad'");
     assertContainsEvent("in sh_library rule //foo");
     assertContainsEvent("cycle in dependency graph");
-    assertEventCount(3, eventCollector);
+    // Dynamic configurations trigger this error both in configuration trimming (which visits
+    // the transitive target closure) and in the normal configured target cycle detection path.
+    // So we get an additional instance of this check (which varies depending on whether Skyframe
+    // loading phase is enabled).
+    // TODO(gregce): refactor away this variation. Note that the duplicate doesn't make it into
+    // real user output (it only affects tests).
+    if (!getTargetConfiguration().useDynamicConfigurations()) {
+      assertEventCount(3, eventCollector);
+    }
   }
 
   @Test
@@ -887,7 +894,6 @@ public class BuildViewTest extends BuildViewTestBase {
           .matches("Analysis of target '//foo:(java|cpp)' failed; build aborted.*");
     }
     assertContainsEvent("cycle in dependency graph");
-    assertContainsEvent("This cycle occurred because of a configuration option");
   }
 
   @Test
@@ -1077,14 +1083,14 @@ public class BuildViewTest extends BuildViewTestBase {
         "filegroup(name = 'jdk', srcs = [",
         "    '//does/not/exist:a-piii', '//does/not/exist:b-k8', '//does/not/exist:c-default'])");
     scratch.file("does/not/exist/BUILD");
-    useConfigurationFactory(AnalysisMock.get().createFullConfigurationFactory());
+    useConfigurationFactory(AnalysisMock.get().createConfigurationFactory());
     useConfiguration("--javabase=//jdk");
     reporter.removeHandler(failFastHandler);
     try {
       update(defaultFlags().with(Flag.KEEP_GOING));
       fail();
     } catch (LoadingFailedException | InvalidConfigurationException e) {
-      if (TestConstants.THIS_IS_BAZEL) {
+      if (getAnalysisMock().isThisBazel()) {
         // TODO(ulfjack): Bazel ignores the --cpu setting and just uses "default" instead. This
         // means all cross-platform Java builds are broken for checked-in JDKs.
         assertContainsEvent(

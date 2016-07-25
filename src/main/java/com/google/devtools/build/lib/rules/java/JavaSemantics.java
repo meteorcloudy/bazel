@@ -39,10 +39,8 @@ import com.google.devtools.build.lib.packages.Rule;
 import com.google.devtools.build.lib.rules.java.DeployArchiveBuilder.Compression;
 import com.google.devtools.build.lib.util.FileType;
 import com.google.devtools.build.lib.vfs.PathFragment;
-
 import java.util.Collection;
 import java.util.List;
-
 import javax.annotation.Nullable;
 
 /**
@@ -70,6 +68,8 @@ public interface JavaSemantics {
       fromTemplates("%{name}_deploy.jar.unstripped");
   SafeImplicitOutputsFunction JAVA_BINARY_PROGUARD_MAP =
       fromTemplates("%{name}_proguard.map");
+  SafeImplicitOutputsFunction JAVA_BINARY_PROGUARD_PROTO_MAP =
+      fromTemplates("%{name}_proguard.pbmap");
   SafeImplicitOutputsFunction JAVA_BINARY_PROGUARD_CONFIG =
       fromTemplates("%{name}_proguard.config");
 
@@ -87,6 +87,9 @@ public interface JavaSemantics {
    * Label to the Java Toolchain rule. It is resolved from a label given in the java options.
    */
   String JAVA_TOOLCHAIN_LABEL = "//tools/defaults:java_toolchain";
+
+  /** The java_toolchain.compatible_javacopts key for Java 7 javacopts */
+  public static final String JAVA7_JAVACOPTS_KEY = "java7";
 
   LateBoundLabel<BuildConfiguration> JAVA_TOOLCHAIN =
       new LateBoundLabel<BuildConfiguration>(JAVA_TOOLCHAIN_LABEL, JavaConfiguration.class) {
@@ -195,6 +198,14 @@ public interface JavaSemantics {
    * <p>Errors should be signaled through {@link RuleContext}.
    */
   void checkRule(RuleContext ruleContext, JavaCommon javaCommon);
+
+  /**
+   * Verifies there are no conflicts in protos.
+   *
+   * <p>Errors should be signaled through {@link RuleContext}.
+   */
+  void checkForProtoLibraryAndJavaProtoLibraryOnSameProto(
+      RuleContext ruleContext, JavaCommon javaCommon);
 
   /**
    * Returns the main class of a Java binary.
@@ -364,10 +375,18 @@ public interface JavaSemantics {
    */
   String getJavaBuilderMainClass();
 
+
   /**
-   * @return Label of pseudo-cc_binary that tells Blaze a java target's JAVABIN is never to be
-   * replaced by the contents of --java_launcher; only the JDK's launcher will ever be used.
+   * @return An artifact representing the protobuf-format version of the
+   * proguard mapping, or null if the proguard version doesn't support this.
    */
-  Label getJdkLauncherLabel();
+  Artifact getProtoMapping(RuleContext ruleContext) throws InterruptedException;
+
+  /**
+   * Returns true if the given Label is of the pseudo-cc_binary that tells Blaze a java target's
+   * JAVABIN is never to be replaced by the contents of --java_launcher; only the JDK's launcher
+   * will ever be used.
+   */
+  boolean isJdkLauncher(Label label);
 }
 

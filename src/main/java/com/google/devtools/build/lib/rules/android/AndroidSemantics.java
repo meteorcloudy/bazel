@@ -18,6 +18,7 @@ import com.google.devtools.build.lib.actions.Artifact;
 import com.google.devtools.build.lib.analysis.OutputGroupProvider;
 import com.google.devtools.build.lib.analysis.RuleConfiguredTargetBuilder;
 import com.google.devtools.build.lib.analysis.RuleContext;
+import com.google.devtools.build.lib.analysis.actions.SpawnAction;
 import com.google.devtools.build.lib.packages.RuleClass.ConfiguredTargetFactory.RuleErrorException;
 import com.google.devtools.build.lib.rules.java.JavaCommon;
 import com.google.devtools.build.lib.rules.java.JavaCompilationArtifacts;
@@ -83,12 +84,19 @@ public interface AndroidSemantics {
    * <p>These will come after the default options specified by the toolchain and the ones in the
    * {@code javacopts} attribute.
    */
-  ImmutableList<String> getJavacArguments();
+  ImmutableList<String> getJavacArguments(RuleContext ruleContext);
 
   /**
    * JVM arguments to be passed to the command line of dx.
    */
   ImmutableList<String> getDxJvmArguments();
+
+  /**
+   * Configures the builder for generating the output jar used to configure the main dex file.
+   * @throws InterruptedException
+   */
+  void addMainDexListActionArguments(RuleContext ruleContext, SpawnAction.Builder builder)
+      throws InterruptedException;
 
   /**
    * Returns the artifact for the debug key for signing the APK.
