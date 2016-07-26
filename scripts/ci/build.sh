@@ -383,8 +383,8 @@ function release_to_apt() {
     local deb_tar_name="${release_name}/bazel.tar.gz"
     cp "${tmpdir}/bazel_${release_label}-linux-x86_64.deb" "${dir}/${deb_pkg_name_jdk8}"
     cp "${tmpdir}/bazel_${release_label}-jdk7-linux-x86_64.deb" "${dir}/${deb_pkg_name_jdk7}"
-    cp "${tmpdir}/bazel-linux-x86_64.dsc" "${dir}/${deb_dsc_name}"
-    cp "${tmpdir}/bazel-linux-x86_64.tar.gz" "${dir}/${deb_tar_name}"
+    cp "${tmpdir}/bazel.dsc" "${dir}/${deb_dsc_name}"
+    cp "${tmpdir}/bazel.tar.gz" "${dir}/${deb_tar_name}"
     cd "${dir}"
     if [ -n "${rc}" ]; then
       create_apt_repository testing "${deb_pkg_name_jdk8}" "${deb_pkg_name_jdk7}" "${deb_dsc_name}"
@@ -432,11 +432,14 @@ function bazel_release() {
     local folder=$2
     shift 2
     for file in $folder/*; do
-      if [ $(basename $file) != README.md ]; then
-        if [[ "$file" =~ /([^/]*)(\.[^\./]+)$ ]]; then
+      local filename=$(basename $file)
+      if [ "$filename" != README.md ]; then
+        if [ "$filename" == "bazel.dsc" ] || [ "$filename" == "bazel.tar.gz" ] ; then
+          local destfile=${tmpdir}/$filename
+        elif [[ "$file" =~ /([^/]*)(\.[^\./]+)$ ]]; then
           local destfile=${tmpdir}/${BASH_REMATCH[1]}-${platform}${BASH_REMATCH[2]}
         else
-          local destfile=${tmpdir}/$(basename $file)-${platform}
+          local destfile=${tmpdir}/$filename-${platform}
         fi
         mv $file $destfile
         checksum $destfile > $destfile.sha256
