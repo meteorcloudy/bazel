@@ -174,7 +174,6 @@ genrule(
         cp $(location :changelog) ./bazel/debian
         dpkg-source -b ./bazel
         cp ./bazel_*.dsc $(location bazel.dsc)
-        sed -i 's/bazel_.*.tar.gz/bazel.tar.gz/g' $(location bazel.dsc)
         cp ./bazel_*.tar.gz $(location bazel.tar.gz)
         """,
     outs = [ "bazel.dsc", "bazel.tar.gz" ],
