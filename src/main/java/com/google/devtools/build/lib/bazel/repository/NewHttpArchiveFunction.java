@@ -36,6 +36,7 @@ import javax.annotation.Nullable;
  */
 public class NewHttpArchiveFunction extends HttpArchiveFunction {
 
+  private NewRepositoryFileHandler fileHandler;
   public NewHttpArchiveFunction(HttpDownloader httpDownloader) {
     super(httpDownloader);
   }
@@ -81,8 +82,15 @@ public class NewHttpArchiveFunction extends HttpArchiveFunction {
         .build());
 
     // Finally, write WORKSPACE and BUILD files.
-    fileHandler.finishFile(outputDirectory);
+    fileHandler.finishFile(outputDirectory, markerData);
 
     return RepositoryDirectoryValue.builder().setPath(outputDirectory);
+  }
+
+  @Override
+  public boolean verifyMarkerData(Rule rule, Map<String, String> markerData, Environment env)
+      throws InterruptedException {
+
+    return false;
   }
 }

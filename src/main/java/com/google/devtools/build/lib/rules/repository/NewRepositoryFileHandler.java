@@ -14,6 +14,7 @@
 
 package com.google.devtools.build.lib.rules.repository;
 
+import com.google.common.base.Preconditions;
 import com.google.devtools.build.lib.cmdline.Label;
 import com.google.devtools.build.lib.cmdline.LabelSyntaxException;
 import com.google.devtools.build.lib.cmdline.LabelValidator;
@@ -25,13 +26,16 @@ import com.google.devtools.build.lib.skyframe.InconsistentFilesystemException;
 import com.google.devtools.build.lib.skyframe.PackageLookupValue;
 import com.google.devtools.build.lib.syntax.EvalException;
 import com.google.devtools.build.lib.syntax.Type;
+import com.google.devtools.build.lib.util.Fingerprint;
 import com.google.devtools.build.lib.vfs.Path;
 import com.google.devtools.build.lib.vfs.PathFragment;
 import com.google.devtools.build.lib.vfs.RootedPath;
 import com.google.devtools.build.skyframe.SkyFunction.Environment;
 import com.google.devtools.build.skyframe.SkyFunctionException.Transience;
 import com.google.devtools.build.skyframe.SkyKey;
+
 import java.io.IOException;
+import java.util.Map;
 
 /**
  * Encapsulates the 2-step behavior of creating workspace and build files for the new_*_repository
@@ -41,10 +45,12 @@ public class NewRepositoryFileHandler {
 
   private NewRepositoryWorkspaceFileHandler workspaceFileHandler;
   private NewRepositoryBuildFileHandler buildFileHandler;
+  private Path workspacePath;
 
   public NewRepositoryFileHandler(Path workspacePath) {
     this.workspaceFileHandler = new NewRepositoryWorkspaceFileHandler(workspacePath);
     this.buildFileHandler = new NewRepositoryBuildFileHandler(workspacePath);
+    this.workspacePath = workspacePath;
   }
 
   public boolean prepareFile(Rule rule, Environment env)
@@ -59,9 +65,32 @@ public class NewRepositoryFileHandler {
     return true;
   }
 
-  public void finishFile(Path outputDirectory) throws RepositoryFunctionException {
-    this.workspaceFileHandler.finishFile(outputDirectory);
-    this.buildFileHandler.finishFile(outputDirectory);
+  public void finishFile(Path outputDirectory, Map<String, String> markerData)
+      throws RepositoryFunctionException {
+    this.workspaceFileHandler.finishFile(outputDirectory, markerData);
+    this.buildFileHandler.finishFile(outputDirectory, markerData);
+  }
+
+  private static boolean verifyFileMarkerData(String key, String value, Environment env)
+      throws InterruptedException {
+    Preconditions.checkArgument(key.startsWith("FILE:"));
+
+    PathFragment filePath = PathFragment.create(key.substring(5));
+
+    return true;
+  }
+
+  public static boolean verifyMarkerDataForFiles(Map<String, String> markerData, Environment env)
+      throws InterruptedException {
+
+    for (Map.Entry<String, String> entry : markerData.entrySet()) {
+      if (entry.getKey().startsWith("FILE:")) {
+        if (!verifyFileMarkerData(entry.getKey(), entry.getValue(), env)) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   /**
@@ -142,14 +171,31 @@ public class NewRepositoryFileHandler {
      * @throws IllegalStateException if {@link #prepareFile} was not called before this, or if
      *     {@link #prepareFile} failed and this was called.
      */
-    public void finishFile(Path outputDirectory) throws RepositoryFunctionException {
+    public void finishFile(Path outputDirectory, Map<String, String> markerData) throws RepositoryFunctionException {
       if (fileValue != null) {
         // Link x/FILENAME to <build_root>/x.FILENAME.
         symlinkFile(fileValue, filename, outputDirectory);
+        try {
+          Fingerprint fingerprint = new Fingerprint();
+          fingerprint.addBytes(fileValue.realRootedPath().asPath().getDigest());
+          markerData.put("FILE:" + fileValue.realRootedPath().asPath().getPathString(),
+              fingerprint.toString());
+        } catch (IOException e) {
+          throw new RepositoryFunctionException(e, Transience.TRANSIENT);
+        }
       } else if (fileContent != null) {
         RepositoryFunction.writeFile(outputDirectory, filename, fileContent);
       } else {
         throw new IllegalStateException("prepareFile() must be called before finishFile()");
+      }
+    }
+
+    public boolean verifyFileValue(Rule rule, Map<String, String> markerData, Environment env)
+        throws RepositoryFunctionException, InterruptedException {
+      FileValue fileValue = getFileValue(rule, env);
+      markerData.get(getFileAttrName());
+      if (fileValue == null) {
+
       }
     }
 
