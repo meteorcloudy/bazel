@@ -12,6 +12,7 @@ class LaunchDataParser {
  public:
   LaunchDataParser(const char* binary_name);
   ~LaunchDataParser();
+  void Close();
   void GetLaunchInfo(LaunchInfo* launch_info);
   DataSize GetDataSize();
   void GetLaunchData(char* launch_data,

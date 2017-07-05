@@ -6,7 +6,7 @@ using namespace std;
 
 int main(int argc, char* argv[]) {
   if (argc < 4) {
-    printf("Usage: input_file output_file_name string\n");
+    printf("Usage: <input_file> <output_file> <data_string>\n");
     return 0;
   }
 
@@ -18,8 +18,8 @@ int main(int argc, char* argv[]) {
     input.close();
     output << argv[3];
     output.put('\0');
-    std::streamsize i = strlen(argv[3]) + sizeof('\0');
-    output.write(reinterpret_cast<char*>(&i), sizeof(i));
+    std::streamsize len = strlen(argv[3]) + sizeof('\0');
+    output.write(reinterpret_cast<char*>(&len), sizeof(len));
     output.close();
   } else {
     cerr << "Cannot open file: " << argv[1] <<endl;

@@ -482,7 +482,7 @@ static void CreateCommandLine(CmdLine* result, const string& exe,
 
   string cmdline_str = cmdline.str();
   if (cmdline_str.size() >= MAX_CMDLINE_LENGTH) {
-    pdie(blaze_exit_code::INTERNAL_ERROR, "Command line too long: %s",
+    pdie(1, "Command line too long: %s",
          cmdline_str.c_str());
   }
 

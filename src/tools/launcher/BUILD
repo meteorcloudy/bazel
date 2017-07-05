@@ -6,31 +6,40 @@ cc_binary(
     ":launcher_lib",
     # ":java_launcher",
     # ":python_launcher",
-    # ":shell_launcher",
+    ":shell_launcher",
+    ":data_parser",
   ],
+)
+
+genrule(
+  name = "launcher_with_data",
+  srcs = [":launcher"],
+  outs = [":launcher_with_data.exe"],
+  cmd = "$(location :append_data) $< $@ \"\nlanguage=java\nversion=1.8\nfoo=bar\n\"",
+  tools = [":append_data"],
+  executable = 1,
+)
+
+cc_binary(
+  name = "append_data",
+  srcs = ["append_data.cc"],
 )
 
 cc_library(
   name = "data_parser",
-  srcs = [
-    "data_parser.cc",
-  ],
-  hdrs = [
-    "data_parser.h",
-  ],
+  srcs = ["data_parser.cc"],
+  hdrs = ["data_parser.h"],
+  deps = ["//src/main/cpp/util:errors"],
 )
 
 cc_library(
   name = "launcher_lib",
   srcs = [
     "launcher.cc",
+    "data_parser.h",
   ],
-  hdrs = [
-    "launcher.h",
-  ],
-  deps = [
-    ":data_parser",
-  ],
+  deps = ["//src/main/cpp/util:errors"],
+  hdrs = ["launcher.h"],
 )
 
 cc_library(
@@ -70,26 +79,4 @@ cc_library(
   deps = [
     ":launcher_lib",
   ],
-)
-
-cc_binary(
-  name = "append_data",
-  srcs = [
-    "append_data.cc",
-  ],
-)
-
-genrule(
-  name = "launcher_with_data",
-  srcs = [
-    ":launcher",
-  ],
-  outs = [
-    ":launcher_with_data.exe",
-  ],
-  cmd = "$(location :append_data) $< $@ \"language:java\nversion:1.8\n\"",
-  tools = [
-    ":append_data",
-  ],
-  executable = 1,
 )

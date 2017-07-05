@@ -77,6 +77,7 @@ cc_library(
     hdrs = ["errors.h"],
     visibility = [
         ":ijar",
+        "//src/tools/launcher:__subpackages__",
         "//src/main/cpp:__subpackages__",
     ],
     deps = [":port"],

@@ -2,14 +2,25 @@
 #include <fstream>
 #include <cstdio>
 #include "src/tools/launcher/data_parser.h"
+#include "src/main/cpp/util/errors.h"
+
+using namespace std;
+using blaze_util::PrintWarning;
 
 LaunchDataParser::LaunchDataParser(const char* binary_name) {
-  binary_file = new std::ifstream(binary_name, std::ios::binary | std::ios::in);
+  binary_file = new ifstream(binary_name, ios::binary | ios::in);
 }
 
 LaunchDataParser::~LaunchDataParser() {
+  if (binary_file != NULL) {
+    this->Close();
+  }
+}
+
+void LaunchDataParser::Close() {
   binary_file->close();
   delete binary_file;
+  binary_file = NULL;
 }
 
 DataSize LaunchDataParser::GetDataSize() {
@@ -39,22 +50,22 @@ void LaunchDataParser::ParseLaunchData(LaunchInfo* launch_info,
       break;
     }
     // Move end to the next \n or data_len,
-    // also find the first colon appears.
+    // also find the first = appears.
     end = start + 1;
     colon = -1;
     while (launch_data[end] != '\n' && end < data_len) {
-      if (colon == -1 && launch_data[end] == ':') {
+      if (colon == -1 && launch_data[end] == '=') {
         colon = end;
       }
       end++;
     }
     if (colon == -1) {
-      std::cerr << "Cannot find colon in line";
-      return;
+      PrintWarning("Cannot find equal symbol in line: %s\n", string(launch_data, start, end - start).c_str());
+    } else {
+      string key(launch_data + start, colon - start);
+      string value(launch_data + colon + 1, end - colon - 1);
+      launch_info->insert(make_pair(key, value));
     }
-    std::string key(launch_data + start, colon - start);
-    std::string value(launch_data + colon + 1, end - colon - 1);
-    launch_info->insert(std::make_pair(key, value));
     start = end;
   }
 }

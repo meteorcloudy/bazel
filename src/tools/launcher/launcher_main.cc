@@ -1,23 +1,33 @@
 #include <iostream>
 
 #include "src/tools/launcher/data_parser.h"
+#include "src/tools/launcher/launcher.h"
+#include "src/tools/launcher/shell_launcher.h"
 
 using namespace std;
 
-int main(int argv, char* args[]) {
+int main(int argc, char* args[]) {
   LaunchDataParser data_parser(args[0]);
-  DataSize data_size = data_parser.GetDataSize();
-  cout << "Data Size: " << data_size <<endl;
+  // DataSize data_size = data_parser.GetDataSize();
+  // cout << "Data Size: " << data_size <<endl;
 
-  char* launch_data = new char[data_size];
-  data_parser.GetLaunchData(launch_data, data_size);
-  printf("\nData:\n%s\n", launch_data);
+  // char* launch_data = new char[data_size];
+  // data_parser.GetLaunchData(launch_data, data_size);
+  // printf("\nData:\n%s\n", launch_data);
 
   LaunchInfo launch_info;
   data_parser.GetLaunchInfo(&launch_info);
-  printf("LaunchInfo:\n");
+  data_parser.Close();
+  cout << "LaunchInfo:" <<endl;
   for (auto& x: launch_info) {
-    cout << x.first << "=" << x.second << endl;
+    cout << "^" << x.first << "=" << x.second << "$" << endl;
   }
+
+  ShellBinaryLauncherBase shell_launcher(&launch_info, argc, args);
+  cout << "InfoByKey:" << endl;
+  cout << shell_launcher.GetLaunchInfoByKey("language") << endl;
+  cout << shell_launcher.GetLaunchInfoByKey("foo") << endl;
+
+  shell_launcher.Launch();
   return 0;
 }
