@@ -20,8 +20,9 @@ class BinaryLauncherBase {
   BinaryLauncherBase(const LaunchInfo* launch_info, int argc, char* args[]);
   string GetLaunchInfoByKey(const string key);
   int GetArgNumber();
-  char** GetArgs();
-  void LaunchProcess(const string commandline);
+  vector<string> GetArgs();
+  void LaunchProcess(const string& executable,
+                     const vector<string>& args_vector);
   void CreateCommandLine(CmdLine* result, const string& exe,
                               const std::vector<string>& args_vector);
   virtual void Launch() = 0;

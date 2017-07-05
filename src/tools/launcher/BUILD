@@ -5,8 +5,8 @@ cc_binary(
   deps = [
     ":launcher_lib",
     # ":java_launcher",
-    # ":python_launcher",
-    ":shell_launcher",
+    ":python_launcher",
+    # ":shell_launcher",
     ":data_parser",
   ],
 )
@@ -15,7 +15,7 @@ genrule(
   name = "launcher_with_data",
   srcs = [":launcher"],
   outs = [":launcher_with_data.exe"],
-  cmd = "$(location :append_data) $< $@ \"\nlanguage=java\nversion=1.8\nfoo=bar\n\"",
+  cmd = "$(location :append_data) $< $@ \"PYTHON_BIN=C:\\Program Files\\Anaconda3\\python.exe\nPYTHON_ZIP=./bazel-genfiles/src/tools/launcher/bin.zip\n\"",
   tools = [":append_data"],
   executable = 1,
 )
@@ -44,39 +44,21 @@ cc_library(
 
 cc_library(
   name = "java_launcher",
-  srcs = [
-    "java_launcher.cc",
-  ],
-  hdrs = [
-    "java_launcher.h"
-  ],
-  deps = [
-    ":launcher_lib",
-  ],
+  srcs = ["java_launcher.cc"],
+  hdrs = ["java_launcher.h"],
+  deps = [":launcher_lib"],
 )
 
 cc_library(
   name = "python_launcher",
-  srcs = [
-    "python_launcher.cc",
-  ],
-  hdrs = [
-    "python_launcher.h"
-  ],
-  deps = [
-    ":launcher_lib",
-  ],
+  srcs = ["python_launcher.cc"],
+  hdrs = ["python_launcher.h"],
+  deps = [":launcher_lib"],
 )
 
 cc_library(
   name = "shell_launcher",
-  srcs = [
-    "shell_launcher.cc",
-  ],
-  hdrs = [
-    "shell_launcher.h"
-  ],
-  deps = [
-    ":launcher_lib",
-  ],
+  srcs = ["shell_launcher.cc"],
+  hdrs = ["shell_launcher.h"],
+  deps = [":launcher_lib"],
 )

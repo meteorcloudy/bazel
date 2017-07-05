@@ -21,8 +21,7 @@ BinaryLauncherBase::BinaryLauncherBase(const LaunchInfo* launch_info, int argc, 
 string BinaryLauncherBase::GetLaunchInfoByKey(const string key) {
   LaunchInfo::const_iterator item = launch_info->find(key);
   if (item == launch_info->end()) {
-    cerr << "Cannot find key \"" << key << "\" from launch data" << endl;
-    return "";
+    die(1, "Cannot find key \"%s\" from launch data.\n", key.c_str());
   }
   return item->second;
 }
@@ -31,23 +30,22 @@ int BinaryLauncherBase::GetArgNumber() {
   return this->argc;
 }
 
-char** BinaryLauncherBase::GetArgs() {
-  return this->args;
+vector<string> BinaryLauncherBase::GetArgs() {
+  vector<string> args_vector;
+  for (int i=0; i < this->argc; i++) {
+    args_vector.push_back(string(this->args[i]));
+  }
+  return args_vector;
 }
 
-void BinaryLauncherBase::CreateCommandLine(CmdLine* result, const string& exe,
-                              const vector<string>& args_vector) {
+void BinaryLauncherBase::CreateCommandLine(CmdLine* result, const string& executable,
+                                           const vector<string>& args_vector) {
   ostringstream cmdline;
+  cmdline << '\"' << executable << '\"';
   bool first = true;
   for (const auto& s : args_vector) {
-    if (first) {
-      first = false;
-      // Skip first argument, instead use quoted executable name.
-      cmdline << '\"' << exe << '\"';
-      continue;
-    } else {
-      cmdline << ' ';
-    }
+
+    cmdline << ' ';
 
     bool has_space = s.find(" ") != string::npos;
 
@@ -87,9 +85,8 @@ void BinaryLauncherBase::CreateCommandLine(CmdLine* result, const string& exe,
 
   string cmdline_str = cmdline.str();
   if (cmdline_str.size() >= MAX_CMDLINE_LENGTH) {
-    pdie(1, "Command line too long: %s",
+    die(1, "Command line too long: %s",
          cmdline_str.c_str());
-
   }
 
   // Copy command line into a mutable buffer.
@@ -98,15 +95,15 @@ void BinaryLauncherBase::CreateCommandLine(CmdLine* result, const string& exe,
   result->cmdline[MAX_CMDLINE_LENGTH - 1] = 0;
 }
 
-void BinaryLauncherBase::LaunchProcess(const string commandline) {
-  // CmdLine cmdline;
-  // CreateCommandLine(&cmdline, exe, args_vector);
+void BinaryLauncherBase::LaunchProcess(const string& executable,
+                                       const vector<string>& args_vector) {
+  CmdLine cmdline;
+  CreateCommandLine(&cmdline, executable, args_vector);
   PROCESS_INFORMATION processInfo = {0};
   STARTUPINFOA startupInfo = {0};
-  char cmdline[MAX_CMDLINE_LENGTH] = "python.exe";
   BOOL ok = CreateProcessA(
       /* lpApplicationName */ NULL,
-      /* lpCommandLine */ cmdline,
+      /* lpCommandLine */ cmdline.cmdline,
       /* lpProcessAttributes */ NULL,
       /* lpThreadAttributes */ NULL,
       /* bInheritHandles */ TRUE,
