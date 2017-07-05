@@ -72,10 +72,24 @@ cc_library(
   ],
 )
 
-
 cc_binary(
   name = "append_data",
   srcs = [
     "append_data.cc",
   ],
+)
+
+genrule(
+  name = "launcher_with_data",
+  srcs = [
+    ":launcher",
+  ],
+  outs = [
+    ":launcher_with_data.exe",
+  ],
+  cmd = "$(location :append_data) $< $@ \"I am the Data\"",
+  tools = [
+    ":append_data",
+  ],
+  executable = 1,
 )

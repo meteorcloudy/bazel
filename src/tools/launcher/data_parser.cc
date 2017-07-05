@@ -19,7 +19,7 @@ std::streamsize LaunchDataParser::GetDataSize() {
 }
 
 LaunchDataMap* LaunchDataParser::ParseLaunchData(const char* launch_data,
-                                                 std::streamsize data_size) {
+                                                 std::streamsize data_len) {
   return new LaunchDataMap({{"key", "value"}});
 }
 
@@ -29,5 +29,6 @@ LaunchDataMap* LaunchDataParser::GetLaunchInfo() {
   binary_file->seekg(0 - data_size - sizeof(data_size), binary_file->end);
   binary_file->read(launch_data, data_size);
   printf("DataStr: %s\n", launch_data);
-  return ParseLaunchData(launch_data, data_size);
+  std::streamsize data_len = data_size ;
+  return ParseLaunchData(launch_data, data_len);
 }

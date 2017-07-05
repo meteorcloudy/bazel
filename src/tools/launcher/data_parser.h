@@ -16,7 +16,7 @@ class LaunchDataParser {
 
  private:
   std::ifstream * binary_file;
-  LaunchDataMap* ParseLaunchData(const char* launch_data, std::streamsize data_size);
+  LaunchDataMap* ParseLaunchData(const char* launch_data, std::streamsize data_len);
 };
 
 #endif // BAZEL_SRC_TOOLS_LAUNCHER_DATA_PARSER_H_
