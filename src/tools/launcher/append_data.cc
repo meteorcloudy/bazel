@@ -17,9 +17,8 @@ int main(int argc, char* argv[]) {
     output << input.rdbuf();
     input.close();
     output << argv[3];
-    char null = '\0';
-    output.write(reinterpret_cast<char*>(&null), sizeof(null));
-    std::streamsize i = strlen(argv[3]) + sizeof(null);
+    output.put('\0');
+    std::streamsize i = strlen(argv[3]) + sizeof('\0');
     output.write(reinterpret_cast<char*>(&i), sizeof(i));
     output.close();
   } else {

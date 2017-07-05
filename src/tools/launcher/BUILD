@@ -87,7 +87,7 @@ genrule(
   outs = [
     ":launcher_with_data.exe",
   ],
-  cmd = "$(location :append_data) $< $@ \"I am the Data\"",
+  cmd = "$(location :append_data) $< $@ \"language:java\nversion:1.8\n\"",
   tools = [
     ":append_data",
   ],

@@ -10,9 +10,6 @@ class BinaryLauncherBase {
  public:
   BinaryLauncherBase(int argc, const char* argv[]);
   virtual void Launch() = 0;
-
- private:
-  LaunchDataMap launchInfo;
 };
 
 #endif // BAZEL_SRC_TOOLS_LAUNCHER_LAUNCHER_H_
