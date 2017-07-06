@@ -6,6 +6,7 @@
 
 using namespace std;
 using blaze_util::PrintWarning;
+using blaze_util::die;
 
 LaunchDataParser::LaunchDataParser(const char* binary_name) {
   binary_file = new ifstream(binary_name, ios::binary | ios::in);
@@ -39,7 +40,7 @@ void LaunchDataParser::GetLaunchData(char* launch_data,
 void LaunchDataParser::ParseLaunchData(LaunchInfo* launch_info,
                                        const char* launch_data,
                                        DataSize data_len) {
-  DataSize start, end, colon;
+  DataSize start, end, equal;
   start = 0;
   while (start < data_len) {
     // Move start to point to the next non-newline character.
@@ -49,21 +50,25 @@ void LaunchDataParser::ParseLaunchData(LaunchInfo* launch_info,
     if (start >= data_len) {
       break;
     }
-    // Move end to the next \n or data_len,
-    // also find the first = appears.
-    end = start + 1;
-    colon = -1;
+    // Move end to the next \n or end of the string,
+    // also find the first equal symbol appears.
+    end = start;
+    equal = -1;
     while (launch_data[end] != '\n' && end < data_len) {
-      if (colon == -1 && launch_data[end] == '=') {
-        colon = end;
+      if (equal == -1 && launch_data[end] == '=') {
+        equal = end;
       }
       end++;
     }
-    if (colon == -1) {
-      PrintWarning("Cannot find equal symbol in line: %s\n", string(launch_data, start, end - start).c_str());
+    if (equal == -1) {
+      PrintWarning("Cannot find equal symbol in line: %s\n",
+                   string(launch_data, start, end - start).c_str());
+    } else if (start == equal) {
+      PrintWarning("Key is empty string in line: %s\n",
+                   string(launch_data, start, end - start).c_str());
     } else {
-      string key(launch_data + start, colon - start);
-      string value(launch_data + colon + 1, end - colon - 1);
+      string key(launch_data + start, equal - start);
+      string value(launch_data + equal + 1, end - equal - 1);
       launch_info->insert(make_pair(key, value));
     }
     start = end;
@@ -75,6 +80,10 @@ void LaunchDataParser::GetLaunchInfo(LaunchInfo* launch_info) {
   char* launch_data = new char[data_size];
   GetLaunchData(launch_data, data_size);
   DataSize data_len = data_size - 1;
+  if (data_len == 0) {
+    Close();
+    die(1, "No data appended, cannot launch anything!");
+  }
   ParseLaunchData(launch_info, launch_data, data_len);
   delete launch_data;
 }

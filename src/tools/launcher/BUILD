@@ -4,18 +4,28 @@ cc_binary(
   srcs = ["launcher_main.cc"],
   deps = [
     ":launcher_lib",
-    # ":java_launcher",
+    ":java_launcher",
     ":python_launcher",
-    # ":shell_launcher",
+    ":bash_launcher",
     ":data_parser",
+    ":util",
   ],
+)
+
+genrule(
+  name = "launcher_with_null_data",
+  srcs = [":launcher"],
+  outs = [":launcher_with_null_data.exe"],
+  cmd = "$(location :append_data) $< $@ \"\"",
+  tools = [":append_data"],
+  executable = 1,
 )
 
 genrule(
   name = "launcher_with_data",
   srcs = [":launcher"],
   outs = [":launcher_with_data.exe"],
-  cmd = "$(location :append_data) $< $@ \"PYTHON_BIN=C:\\Program Files\\Anaconda3\\python.exe\nPYTHON_ZIP=./bazel-genfiles/src/tools/launcher/bin.zip\n\"",
+  cmd = "$(location :append_data) $< $@ \"PYTHON_BIN=C:\\Program Files\\Anaconda3\\python.exe\n\"",
   tools = [":append_data"],
   executable = 1,
 )
@@ -23,6 +33,12 @@ genrule(
 cc_binary(
   name = "append_data",
   srcs = ["append_data.cc"],
+)
+
+cc_library(
+  name = "util",
+  srcs = ["launcher_util.cc"],
+  hdrs = ["launcher_util.h"],
 )
 
 cc_library(
@@ -53,12 +69,12 @@ cc_library(
   name = "python_launcher",
   srcs = ["python_launcher.cc"],
   hdrs = ["python_launcher.h"],
-  deps = [":launcher_lib"],
+  deps = [":launcher_lib", ":util"],
 )
 
 cc_library(
-  name = "shell_launcher",
-  srcs = ["shell_launcher.cc"],
-  hdrs = ["shell_launcher.h"],
+  name = "bash_launcher",
+  srcs = ["bash_launcher.cc"],
+  hdrs = ["bash_launcher.h"],
   deps = [":launcher_lib"],
 )
