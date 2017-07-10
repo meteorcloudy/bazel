@@ -16,7 +16,7 @@ genrule(
   name = "launcher_with_null_data",
   srcs = [":launcher"],
   outs = [":launcher_with_null_data.exe"],
-  cmd = "$(location :append_data) $< $@ \"\"",
+  cmd = "$(location :append_data) $< $@",
   tools = [":append_data"],
   executable = 1,
 )
@@ -25,7 +25,7 @@ genrule(
   name = "launcher_with_data",
   srcs = [":launcher"],
   outs = [":launcher_with_data.exe"],
-  cmd = "$(location :append_data) $< $@ \"PYTHON_BIN=C:\\Program Files\\Anaconda3\\python.exe\n\"",
+  cmd = "$(location :append_data) $< $@  \"BINARY_TYPE=python\" \"PYTHON_BIN=C:\\Program Files\\Anaconda3\\python.exe\"",
   tools = [":append_data"],
   executable = 1,
 )

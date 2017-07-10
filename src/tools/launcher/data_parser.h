@@ -22,7 +22,7 @@ class LaunchDataParser {
   std::ifstream * binary_file;
   void ParseLaunchData(LaunchInfo* launch_info,
                        const char* launch_data,
-                       DataSize data_len);
+                       DataSize data_size);
 };
 
 #endif // BAZEL_SRC_TOOLS_LAUNCHER_DATA_PARSER_H_

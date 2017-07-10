@@ -39,22 +39,22 @@ void LaunchDataParser::GetLaunchData(char* launch_data,
 
 void LaunchDataParser::ParseLaunchData(LaunchInfo* launch_info,
                                        const char* launch_data,
-                                       DataSize data_len) {
+                                       DataSize data_size) {
   DataSize start, end, equal;
   start = 0;
-  while (start < data_len) {
-    // Move start to point to the next non-newline character.
-    while (launch_data[start] == '\n') {
+  while (start < data_size) {
+    // Move start to point to the next non-null character.
+    while (launch_data[start] == '\0' && start < data_size) {
       start++;
     }
-    if (start >= data_len) {
+    if (start >= data_size) {
       break;
     }
-    // Move end to the next \n or end of the string,
+    // Move end to the next null character or end of the string,
     // also find the first equal symbol appears.
     end = start;
     equal = -1;
-    while (launch_data[end] != '\n' && end < data_len) {
+    while (launch_data[end] != '\0' && end < data_size) {
       if (equal == -1 && launch_data[end] == '=') {
         equal = end;
       }
@@ -62,10 +62,10 @@ void LaunchDataParser::ParseLaunchData(LaunchInfo* launch_info,
     }
     if (equal == -1) {
       PrintWarning("Cannot find equal symbol in line: %s\n",
-                   string(launch_data, start, end - start).c_str());
+                   string(launch_data + start, end - start).c_str());
     } else if (start == equal) {
       PrintWarning("Key is empty string in line: %s\n",
-                   string(launch_data, start, end - start).c_str());
+                   string(launch_data + start, end - start).c_str());
     } else {
       string key(launch_data + start, equal - start);
       string value(launch_data + equal + 1, end - equal - 1);
@@ -79,11 +79,10 @@ void LaunchDataParser::GetLaunchInfo(LaunchInfo* launch_info) {
   DataSize data_size = GetDataSize();
   char* launch_data = new char[data_size];
   GetLaunchData(launch_data, data_size);
-  DataSize data_len = data_size - 1;
-  if (data_len == 0) {
+  if (data_size == 0) {
     Close();
     die(1, "No data appended, cannot launch anything!");
   }
-  ParseLaunchData(launch_info, launch_data, data_len);
+  ParseLaunchData(launch_info, launch_data, data_size);
   delete launch_data;
 }
