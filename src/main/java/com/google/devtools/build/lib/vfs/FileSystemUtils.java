@@ -22,10 +22,14 @@ import com.google.common.io.ByteSource;
 import com.google.common.io.ByteStreams;
 import com.google.devtools.build.lib.concurrent.ThreadSafety.ConditionallyThreadSafe;
 import com.google.devtools.build.lib.concurrent.ThreadSafety.ThreadSafe;
+
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
+import java.nio.file.DirectoryNotEmptyException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -546,7 +550,33 @@ public class FileSystemUtils {
   @ThreadSafe
   public static void deleteTree(Path p) throws IOException {
     deleteTreesBelow(p);
-    p.delete();
+    try {
+
+      p.delete();
+    } catch (IOException e){
+      final Runtime rt = Runtime.getRuntime();
+      Process process = rt.exec("C:\\tools\\msys64\\usr\\bin\\ls.exe -l " + p.getPathString().replace("/", "\\"));
+      try {
+        process.waitFor();
+      } catch (InterruptedException e1) {
+        e1.printStackTrace();
+      }
+      InputStream in = process.getInputStream();
+      InputStream error = process.getErrorStream();
+      BufferedReader reader = new BufferedReader(new InputStreamReader(in));
+      String line;
+      System.out.println("STDOUT:");
+      while ((line = reader.readLine()) != null) {
+        System.out.println(line);
+      }
+
+      BufferedReader errorreader = new BufferedReader(new InputStreamReader(error));
+      System.out.println("\nSTDERR:");
+      while ((line = errorreader.readLine()) != null) {
+        System.out.println(line);
+      }
+      throw e;
+    }
   }
 
   /**

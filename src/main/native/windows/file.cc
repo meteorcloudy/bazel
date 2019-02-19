@@ -14,10 +14,13 @@
 
 #include <stdint.h>  // uint8_t
 #include <windows.h>
+#include <Shlwapi.h>
 
 #include <memory>
 #include <sstream>
 #include <string>
+#include <iostream>
+#include <fstream>
 
 #include "src/main/native/windows/file.h"
 #include "src/main/native/windows/util.h"
@@ -402,6 +405,9 @@ int DeletePath(const wstring& path, wstring* error) {
     return DeletePathResult::kError;
   }
 
+  std::wofstream myfile;
+  myfile.open("C:\\users\\pcloudy\\desktop\\output.txt", std::ofstream::out | std::ofstream::app);
+
   const std::wstring winpath(AddUncPrefixMaybe(path));
   const wchar_t* wpath = winpath.c_str();
 
@@ -446,20 +452,99 @@ int DeletePath(const wstring& path, wstring* error) {
     // DeleteFileW failed with access denied, but the path exists.
     if (attr & FILE_ATTRIBUTE_DIRECTORY) {
       // It's a directory or a junction.
-      if (!RemoveDirectoryW(wpath)) {
+
+      // Sometimes a deleted directory lingers in its parent dir
+      // after the deleting handle has already been closed.
+      // In this case we check the content of the parent directory,
+      // if we don't find any valid file, we try to delete it again after 5 ms.
+      // But we don't want to hang infinitely because another application
+      // can hold the handle for a long time. So try at most 20 times,
+      // which means a process time of 100-120ms.
+      // Inspired by https://github.com/Alexpux/Cygwin/commit/28fa2a72f810670a0562ea061461552840f5eb70
+      int count = 20;
+      while (count > 0) {
+        if (RemoveDirectoryW(wpath)) {
+          break;
+        }
+
         // Failed to delete the directory.
         err = GetLastError();
         if (err == ERROR_SHARING_VIOLATION || err == ERROR_ACCESS_DENIED) {
           // The junction or directory is in use by another process, or we have
           // no permission to delete it.
           return DeletePathResult::kAccessDenied;
-        } else if (err == ERROR_DIR_NOT_EMPTY) {
-          // The directory is not empty.
-          return DeletePathResult::kDirectoryNotEmpty;
         } else if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) {
           // The directory or one of its directories disappeared or is no longer
           // a directory.
           return DeletePathResult::kDoesNotExist;
+        } else if (err == ERROR_DIR_NOT_EMPTY) {
+          myfile << "Got ERROR_DIR_NOT_EMPTY for " << winpath << "\n";
+          static const wstring kDot(L".");
+          static const wstring kDotDot(L"..");
+          bool found_valid_file = false;
+          bool found_pending_delete_file = false;
+          WIN32_FIND_DATAW metadata;
+          HANDLE handle = ::FindFirstFileW((winpath + L"\\*").c_str(), &metadata);
+          if (handle != INVALID_HANDLE_VALUE) {
+            do {
+              if (kDot != metadata.cFileName && kDotDot != metadata.cFileName) {
+                std::wstring wname = winpath + L"\\" + metadata.cFileName;
+                HANDLE hFile = CreateFileW(wname.c_str(),
+                  GENERIC_READ,
+                  FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                  NULL,
+                  OPEN_EXISTING,
+                  FILE_FLAG_BACKUP_SEMANTICS,
+                  NULL);
+                if (hFile != INVALID_HANDLE_VALUE) {
+                  // If there is a valid file under the directory, we should stop
+                  // and return kDirectoryNotEmpty.
+                  CloseHandle(hFile);
+                  found_valid_file = true;
+                  break;
+                } else {
+                  DWORD error_code = GetLastError();
+                  // If the file or directory is in deleting process,
+                  // CreateFileW returns ERROR_ACCESS_DENIED,
+                  // If it's already deleted at the time we check,
+                  // CreateFileW returns ERROR_FILE_NOT_FOUND.
+                  // If CreateFileW fails with other reason, we consider there is a
+                  // valid file that we cannot open, thus set found_valid_file to true.
+                  if (error_code != ERROR_ACCESS_DENIED &&
+                      error_code != ERROR_FILE_NOT_FOUND) {
+                    found_valid_file = true;
+                    break;
+                  } else if (error_code == ERROR_ACCESS_DENIED) {
+                    found_pending_delete_file = true;
+                  }
+                }
+              }
+            } while (::FindNextFileW(handle, &metadata));
+            ::FindClose(handle);
+            if (found_valid_file) {
+              // The directory is truely not empty.
+              return DeletePathResult::kDirectoryNotEmpty;
+            } else {
+              if (found_pending_delete_file) {
+                // The files and sub-directories under this directory are all in deleting process,
+                // wait for the system to clean them up and try delete the directory again.
+                Sleep(5L);
+                myfile << "Sleeped for " << winpath << "\n";
+              }
+              myfile << "count == " << count << "\n";
+              myfile << "Try delete " << winpath << " again \n";
+              count--;
+              continue;
+            }
+          } else {
+            // This case should never happen, because ERROR_DIR_NOT_EMPTY means the directory exists.
+            // But if it does happen, return an error message.
+            if (error) {
+              *error = MakeErrorMessage(WSTR(__FILE__), __LINE__,
+                                        L"RemoveDirectoryW", path, GetLastError());
+            }
+            return DeletePathResult::kError;
+          }
         }
 
         // Some unknown error occurred.
@@ -468,6 +553,12 @@ int DeletePath(const wstring& path, wstring* error) {
                                     L"RemoveDirectoryW", path, err);
         }
         return DeletePathResult::kError;
+      }
+
+      if (count == 0) {
+        // After trying 20 times, the "deleted" sub-directories still won't go away,
+        // so just return DirectoryNotEmpty error.
+        return DeletePathResult::kDirectoryNotEmpty;
       }
     } else if (attr & FILE_ATTRIBUTE_READONLY) {
       // It's a file and it's probably read-only.

@@ -41,7 +41,7 @@ java_library(
         [
             "*.java",
         ],
-        exclude = PATH_FRAGMENT_SOURCES + OUTPUT_SERVICE_SOURCES,
+        exclude = PATH_FRAGMENT_SOURCES + OUTPUT_SERVICE_SOURCES + ["Delete.java"],
     ),
     visibility = ["//visibility:public"],
     exports = [
@@ -59,6 +59,17 @@ java_library(
         "//third_party:guava",
         "//third_party:jsr305",
     ],
+)
+
+java_binary(
+    name = "delete",
+    srcs = ["Delete.java"],
+    main_class = "com.google.devtools.build.lib.vfs.Delete",
+    deps = [
+        ":vfs",
+        "//src/main/java/com/google/devtools/build/lib/windows:windows",
+    ],
+    data = ["//src/main/native/windows:windows_jni.dll"],
 )
 
 java_library(
