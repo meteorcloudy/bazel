@@ -22,6 +22,8 @@ import com.google.common.collect.Sets;
 import com.google.devtools.build.lib.cmdline.LabelConstants;
 import com.google.devtools.build.lib.cmdline.PackageIdentifier;
 import com.google.devtools.build.lib.concurrent.ThreadSafety;
+import com.google.devtools.build.lib.profiler.Profiler;
+import com.google.devtools.build.lib.profiler.SilentCloseable;
 import com.google.devtools.build.lib.vfs.FileSystemUtils;
 import com.google.devtools.build.lib.vfs.Path;
 import com.google.devtools.build.lib.vfs.PathFragment;
@@ -94,150 +96,153 @@ class SymlinkForest {
           continue dirloop;
         }
       }
+//      System.out.println("Delete: " + p.asFragment());
       p.deleteTree();
     }
   }
 
   void plantSymlinkForest() throws IOException {
-    deleteTreesBelowNotPrefixed(execroot, prefixes);
-    // TODO(kchodorow): this can be removed once the execution root is rearranged.
-    // Current state: symlink tree was created under execroot/$(basename ws) and then
-    // execroot/wsname is symlinked to that. The execution root change creates (and cleans up)
-    // subtrees for each repository and has been rolled forward and back several times. Thus, if
-    // someone was using a with-execroot-change version of bazel and then switched to this one,
-    // their execution root would contain a subtree for execroot/wsname that would never be
-    // cleaned up by this version of Bazel.
-    Path realWorkspaceDir = execroot.getParentDirectory().getRelative(workspaceName);
-    if (!workspaceName.equals(execroot.getBaseName()) && realWorkspaceDir.exists()
-        && !realWorkspaceDir.isSymbolicLink()) {
-      realWorkspaceDir.deleteTree();
+    try (SilentCloseable c = Profiler.instance().profile("deleteTreesBelowNotPrefixed")) {
+      deleteTreesBelowNotPrefixed(execroot, prefixes);
     }
 
     // Packages come from exactly one root, but their shared ancestors may come from more.
     Map<PackageIdentifier, Set<Root>> dirRootsMap = Maps.newHashMap();
     // Elements in this list are added so that parents come before their children.
     ArrayList<PackageIdentifier> dirsParentsFirst = new ArrayList<>();
-    for (Map.Entry<PackageIdentifier, Root> entry : packageRoots.entrySet()) {
-      PackageIdentifier pkgId = entry.getKey();
-      if (pkgId.equals(LabelConstants.EXTERNAL_PACKAGE_IDENTIFIER)) {
-        // This isn't a "real" package, don't add it to the symlink tree.
-        continue;
-      }
-      Root pkgRoot = entry.getValue();
-      ArrayList<PackageIdentifier> newDirs = new ArrayList<>();
-      for (PathFragment fragment = pkgId.getPackageFragment();
-          !fragment.isEmpty();
-          fragment = fragment.getParentDirectory()) {
-        PackageIdentifier dirId = createInRepo(pkgId, fragment);
-        Set<Root> roots = dirRootsMap.get(dirId);
-        if (roots == null) {
-          roots = Sets.newHashSet();
-          dirRootsMap.put(dirId, roots);
-          newDirs.add(dirId);
+    try (SilentCloseable c = Profiler.instance().profile("First")) {
+      for (Map.Entry<PackageIdentifier, Root> entry : packageRoots.entrySet()) {
+        PackageIdentifier pkgId = entry.getKey();
+        if (pkgId.equals(LabelConstants.EXTERNAL_PACKAGE_IDENTIFIER)) {
+          // This isn't a "real" package, don't add it to the symlink tree.
+          continue;
         }
-        roots.add(pkgRoot);
-      }
-      Collections.reverse(newDirs);
-      dirsParentsFirst.addAll(newDirs);
-    }
-    // Now add in roots for all non-pkg dirs that are in between two packages, and missed above.
-    for (PackageIdentifier dir : dirsParentsFirst) {
-      if (!packageRoots.containsKey(dir)) {
-        PackageIdentifier pkgId = longestPathPrefix(dir, packageRoots.keySet());
-        if (pkgId != null) {
-          dirRootsMap.get(dir).add(packageRoots.get(pkgId));
-        }
-      }
-    }
-    // Create output dirs for all dirs that have more than one root and need to be split.
-    for (PackageIdentifier dir : dirsParentsFirst) {
-      if (!dir.getRepository().isMain()) {
-        FileSystemUtils.createDirectoryAndParents(
-            execroot.getRelative(dir.getRepository().getPathUnderExecRoot()));
-      }
-      if (dirRootsMap.get(dir).size() > 1) {
-        if (LOG_FINER) {
-          logger.finer("mkdir " + execroot.getRelative(dir.getPathUnderExecRoot()));
-        }
-        FileSystemUtils.createDirectoryAndParents(
-            execroot.getRelative(dir.getPathUnderExecRoot()));
-      }
-    }
-
-    // Make dir links for single rooted dirs.
-    for (PackageIdentifier dir : dirsParentsFirst) {
-      Set<Root> roots = dirRootsMap.get(dir);
-      // Simple case of one root for this dir.
-      if (roots.size() == 1) {
-        PathFragment parent = dir.getPackageFragment().getParentDirectory();
-        if (!parent.isEmpty() && dirRootsMap.get(createInRepo(dir, parent)).size() == 1) {
-          continue;  // skip--an ancestor will link this one in from above
-        }
-        // This is the top-most dir that can be linked to a single root. Make it so.
-        Root root = roots.iterator().next(); // lone root in set
-        if (LOG_FINER) {
-          logger.finer(
-              "ln -s "
-                  + root.getRelative(dir.getSourceRoot())
-                  + " "
-                  + execroot.getRelative(dir.getPathUnderExecRoot()));
-        }
-        execroot.getRelative(dir.getPathUnderExecRoot())
-            .createSymbolicLink(root.getRelative(dir.getSourceRoot()));
-      }
-    }
-    // Make links for dirs within packages, skip parent-only dirs.
-    for (PackageIdentifier dir : dirsParentsFirst) {
-      if (dirRootsMap.get(dir).size() > 1) {
-        // If this dir is at or below a package dir, link in its contents.
-        PackageIdentifier pkgId = longestPathPrefix(dir, packageRoots.keySet());
-        if (pkgId != null) {
-          Root root = packageRoots.get(pkgId);
-          try {
-            Path absdir = root.getRelative(dir.getSourceRoot());
-            if (absdir.isDirectory()) {
-              if (LOG_FINER) {
-                logger.finer(
-                    "ln -s " + absdir + "/* " + execroot.getRelative(dir.getSourceRoot()) + "/");
-              }
-              for (Path target : absdir.getDirectoryEntries()) {
-                PathFragment p = root.relativize(target);
-                if (!dirRootsMap.containsKey(createInRepo(pkgId, p))) {
-                  //LOG.finest("ln -s " + target + " " + linkRoot.getRelative(p));
-                  execroot.getRelative(p).createSymbolicLink(target);
-                }
-              }
-            } else {
-              logger.fine("Symlink planting skipping dir '" + absdir + "'");
-            }
-          } catch (IOException e) {
-            e.printStackTrace();
+        Root pkgRoot = entry.getValue();
+        ArrayList<PackageIdentifier> newDirs = new ArrayList<>();
+        for (PathFragment fragment = pkgId.getPackageFragment();
+            !fragment.isEmpty();
+            fragment = fragment.getParentDirectory()) {
+          PackageIdentifier dirId = createInRepo(pkgId, fragment);
+          Set<Root> roots = dirRootsMap.get(dirId);
+          if (roots == null) {
+            roots = Sets.newHashSet();
+            dirRootsMap.put(dirId, roots);
+            newDirs.add(dirId);
           }
-          // Otherwise its just an otherwise empty common parent dir.
+          roots.add(pkgRoot);
+        }
+        Collections.reverse(newDirs);
+        dirsParentsFirst.addAll(newDirs);
+      }
+    }
+    try (SilentCloseable c = Profiler.instance().profile("Second")) {
+      // Now add in roots for all non-pkg dirs that are in between two packages, and missed above.
+      for (PackageIdentifier dir : dirsParentsFirst) {
+        if (!packageRoots.containsKey(dir)) {
+          PackageIdentifier pkgId = longestPathPrefix(dir, packageRoots.keySet());
+          if (pkgId != null) {
+            dirRootsMap.get(dir).add(packageRoots.get(pkgId));
+          }
+        }
+      }
+      // Create output dirs for all dirs that have more than one root and need to be split.
+      for (PackageIdentifier dir : dirsParentsFirst) {
+        if (!dir.getRepository().isMain()) {
+          FileSystemUtils.createDirectoryAndParents(
+              execroot.getRelative(dir.getRepository().getPathUnderExecRoot()));
+        }
+        if (dirRootsMap.get(dir).size() > 1) {
+          if (LOG_FINER) {
+            logger.finer("mkdir " + execroot.getRelative(dir.getPathUnderExecRoot()));
+          }
+          FileSystemUtils.createDirectoryAndParents(
+              execroot.getRelative(dir.getPathUnderExecRoot()));
         }
       }
     }
 
-    for (Map.Entry<PackageIdentifier, Root> entry : packageRoots.entrySet()) {
-      PackageIdentifier pkgId = entry.getKey();
-      if (!pkgId.getPackageFragment().equals(PathFragment.EMPTY_FRAGMENT)) {
-        continue;
-      }
-      Path execrootDirectory = execroot.getRelative(pkgId.getPathUnderExecRoot());
-      // If there were no subpackages, this directory might not exist yet.
-      if (!execrootDirectory.exists()) {
-        FileSystemUtils.createDirectoryAndParents(execrootDirectory);
-      }
-      // For the top-level directory, generate symlinks to everything in the directory instead of
-      // the directory itself.
-      Path sourceDirectory = entry.getValue().getRelative(pkgId.getSourceRoot());
-      for (Path target : sourceDirectory.getDirectoryEntries()) {
-        String baseName = target.getBaseName();
-        Path execPath = execrootDirectory.getRelative(baseName);
-        // Create any links that don't exist yet and don't start with bazel-.
-        if (!baseName.startsWith(productName + "-") && !execPath.exists()) {
-          execPath.createSymbolicLink(target);
+    try (SilentCloseable c = Profiler.instance().profile("Third")) {
+      // Make dir links for single rooted dirs.
+      for (PackageIdentifier dir : dirsParentsFirst) {
+        Set<Root> roots = dirRootsMap.get(dir);
+        // Simple case of one root for this dir.
+        if (roots.size() == 1) {
+          PathFragment parent = dir.getPackageFragment().getParentDirectory();
+          if (!parent.isEmpty() && dirRootsMap.get(createInRepo(dir, parent)).size() == 1) {
+            continue;  // skip--an ancestor will link this one in from above
+          }
+          // This is the top-most dir that can be linked to a single root. Make it so.
+          Root root = roots.iterator().next(); // lone root in set
+          if (LOG_FINER) {
+            logger.finer(
+                "ln -s "
+                    + root.getRelative(dir.getSourceRoot())
+                    + " "
+                    + execroot.getRelative(dir.getPathUnderExecRoot()));
+          }
+          execroot.getRelative(dir.getPathUnderExecRoot())
+              .createSymbolicLink(root.getRelative(dir.getSourceRoot()));
         }
+      }
+    }
+    try (SilentCloseable c = Profiler.instance().profile("Forth")) {
+      // Make links for dirs within packages, skip parent-only dirs.
+      for (PackageIdentifier dir : dirsParentsFirst) {
+        if (dirRootsMap.get(dir).size() > 1) {
+          // If this dir is at or below a package dir, link in its contents.
+          PackageIdentifier pkgId = longestPathPrefix(dir, packageRoots.keySet());
+          if (pkgId != null) {
+            Root root = packageRoots.get(pkgId);
+            try {
+              Path absdir = root.getRelative(dir.getSourceRoot());
+              if (absdir.isDirectory()) {
+                if (LOG_FINER) {
+                  logger.finer(
+                      "ln -s " + absdir + "/* " + execroot.getRelative(dir.getSourceRoot()) + "/");
+                }
+                for (Path target : absdir.getDirectoryEntries()) {
+                  PathFragment p = root.relativize(target);
+                  if (!dirRootsMap.containsKey(createInRepo(pkgId, p))) {
+                    //LOG.finest("ln -s " + target + " " + linkRoot.getRelative(p));
+                    execroot.getRelative(p).createSymbolicLink(target);
+                  }
+                }
+              } else {
+                logger.fine("Symlink planting skipping dir '" + absdir + "'");
+              }
+            } catch (IOException e) {
+              e.printStackTrace();
+            }
+            // Otherwise its just an otherwise empty common parent dir.
+          }
+        }
+      }
+    }
+    try (SilentCloseable c = Profiler.instance().profile("Fifth")) {
+      for (Map.Entry<PackageIdentifier, Root> entry : packageRoots.entrySet()) {
+        PackageIdentifier pkgId = entry.getKey();
+        if (!pkgId.getPackageFragment().equals(PathFragment.EMPTY_FRAGMENT)) {
+          continue;
+        }
+        Path execrootDirectory = execroot.getRelative(pkgId.getPathUnderExecRoot());
+        // If there were no subpackages, this directory might not exist yet.
+        if (!execrootDirectory.exists()) {
+          FileSystemUtils.createDirectoryAndParents(execrootDirectory);
+        }
+        // For the top-level directory, generate symlinks to everything in the directory instead of
+        // the directory itself.
+        Path sourceDirectory = entry.getValue().getRelative(pkgId.getSourceRoot());
+        if (!execrootDirectory.exists()) {
+          execrootDirectory.createSymbolicLink(sourceDirectory);
+        }
+//        for (Path target : sourceDirectory.getDirectoryEntries()) {
+//          String baseName = target.getBaseName();
+//          Path execPath = execrootDirectory.getRelative(baseName);
+//          // Create any links that don't exist yet and don't start with bazel-.
+//          if (!baseName.startsWith(productName + "-") && !execPath.exists()) {
+//            execPath.createSymbolicLink(target);
+//          }
+//        }
       }
     }
 
