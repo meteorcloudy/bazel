@@ -63,6 +63,23 @@ def workspace_and_buildfile(ctx):
         ctx.delete("BUILD.bazel")
         ctx.file("BUILD.bazel", ctx.attr.build_file_content)
 
+def _is_windows(ctx):
+    return ctx.os.name.lower().find("windows") != -1
+
+def _get_windows_patch(ctx):
+    patch_tool_dir = ".bazel_tmp/patch/"
+    ctx.download_and_extract([
+        # TODO(pcloudy): Add patch-2.5.9-7-bin.zip to bazel mirror.
+        "https://kent.dl.sourceforge.net/project/gnuwin32/patch/2.5.9-7/patch-2.5.9-7-bin.zip"],
+        patch_tool_dir,
+        "fabd6517e7bd88e067db9bf630d69bb3a38a08e044fa73d13a704ab5f8dd110b",
+    )
+
+    # Rename the patch tool to pt.exe so that it doesn't require admin right.
+    patch = patch_tool_dir + "bin/pt.exe"
+    ctx.symlink(patch_tool_dir + "bin/patch.exe", patch)
+    return patch
+
 def patch(ctx):
     """Implementation of patching an already extracted repository.
 
@@ -75,26 +92,53 @@ def patch(ctx):
         function.
     """
     bash_exe = ctx.os.environ["BAZEL_SH"] if "BAZEL_SH" in ctx.os.environ else "bash"
+    powershell_exe = ctx.os.environ["BAZEL_POWERSHELL"] if "BAZEL_POWERSHELL" in ctx.os.environ else "powershell.exe"
     if len(ctx.attr.patches) > 0 or len(ctx.attr.patch_cmds) > 0:
         ctx.report_progress("Patching repository")
+
+    patch_tool = ctx.attr.patch_tool
+    if patch_tool == "auto":
+        patch_tool = _get_windows_patch(ctx) if _is_windows(ctx) else "patch"
+
     for patchfile in ctx.attr.patches:
-        command = "{patchtool} {patch_args} < {patchfile}".format(
-            patchtool = ctx.attr.patch_tool,
-            patchfile = ctx.path(patchfile),
-            patch_args = " ".join([
-                "'%s'" % arg
-                for arg in ctx.attr.patch_args
-            ]),
-        )
-        st = ctx.execute([bash_exe, "-c", command])
-        if st.return_code:
-            fail("Error applying patch %s:\n%s%s" %
-                 (str(patchfile), st.stderr, st.stdout))
-    for cmd in ctx.attr.patch_cmds:
-        st = ctx.execute([bash_exe, "-c", cmd])
-        if st.return_code:
-            fail("Error applying patch command %s:\n%s%s" %
-                 (cmd, st.stdout, st.stderr))
+        if _is_windows(ctx):
+            command = "Get-Content {patchfile} | {patchtool} {patch_args}".format(
+                patchtool = patch_tool,
+                patchfile = ctx.path(patchfile),
+                patch_args = " ".join([
+                    "'%s'" % arg
+                    for arg in ctx.attr.patch_args
+                ]),
+            )
+            st = ctx.execute([powershell_exe, "/c", command])
+            if st.return_code:
+                fail("Error applying patch %s:\n%s%s" %
+                     (str(patchfile), st.stderr, st.stdout))
+        else:
+            command = "{patchtool} {patch_args} < {patchfile}".format(
+                patchtool = patch_tool,
+                patchfile = ctx.path(patchfile),
+                patch_args = " ".join([
+                    "'%s'" % arg
+                    for arg in ctx.attr.patch_args
+                ]),
+            )
+            st = ctx.execute([bash_exe, "-c", command])
+            if st.return_code:
+                fail("Error applying patch %s:\n%s%s" %
+                     (str(patchfile), st.stderr, st.stdout))
+    if _is_windows(ctx) and hasattr(ctx.attr, "patch_cmds_win"):
+        for cmd in ctx.attr.patch_cmds_win:
+            st = ctx.execute([powershell_exe, "/c", cmd])
+            if st.return_code:
+                fail("Error applying patch command %s:\n%s%s" %
+                     (cmd, st.stdout, st.stderr))
+    else:
+        for cmd in ctx.attr.patch_cmds:
+            st = ctx.execute([bash_exe, "-c", cmd])
+            if st.return_code:
+                fail("Error applying patch command %s:\n%s%s" %
+                     (cmd, st.stdout, st.stderr))
 
 def update_attrs(orig, keys, override):
     """Utility function for altering and adding the specified attributes to a particular repository rule invocation.

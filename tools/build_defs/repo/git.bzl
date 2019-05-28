@@ -177,8 +177,9 @@ _common_attrs = {
             "extracting the archive.",
     ),
     "patch_tool": attr.string(
-        default = "patch",
-        doc = "The patch(1) utility to use.",
+        default = "auto",
+        doc = "The patch(1) utility to use. On Linux/MacOs, use patch tool in PATH, On Windows, " +
+              "download and use a prebuit patch tool.",
     ),
     "patch_args": attr.string_list(
         default = ["-p0"],
@@ -186,7 +187,13 @@ _common_attrs = {
     ),
     "patch_cmds": attr.string_list(
         default = [],
-        doc = "Sequence of commands to be applied after patches are applied.",
+        doc = "Sequence of Bash commands to be applied on Linux/Macos after patches are applied.",
+    ),
+    "patch_cmds_win": attr.string_list(
+        default = [],
+        doc = "Sequence of Powershell commands to be applied on Windows after patches are " +
+              "applied. If this attribute is not set, patch_cmds will be executed on Windows, " +
+              "which requires Bash binary to exist.",
     ),
 }
 
