@@ -1,6 +1,8 @@
+
+cd %KOKORO_ARTIFACTS_DIR%\github\bazel
+
 SET /p RELEASE_NAME=test
 echo Release: %RELEASE_NAME%
-
 
 mkdir T:\tmp\tool
 set BAZELISK=T:\tmp\tool\bazelisk.exe
