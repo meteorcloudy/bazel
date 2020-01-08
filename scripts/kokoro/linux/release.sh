@@ -13,6 +13,7 @@ echo "release_name = \"\$release_name\""
 mkdir -p /tmp/tool
 BAZELISK="/tmp/tool/bazelisk"
 wget https://github.com/bazelbuild/bazelisk/releases/download/v1.2.1/bazelisk-linux-amd64 -O "${BAZELISK}"
+chmod +x "${BAZELISK}"
 
 "${BAZELISK}" build --sandbox_tmpfs_path=/tmp //src:bazel
 mkdir output
