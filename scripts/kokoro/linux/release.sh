@@ -6,7 +6,7 @@ cd ${KOKORO_ARTIFACTS_DIR}/github/bazel
 
 # Get release name
 git fetch --force origin refs/notes/*:refs/notes/*
-release_name=\$(source scripts/release/common.sh; get_full_release_name)
+release_name=$(source scripts/release/common.sh; get_full_release_name)
 echo "release_name = \"\$release_name\""
 
 # Get Bazelisk
