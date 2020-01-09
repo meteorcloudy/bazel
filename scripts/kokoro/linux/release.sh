@@ -2,6 +2,11 @@
 set -e
 set -x
 
+##### DEBUG - begin ######
+echo $RELEASE_BRANCH
+exit 0
+##### DEBUG - end   ######
+
 cd ${KOKORO_ARTIFACTS_DIR}/github/bazel
 
 # Get release name
