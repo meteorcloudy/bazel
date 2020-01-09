@@ -2,6 +2,8 @@
 set -e
 set -x
 
+sudo xcode-select -s /Applications/Xcode_10.3.app/Contents/Developer
+
 cd ${KOKORO_ARTIFACTS_DIR}/github/bazel
 
 # Get release name
