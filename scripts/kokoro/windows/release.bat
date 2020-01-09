@@ -1,6 +1,8 @@
 
 cd %KOKORO_ARTIFACTS_DIR%\github\bazel
 
+set PATH=C:\python37;%PATH%
+
 SET /p RELEASE_NAME=test
 echo Release: %RELEASE_NAME%
 
