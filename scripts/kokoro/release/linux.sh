@@ -2,6 +2,8 @@
 set -e
 set -x
 
+RELEASE_NAME=${RELEASE_NAME:-unknown}
+
 # Get Bazelisk
 mkdir -p /tmp/tool
 BAZELISK="/tmp/tool/bazelisk"

@@ -1,4 +1,8 @@
 
+if not defined RELEASE_NAME (
+  set RELEASE_NAME=unknown
+)
+
 mkdir T:\tmp\tool
 set BAZELISK=T:\tmp\tool\bazelisk.exe
 powershell /c "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('https://github.com/bazelbuild/bazelisk/releases/download/v1.2.1/bazelisk-windows-amd64.exe', '%BAZELISK%')"
