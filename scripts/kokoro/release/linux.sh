@@ -4,6 +4,10 @@ set -x
 
 ##### DEBUG - begin ######
 echo $RELEASE_BRANCH
+
+git checkout $RELEASE_BRANCH
+
+echo "Done"
 exit 0
 ##### DEBUG - end   ######
 
