@@ -2,24 +2,12 @@
 set -e
 set -x
 
-##### DEBUG - begin ######
-echo $RELEASE_BRANCH
-
 cd ${KOKORO_ARTIFACTS_DIR}/github/bazel
+
+echo "Rlease name: $RLEASE_NAME"
+echo "Switching to branch $RELEASE_BRANCH"
 git fetch origin $RELEASE_BRANCH
 git checkout $RELEASE_BRANCH
-
-echo "Done"
-exit 0
-##### DEBUG - end   ######
-
-cd ${KOKORO_ARTIFACTS_DIR}/github/bazel
-
-# Get release name
-git fetch --force origin refs/notes/*:refs/notes/*
-release_name=$(source scripts/release/common.sh; get_full_release_name)
-release_name=test
-echo "release_name = \"${release_name}\""
 
 # Get Bazelisk
 mkdir -p /tmp/tool
@@ -35,7 +23,7 @@ output/bazel build \
     -c opt \
     --stamp \
     --sandbox_tmpfs_path=/tmp \
-    --embed_label "${release_name}" \
+    --embed_label "${RELEASE_NAME}" \
     --workspace_status_command=scripts/ci/build_status_command.sh \
     src/bazel \
     scripts/packages/with-jdk/install.sh \
@@ -45,9 +33,9 @@ output/bazel build \
     bazel-distfile.zip
 
 mkdir artifacts
-cp "bazel-bin/src/bazel" "artifacts/bazel-${release_name}-linux-x86_64"
-cp "bazel-bin/scripts/packages/with-jdk/install.sh" "artifacts/bazel-${release_name}-installer-linux-x86_64.sh"
-cp "bazel-bin/scripts/packages/debian/bazel-debian.deb" "artifacts/bazel_${release_name}-linux-x86_64.deb"
-cp "bazel-bin/scripts/packages/debian/bazel.dsc" "artifacts/bazel_${release_name}.dsc"
-cp "bazel-bin/scripts/packages/debian/bazel.tar.gz" "artifacts/bazel_${release_name}.tar.gz"
-cp "bazel-bin/bazel-distfile.zip" "artifacts/bazel-${release_name}-dist.zip"
+cp "bazel-bin/src/bazel" "artifacts/bazel-${RELEASE_NAME}-linux-x86_64"
+cp "bazel-bin/scripts/packages/with-jdk/install.sh" "artifacts/bazel-${RELEASE_NAME}-installer-linux-x86_64.sh"
+cp "bazel-bin/scripts/packages/debian/bazel-debian.deb" "artifacts/bazel_${RELEASE_NAME}-linux-x86_64.deb"
+cp "bazel-bin/scripts/packages/debian/bazel.dsc" "artifacts/bazel_${RELEASE_NAME}.dsc"
+cp "bazel-bin/scripts/packages/debian/bazel.tar.gz" "artifacts/bazel_${RELEASE_NAME}.tar.gz"
+cp "bazel-bin/bazel-distfile.zip" "artifacts/bazel-${RELEASE_NAME}-dist.zip"

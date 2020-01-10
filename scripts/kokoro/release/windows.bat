@@ -1,14 +1,16 @@
 
 cd %KOKORO_ARTIFACTS_DIR%\github\bazel
 
-set PATH=C:\python37;%PATH%
-
-SET /p RELEASE_NAME=test
-echo Release: %RELEASE_NAME%
+echo Release name: %RELEASE_NAME%
+echo Switching to branch %RELEASE_BRANCH%
+git fetch origin %RELEASE_BRANCH%
+git checkout %RELEASE_BRANCH%
 
 mkdir T:\tmp\tool
 set BAZELISK=T:\tmp\tool\bazelisk.exe
 powershell /c "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('https://github.com/bazelbuild/bazelisk/releases/download/v1.2.1/bazelisk-windows-amd64.exe', '%BAZELISK%')"
+
+set PATH=C:\python37;%PATH%
 
 %BAZELISK% build //src:bazel.exe
 mkdir output

@@ -2,26 +2,21 @@
 set -e
 set -x
 
-sudo xcode-select -s /Applications/Xcode_10.3.app/Contents/Developer
-
 cd ${KOKORO_ARTIFACTS_DIR}/github/bazel
 
-# Get release name
-git fetch --force origin refs/notes/*:refs/notes/*
-release_name=$(source scripts/release/common.sh; get_full_release_name)
-release_name=test
-echo "release_name = \"${release_name}\""
-
-# # Switch to Xcode 10.2.1 so that the Bazel release we build is still
-# # compatible with macOS High Sierra.
-# /usr/bin/sudo /usr/bin/xcode-select --switch /Applications/Xcode10.2.1.app
-# /usr/bin/sudo /usr/bin/xcodebuild -runFirstLaunch
+echo "Rlease name: $RLEASE_NAME"
+echo "Switching to branch $RELEASE_BRANCH"
+git fetch origin $RELEASE_BRANCH
+git checkout $RELEASE_BRANCH
 
 # Get Bazelisk
 mkdir -p /tmp/tool
 BAZELISK="/tmp/tool/bazelisk"
 wget https://github.com/bazelbuild/bazelisk/releases/download/v1.2.1/bazelisk-darwin-amd64 -O "${BAZELISK}"
 chmod +x "${BAZELISK}"
+
+# Switch to Xcode 10.3
+sudo xcode-select -s /Applications/Xcode_10.3.app/Contents/Developer
 
 "${BAZELISK}" build //src:bazel
 mkdir output
@@ -31,11 +26,11 @@ output/bazel build \
     --define IPHONE_SDK=1 \
     -c opt \
     --stamp \
-    --embed_label "${release_name}" \
+    --embed_label "${RELEASE_NAME}" \
     --workspace_status_command=scripts/ci/build_status_command.sh \
     src/bazel \
     scripts/packages/with-jdk/install.sh
 
 mkdir artifacts
-cp "bazel-bin/src/bazel" "artifacts/bazel-${release_name}-darwin-x86_64"
-cp "bazel-bin/scripts/packages/with-jdk/install.sh" "artifacts/bazel-${release_name}-installer-darwin-x86_64.sh"
+cp "bazel-bin/src/bazel" "artifacts/bazel-${RELEASE_NAME}-darwin-x86_64"
+cp "bazel-bin/scripts/packages/with-jdk/install.sh" "artifacts/bazel-${RELEASE_NAME}-installer-darwin-x86_64.sh"
