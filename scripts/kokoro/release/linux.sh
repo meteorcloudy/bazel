@@ -5,6 +5,7 @@ set -x
 ##### DEBUG - begin ######
 echo $RELEASE_BRANCH
 
+cd ${KOKORO_ARTIFACTS_DIR}/github/bazel
 git checkout $RELEASE_BRANCH
 
 echo "Done"
