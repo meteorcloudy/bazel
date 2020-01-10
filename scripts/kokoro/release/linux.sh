@@ -2,13 +2,6 @@
 set -e
 set -x
 
-cd ${KOKORO_ARTIFACTS_DIR}/github/bazel
-
-echo "Rlease name: $RLEASE_NAME"
-echo "Switching to branch $RELEASE_BRANCH"
-git fetch origin $RELEASE_BRANCH
-git checkout $RELEASE_BRANCH
-
 # Get Bazelisk
 mkdir -p /tmp/tool
 BAZELISK="/tmp/tool/bazelisk"
