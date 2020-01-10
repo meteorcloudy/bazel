@@ -6,6 +6,7 @@ set -x
 echo $RELEASE_BRANCH
 
 cd ${KOKORO_ARTIFACTS_DIR}/github/bazel
+git fetch origin $RELEASE_BRANCH
 git checkout $RELEASE_BRANCH
 
 echo "Done"
