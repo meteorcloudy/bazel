@@ -1,3 +1,114 @@
+## Release 5.6.7 (2020-02-10)
+
+```
+Baseline: 9807e506cd17bb15c84106e1b6c210bb6261ad84
+
+Cherry picks:
+
+   + 3983e211ef8e71f838f848ab5845910ff5e92e72:
+     Swith to meteorcloudy/bazel
+   + a9d2d0789e63c08ec36d5b5ec0a6b8dad80ac88b:
+     Remove git notes from release process
+   + 8c1b17bd7de19e0d8aa45d5d1d2766ae4ec9bb0d:
+     Add blabla2
+```
+
+Incompatible changes:
+
+  - The following attributes of CcToolchainProvider, which formerly
+    were
+    accessible both as fields (x.f) and as methods (x.f()), are now
+    only fields:
+  - The --[no]incompatible_windows_bashless_run_command flag is no
+    longer supported. It was flipped in Bazel 1.0
+  - The --[no]incompatible_windows_native_test_wrapper flag is no
+    longer supported. It was flipped in Bazel 1.0
+
+New features:
+
+  - Similar to the
+    [.bazelignore](https://docs.bazel.build/versions/master/guide.html
+    #.bazelignore) in the main repository, a `.bazelignore` file in
+    external repository will cause the specified directories to be
+    ignored by Bazel. Bazel won't try to identify any packages under
+    the directories, but the files can still be referenced in other
+    BUILD files.
+  - bazelignore files now support line comments, e.g. "# this is a
+    comment"
+
+Important changes:
+
+  - Experimental support for d8 merger is now available for use using
+    --define=android_dexmerger_tool=d8_dexmerger.
+  - Critical path run time should not have a longer run time than
+    total execution run time.
+  - Remove "please do not import" warning for cc rules.
+  - x.f() is now equivalent to y=x.f; y(). That is, x.f should return
+    the same
+    attribute value regardless of whether it is accessed as a field
+    or called
+    like a method. Any arguments to the call are evaluated after the
+    x.f operation.
+  - Add desugaring support for RoleManager#addRoleHolderAsUser
+  - Adds ctx.target_platform_has_constraint to allow rules to check
+    the target platform's constraints.
+  - Critical path run time should not have a longer run time than
+    total execution run time.
+  - Post new ConvenienceSymlinksIdentifiedEvent to the
+    BuildEventProtocol when
+    --experimental_convenience_symlinks_bep_event is enabled.
+  - Keyword-only arguments are now allowed:
+        def foo(a, *, k): pass
+        def foo(a, *b, k): pass
+      where k can be specified only by keyword:
+        foo(5, k=6)
+  - Generated Go protobufs now depend on //net/proto2/go:protodeps in
+    addition to //net/proto2/go:proto
+  - cquery 'somepath' returns more reliable results when the
+    dep has a different configuration than the parent. To get a
+    result for
+    `somepath(//foo, //bar`) where //bar isn't in the top-level
+    configuration,
+    run your query with `--universe_scope=//foo`. See cquery docs for
+    details.
+  - Consistent target naming style in example target names.
+  - cquery's config() now supports arbitrary configurations.
+  - The flag --incompatible_disallow_dict_lookup_unhashable_keys is
+    removed.
+  - Include target label in Python version error message.
+  - The flag --incompatible_remap_main_repo is removed.
+  - Windows: we now discourage running Bazel from MSYS2 because of a
+    newly found bug (#10573)
+  - Reduced the packaging time (`package-bazel.sh`) for the
+    `//src:bazel-dev` Bazel development build target from 14s to 6s.
+    Use `//src:bazel-dev` if you're iterating rapidly on a local
+    Bazel changes, and use `//src:bazel --compilation_mode=opt` for
+    release builds.
+  - cquery: "//foo:bar" now means "all configured targets with label
+    //foo:bar" instead of "choose an arbitrary configured target with
+    label //foo:bar". See cquery docs for details.
+  - WORKSPACE and BUILD.bazel files of http_archive repositories can
+    now be patched using the "patch_cmds" and "patches" attributes.
+  - Actions with "parse" on the critical path should no longer finish
+    in the future.
+  - Flags that affect external repositories like
+    "--override_repository" can now be addressed in bazelrc files
+    using the "common" command, without causing commands like "bazel
+    shutdown" to fail.
+  - The flag --incompatible_disallow_unverified_http_downloads is
+    removed.
+  - Create the incompatibleApplicableLicenses flag.
+    We plan to flip this from false to true in Bazel 4.x.
+    Implementation to follow.
+  - Treat .cu and .cl files as C++ source. CUDA or OpenCL are not
+    natively supported and will require custom flags to compile with
+    e.g. clang.
+  - Treat .cu and .cl files as C++ source. CUDA or OpenCL are not
+    natively supported and will require custom flags to compile with
+    e.g. clang.
+
+This release contains contributions from many people at Google, as well as Adam Liddell, Alessandro Patti, Alex Kirchhoff, aman, Andreas Herrmann, Benjamin Peterson, Benjamin Peterson, Bor Kae Hwang, Brian Silverman, David Ostrovsky, Elliotte Rusty Harold, Emran BatmanGhelich, George Gensure, Greg Estren, Jeff Palm, John Millikin, Jonathan Beverly, Mark Nevill, Michael McLoughlin, nikola-sh, Nikolay Shelukhin, Patrick Niklaus, Peter, Philipp Wollermann, Ryan Beasley, Shin Yamamoto, Yannic Bonenberger, Yannic, Yen-Chi Chen.
+
 ## Release 2.0.0 (2019-12-19)
 
 ```
