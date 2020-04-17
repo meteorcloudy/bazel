@@ -903,3 +903,13 @@ load("@local_config_winsdk//:toolchains.bzl", "register_local_rc_exe_toolchains"
 register_local_rc_exe_toolchains()
 
 register_toolchains("//src/main/res:empty_rc_toolchain")
+
+# Please run apt-get install libnetty-java
+new_local_repository(
+    name = "debian_netty",
+    path = "/usr/share/java",
+    build_file_content=
+    """
+exports_files(["netty-all-4.1.45.Final.jar"])
+    """,
+)

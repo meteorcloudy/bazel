@@ -494,6 +494,7 @@ genrule(
 java_import(
     name = "netty",
     jars = ["netty/netty-all-4.1.34.Final.jar"],
+    # jars = ["@debian_netty//:netty-all-4.1.45.Final.jar"],
 )
 
 java_import(
