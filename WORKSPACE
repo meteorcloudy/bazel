@@ -911,5 +911,23 @@ new_local_repository(
     build_file_content=
     """
 exports_files(["netty-all-4.1.45.Final.jar"])
+ """,
+)
+
+# Please run apt-get install zlib1g-dev
+new_local_repository(
+    name = "debian_zlib",
+    path = "/usr",
+    build_file_content=
+    """
+cc_library(
+  name = "zlib",
+  srcs = ["lib/x86_64-linux-gnu/libz.a"],
+  hdrs = ["include/zconf.h", "include/zlib.h"],
+  includes = ["include"],
+  visibility = ["//visibility:public"],
+  linkstatic = 1,
+)
     """,
 )
+
