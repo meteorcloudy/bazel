@@ -11,5 +11,6 @@ filegroup(
 
 java_import(
     name = "allocation_instrumenter",
-    jars = ["java-allocation-instrumenter-3.0.1.jar"],
+#    jars = ["java-allocation-instrumenter-3.0.1.jar"],
+    jars = ["@debian_allocation_instrumenter//:java-allocation-instrumenter-3.1.0.jar"],
 )

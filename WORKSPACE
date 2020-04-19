@@ -924,6 +924,17 @@ exports_files(["gson-2.8.5.jar"])
  """,
 )
 
+# Please run apt-get install libjava-allocation-instrumenter-java
+new_local_repository(
+    name = "debian_allocation_instrumenter",
+    path = "/usr/share/java",
+    build_file_content=
+    """
+exports_files(["java-allocation-instrumenter-3.1.0.jar"])
+ """,
+)
+
+
 
 # Please run apt-get install zlib1g-dev
 new_local_repository(
