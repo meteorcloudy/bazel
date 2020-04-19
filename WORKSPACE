@@ -914,6 +914,17 @@ exports_files(["netty-all-4.1.45.Final.jar"])
  """,
 )
 
+# Please run apt-get install libgoogle-gson-java
+new_local_repository(
+    name = "debian_gson",
+    path = "/usr/share/java",
+    build_file_content=
+    """
+exports_files(["gson-2.8.5.jar"])
+ """,
+)
+
+
 # Please run apt-get install zlib1g-dev
 new_local_repository(
     name = "debian_zlib",
