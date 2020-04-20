@@ -953,3 +953,24 @@ cc_library(
     """,
 )
 
+
+# Please run apt-get -t testing install libprotobuf-dev libprotoc-dev
+new_local_repository(
+    name = "debian_protobuf",
+    path = "/usr",
+    build_file_content=
+    """
+cc_library(
+  name = "protoc_lib",
+  srcs = [
+      "lib/x86_64-linux-gnu/libprotobuf.a",
+      "lib/x86_64-linux-gnu/libprotoc.a",
+  ],
+  hdrs = glob(["include/google/protobuf/**/*.h"]),
+  includes = ["include"],
+  visibility = ["//visibility:public"],
+  linkstatic = 1,
+)
+    """,
+)
+

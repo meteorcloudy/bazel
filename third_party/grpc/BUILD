@@ -77,7 +77,8 @@ cc_binary(
         "compiler/src/java_plugin/cpp/java_plugin.cpp",
     ],
     copts = ["-w"],
-    deps = ["//third_party/protobuf:protoc_lib"],
+#    deps = ["//third_party/protobuf:protoc_lib"],
+    deps = ["@debian_protobuf//:protoc_lib"],
 )
 
 cc_binary(
