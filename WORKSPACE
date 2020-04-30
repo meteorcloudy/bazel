@@ -420,18 +420,6 @@ http_archive(
     ],
 )
 
-# Note that skydoc depends on being called io_bazel_skydoc (and not just skydoc)
-# to work without being patched, as it hard-codes this name in its sources.
-http_archive(
-    name = "io_bazel_skydoc",
-    sha256 = "e6a76586b264f30679688f65f7e71ac112d1446681010a13bf22d9ca071f34b7",
-    strip_prefix = "skydoc-c7bbde2950769aac9a99364b0926230060a3ce04",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/skydoc/archive/c7bbde2950769aac9a99364b0926230060a3ce04.tar.gz",
-        "https://github.com/bazelbuild/skydoc/archive/c7bbde2950769aac9a99364b0926230060a3ce04.tar.gz",
-    ],
-)
-
 http_archive(
     name = "rules_cc",
     patch_cmds = EXPORT_WORKSPACE_IN_BUILD_FILE,
@@ -858,10 +846,6 @@ exports_files(["WORKSPACE"], visibility = ["//visibility:public"])
     strip_prefix = "zulu12.2.3-ca-jdk12.0.1-win_x64",
     urls = ["https://mirror.bazel.build/openjdk/azul-zulu12.2.3-ca-jdk12.0.1/zulu12.2.3-ca-jdk12.0.1-win_x64.zip"],
 )
-
-load("@io_bazel_skydoc//:setup.bzl", "skydoc_repositories")
-
-skydoc_repositories()
 
 load("@io_bazel_rules_sass//:package.bzl", "rules_sass_dependencies")
 
