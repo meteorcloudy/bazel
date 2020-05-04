@@ -493,8 +493,7 @@ genrule(
 distrib_java_import(
     name = "netty",
     jars = ["netty/netty-all-4.1.34.Final.jar"],
-    # TODO: The debian netty-all.jar is empty, fix it then enable the following
-    # enable_distributions = ["debian"],
+    enable_distributions = ["debian"],
 )
 
 java_import(
