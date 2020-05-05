@@ -1,3 +1,5 @@
+load("//tools/distributions:distribution_rules.bzl", "distrib_cc_library")
+
 licenses(["notice"])  #  BSD/MIT-like license
 
 filegroup(
@@ -12,7 +14,7 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
-cc_library(
+distrib_cc_library(
     name = "zlib",
     srcs = glob(["*.c"]),
     hdrs = glob(["*.h"]),
@@ -23,4 +25,5 @@ cc_library(
     ],
     includes = ["."],
     visibility = ["//visibility:public"],
+    enable_distributions = ["debian"],
 )
