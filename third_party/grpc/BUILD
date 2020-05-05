@@ -311,7 +311,7 @@ cc_library(
 )
 
 grpc_cc_library(
-    name = "grpc++_unsecure",
+    name = "_grpc++_unsecure",
     srcs = [
         "src/cpp/client/insecure_credentials.cc",
         "src/cpp/common/insecure_create_auth_context.cc",
@@ -327,6 +327,11 @@ grpc_cc_library(
         "grpc++_codegen_proto",
         "grpc_unsecure",
     ],
+)
+
+alias(
+    name = "grpc++_unsecure",
+    actual = "@debian_cc_deps//:grpc++_unsecure",
 )
 
 grpc_cc_library(

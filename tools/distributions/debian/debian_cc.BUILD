@@ -21,3 +21,10 @@ cc_library(
     visibility = ["//visibility:public"],
     linkstatic = 1,
 )
+
+cc_library(
+    name = "grpc++_unsecure",
+    srcs= ["x86_64-linux-gnu/libgrpc++_unsecure.a"],
+    visibility = ["//visibility:public"],
+    linkstatic = 1,
+)
