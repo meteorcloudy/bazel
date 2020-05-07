@@ -73,7 +73,7 @@ import com.google.devtools.build.lib.vfs.Symlinks;
 import com.google.devtools.build.skyframe.SkyFunction.Environment;
 import com.google.devtools.build.skyframe.SkyFunctionException.Transience;
 import com.google.devtools.build.skyframe.SkyKey;
-import difflib.PatchFailedException;
+import com.github.difflib.patch.PatchFailedException;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;

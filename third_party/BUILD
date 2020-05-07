@@ -511,7 +511,7 @@ filegroup(
 
 java_import(
     name = "diffutils",
-    jars = ["diffutils/diffutils-1.3.0.jar"],
+    jars = ["diffutils/java-diff-utils-4.0.jar"],
 )
 
 java_import(
