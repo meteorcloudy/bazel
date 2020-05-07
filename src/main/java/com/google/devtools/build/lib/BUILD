@@ -447,13 +447,10 @@ java_library(
     ],
 )
 
-merge_licenses(
-    name = "merge_licenses",
-    srcs = [
-        "//:LICENSE",
-        "//third_party:srcs",
-    ],
-    out = "runtime/commands/LICENSE",
+genrule(
+    name = "merge_license",
+    outs = ["runtime/commands/LICENSE"],
+    cmd = "echo 'Please find the license file of Bazel at /usr/share/doc/bazel/copyright' > $@",
 )
 
 java_library(
