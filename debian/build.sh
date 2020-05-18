@@ -1,0 +1,58 @@
+#!/bin/bash
+
+set -x
+
+# Revert files before patching
+git checkout WORKSPACE
+git checkout src/main/java/com/google/devtools/build/lib/runtime/commands/license/BUILD
+git checkout src/java_tools/buildjar
+
+# Apply patch
+patch -p1 < debian/patches/debian.patch
+patch -p1 < debian/patches/remove_javac.patch
+
+# Delete derived directory in case it exists
+rm -rf derived
+rm -f ./grpc-java-plugin
+
+# Ensure packages build with no Internet access
+export http_proxy=127.0.0.1:9
+export https_proxy=127.0.0.1:9
+
+export EXTRA_BAZEL_ARGS="\
+    --define=distribution=debian \
+    --host_javabase=@local_jdk//:jdk \
+    --override_repository=com_google_protobuf=$PWD/tools/distributions/debian/protobuf \
+    --override_repository=remote_java_tools_linux=$PWD/debian/missing-sources/mock_repos/remote_java_tools_linux \
+    --override_repository=bazel_skylib=$PWD/debian/missing-sources/mock_repos/bazel_skylib \
+    --override_repository=io_bazel_skydoc=$PWD/debian/missing-sources/mock_repos/bazel_skydoc \
+    --override_repository=rules_pkg=$PWD/debian/missing-sources/mock_repos/rules_pkg \
+    --override_repository=rules_cc=$PWD/debian/missing-sources/mock_repos/rules_cc \
+    --override_repository=rules_java=$PWD/debian/missing-sources/mock_repos/rules_java \
+    --override_repository=rules_proto=$PWD/debian/missing-sources/mock_repos/rules_proto \
+    --override_repository=platforms=$PWD/debian/missing-sources/mock_repos/platforms \
+    "
+
+# Only for testing, to make sure we don't use any repository cache. Can be removed.
+export EXTRA_BAZEL_ARGS="${EXTRA_BAZEL_ARGS} --repository_cache="
+
+export PROTOC=/usr/bin/protoc
+
+g++ third_party/grpc/compiler/src/java_plugin/cpp/java_generator.cpp \
+	third_party/grpc/compiler/src/java_plugin/cpp/java_generator.h \
+	third_party/grpc/compiler/src/java_plugin/cpp/java_plugin.cpp \
+	-o grpc-java-plugin -lprotobuf -lprotoc -lpthread
+export GRPC_JAVA_PLUGIN=./grpc-java-plugin
+
+export VERBOSE=yes
+
+./compile.sh
+
+# Revert files after build
+git checkout WORKSPACE
+git checkout src/main/java/com/google/devtools/build/lib/runtime/commands/license/BUILD
+git checkout src/java_tools/buildjar
+
+# Remove files after build
+rm -rf derived
+rm -f ./grpc-java-plugin
