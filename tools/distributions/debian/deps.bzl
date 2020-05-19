@@ -14,6 +14,8 @@
 
 """Macros for defining external repositories for Debian system installed libraries."""
 
+load("//tools/distributions:system_repo.bzl", "system_repo")
+
 def debian_deps():
     debian_java_deps()
     debian_cc_deps()
@@ -38,16 +40,20 @@ def debian_cc_deps():
 
 def debian_proto_deps():
     # An external repository for providing Debian system installed proto files.
-    native.new_local_repository(
+    system_repo(
         name = "debian_proto_deps",
-        path = "/usr/include",
+        symlinks = {
+            "google/protobuf": "/usr/include/google/protobuf",
+        },
         build_file = "//tools/distributions/debian:debian_proto.BUILD",
     )
 
 def debian_bin_deps():
     # An external repository for providing Debian system installed binaries.
-    native.new_local_repository(
+    system_repo(
         name = "debian_bin_deps",
-        path = "/usr/bin",
+        symlinks = {
+            "protoc": "/usr/bin/protoc",
+        },
         build_file = "//tools/distributions/debian:debian_bin.BUILD",
     )
