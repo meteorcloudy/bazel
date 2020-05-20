@@ -14,6 +14,17 @@
 
 package(default_visibility = ["//visibility:public"])
 
+filegroup(
+    name = "bootstrap_JavaBuilder_jars",
+    srcs = [
+        "tomcat9-annotations-api.jar",
+        "jsr305.jar",
+        "protobuf.jar",
+        "protobuf-util.jar",
+        "jcip-annotations.jar",
+    ]
+)
+
 # libnetty-java
 # TODO: The netty-all.jar is empty in Debian distribution, we have to list
 # all netty jars here. Replace them with netty-all.jar once it's fixed.
@@ -58,6 +69,12 @@ java_import(
     jars = ["tomcat9-annotations-api.jar"],
 )
 
+# For bootstrapping java toolcahin
+filegroup(
+    name = "tomcat_annotations_api-jars",
+    srcs = ["tomcat9-annotations-api.jar"],
+)
+
 # libjava-allocation-instrumenter-java
 java_import(
     name = "allocation_instrumenter",
@@ -74,6 +91,15 @@ java_import(
 java_import(
     name = "protobuf_java_util",
     jars = ["protobuf-util.jar"],
+)
+
+# For bootstrapping java toolcahin
+filegroup(
+    name = "bootstrap-derived-java-jars",
+    srcs = [
+        "protobuf.jar",
+        "protobuf-util.jar",
+    ],
 )
 
 # libcommons-collections3-java
@@ -134,10 +160,24 @@ java_import(
     ],
 )
 
+# For bootstrapping java toolcahin
+filegroup(
+    name = "jcip_annotations-jars",
+    srcs = [
+        "jcip-annotations.jar",
+    ],
+)
+
 # libjsr305-java
 java_import(
     name = "jsr305",
     jars = ["jsr305.jar"],
+)
+
+# For bootstrapping java toolcahin
+filegroup(
+    name = "jsr305-jars",
+    srcs = ["jsr305.jar"],
 )
 
 # libnetty-tcnative-java
