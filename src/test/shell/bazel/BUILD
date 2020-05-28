@@ -15,7 +15,6 @@ filegroup(
 genrule(
     name = "langtools-copy",
     testonly = 1,
-    srcs = ["//third_party/java/jdk/langtools:javac_jar"],
     outs = ["langtools.jar"],
     cmd = "cp $< $@",
 )

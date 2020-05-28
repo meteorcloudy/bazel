@@ -17,7 +17,6 @@ java_library(
         "//third_party:junit4",
         "//third_party:truth",
         "//third_party:turbine",
-        "//third_party/java/jdk/langtools:javac",
     ],
 )
 
@@ -37,7 +36,6 @@ java_test(
         "//third_party:junit4",
         "//third_party:truth",
         "//third_party:turbine",
-        "//third_party/java/jdk/langtools:javac",
     ],
 )
 
@@ -56,7 +54,6 @@ java_test(
         "//third_party:junit4",
         "//third_party:truth",
         "//third_party:turbine",
-        "//third_party/java/jdk/langtools:javac",
     ],
 )
 
@@ -71,7 +68,6 @@ java_test(
         "//third_party:guava",
         "//third_party:junit4",
         "//third_party:truth",
-        "//third_party/java/jdk/langtools:javac",
     ],
 )
 
