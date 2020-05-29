@@ -117,17 +117,34 @@ def generate_cc_impl(ctx):
     arguments += ["--proto_path={0}{1}".format(dir_out, proto_root)]
     arguments += [_get_srcs_file_path(proto) for proto in protos]
 
+    # create a list of well known proto files if the argument is non-None
+    well_known_proto_files = []
+    if ctx.attr.well_known_protos:
+        f = ctx.attr.well_known_protos.files.to_list()[0].dirname
+        if f != "external/com_google_protobuf/src/google/protobuf":
+            print(
+                "Error: Only @com_google_protobuf//:well_known_protos is supported",
+            )
+        else:
+            # f points to "external/com_google_protobuf/src/google/protobuf"
+            # add -I argument to protoc so it knows where to look for the proto files.
+            arguments += ["-I{0}".format(f + "/../..")]
+            well_known_proto_files = [
+                f
+                for f in ctx.attr.well_known_protos.files.to_list()
+            ]
+
     ctx.actions.run(
-        inputs = protos + includes,
+        inputs = protos + includes + well_known_proto_files,
         tools = tools,
         outputs = out_files,
-        executable = ctx.executable.protoc,
+        executable = ctx.executable._protoc,
         arguments = arguments,
     )
 
     return struct(files = depset(out_files))
 
-generate_cc = rule(
+_generate_cc = rule(
     attrs = {
         "srcs": attr.label_list(
             mandatory = True,
@@ -143,12 +160,13 @@ generate_cc = rule(
             mandatory = False,
             allow_empty = True,
         ),
+        "well_known_protos": attr.label(mandatory = False),
         "generate_mocks": attr.bool(
             default = False,
             mandatory = False,
         ),
-        "protoc": attr.label(
-            mandatory = True,
+        "_protoc": attr.label(
+            default = Label("//third_party/protobuf:protoc"),
             executable = True,
             cfg = "host",
         ),
@@ -157,3 +175,12 @@ generate_cc = rule(
     output_to_genfiles = True,
     implementation = generate_cc_impl,
 )
+
+def generate_cc(well_known_protos, **kwargs):
+    if well_known_protos:
+        _generate_cc(
+            well_known_protos = "@com_google_protobuf//:well_known_protos",
+            **kwargs
+        )
+    else:
+        _generate_cc(**kwargs)

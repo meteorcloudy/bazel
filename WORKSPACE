@@ -950,5 +950,28 @@ register_local_rc_exe_toolchains()
 
 register_toolchains("//src/main/res:empty_rc_toolchain")
 
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+http_archive(
+    name = "com_github_grpc_grpc",
+    # urls = ["https://github.com/grpc/grpc/archive/v1.29.0.tar.gz"],
+    # sha256 = "c0a6b40a222e51bea5c53090e9e65de46aee2d84c7fa7638f09cb68c3331b983",
+    # strip_prefix = "grpc-1.29.0",
+    urls = ["https://github.com/grpc/grpc/archive/v1.26.0.tar.gz"],
+    sha256 = "2fcb7f1ab160d6fd3aaade64520be3e5446fc4c6fa7ba6581afdc4e26094bd81",
+    patches = ["//third_party/grpc:grpc_remove_deps.patch"],
+    patch_args = ["-p1"],
+    strip_prefix = "grpc-1.26.0",
+)
+
+load("@com_github_grpc_grpc//bazel:grpc_deps.bzl", "grpc_deps")
+
+grpc_deps()
+
+# Projects using gRPC as an external dependency must call both grpc_deps() and
+# grpc_extra_deps().
+load("@com_github_grpc_grpc//bazel:grpc_extra_deps.bzl", "grpc_extra_deps")
+
+grpc_extra_deps()
+
 load("//tools/distributions/debian:deps.bzl", "debian_deps")
 debian_deps()

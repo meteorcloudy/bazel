@@ -207,6 +207,7 @@ cc_grpc_library(
         ":command_server_cc_proto",
         "//third_party/grpc:grpc++_unsecure",
     ],
+    grpc_only = True,
 )
 
 py_proto_library(
