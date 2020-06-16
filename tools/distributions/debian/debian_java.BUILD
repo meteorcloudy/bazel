@@ -351,3 +351,9 @@ java_import(
         "error-prone-type-annotations.jar",
     ],
 )
+
+# For bootstrapping JavaBuilder
+filegroup(
+    name = "error_prone_annotations-jar",
+    srcs = ["error-prone-annotations.jar"],
+)

@@ -339,6 +339,12 @@ distrib_java_import(
     enable_distributions = ["debian"],
 )
 
+distrib_jar_filegroup(
+    name = "error_prone_annotations-jar",
+    srcs = ["error_prone/error_prone_annotations-2.2.0.jar"],
+    enable_distributions = ["debian"],
+)
+
 java_import(
     name = "error_prone",
     jars = [
@@ -397,7 +403,7 @@ java_import(
 filegroup(
     name = "bootstrap_guava_and_error_prone-jars",
     srcs = [
-        "error_prone/error_prone_annotations-2.2.0.jar",
+        ":error_prone_annotations-jar",
         ":guava-jars",
         ":jcip_annotations-jars",
         ":jsr305-jars",
