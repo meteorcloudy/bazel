@@ -272,12 +272,82 @@ java_import(
 )
 
 java_import(
-   name = "blaze-agent",
-   jars = ["org.jacoco.agent.jar"],
+    name = "blaze-agent",
+    jars = ["org.jacoco.agent.jar"],
 )
 
 java_import(
-   name = "blaze-agent-%s" % JACOCOVERSION,
-   jars = ["org.jacoco.agent.jar"],
+    name = "blaze-agent-%s" % JACOCOVERSION,
+    jars = ["org.jacoco.agent.jar"],
 )
 # libjacoco-java - END
+
+# libgoogle-auto-common-java
+java_import(
+    name = "auto_common",
+    jars = ["auto-common.jar"],
+)
+
+# libgoogle-auto-service-java
+java_import(
+    name = "auto_service_lib",
+    jars = [
+        "auto-service.jar",
+        "auto-service-annotations.jar",
+    ],
+)
+
+# libgoogle-auto-value-java
+java_import(
+    name = "auto_value_value",
+    jars = [
+        "auto-value.jar",
+        "auto-value-annotations.jar",
+    ],
+)
+
+# For bootstrapping JavaBuilder
+filegroup(
+    name = "auto_value-jars",
+    srcs = [
+        "auto-value.jar",
+        "auto-value-annotations.jar",
+    ],
+)
+
+# libgoogle-http-client-java
+java_import(
+    name = "api_client",
+    jars = [
+        # "google-api-client.jar",
+        # "google-api-client-jackson2.jar",
+        "google-http-client.jar",
+        "google-http-client-jackson2.jar",
+    ],
+    runtime_deps = [
+        ":jackson2",
+    ],
+)
+
+# libgoogle-auth-java
+java_import(
+    name = "auth",
+    jars = [
+        "google-auth-library-oauth2-http.jar",
+        "google-auth-library-credentials.jar",
+    ],
+    runtime_deps = [
+        ":api_client",
+        ":guava",
+        "@//third_party/aws-sdk-auth-lite",
+    ],
+)
+
+# liberror-prone-java
+java_import(
+    name = "error_prone_annotations",
+    jars = [
+        "error-prone-annotations.jar",
+        "error-prone-type-annotations.jar",
+    ],
+)
