@@ -19,12 +19,13 @@ rm -f ./grpc-java-plugin
 export http_proxy=127.0.0.1:9
 export https_proxy=127.0.0.1:9
 
+#    --override_repository=bazel_skylib=$PWD/debian/missing-sources/mock_repos/bazel_skylib \
 export EXTRA_BAZEL_ARGS="\
     --define=distribution=debian \
+    --distdir=debian/distdir \
     --host_javabase=@local_jdk//:jdk \
     --override_repository=com_google_protobuf=$PWD/tools/distributions/debian/protobuf \
     --override_repository=remote_java_tools_linux=$PWD/debian/missing-sources/mock_repos/remote_java_tools_linux \
-    --override_repository=bazel_skylib=$PWD/debian/missing-sources/mock_repos/bazel_skylib \
     --override_repository=io_bazel_skydoc=$PWD/debian/missing-sources/mock_repos/bazel_skydoc \
     --override_repository=rules_pkg=$PWD/debian/missing-sources/mock_repos/rules_pkg \
     --override_repository=rules_cc=$PWD/debian/missing-sources/mock_repos/rules_cc \
