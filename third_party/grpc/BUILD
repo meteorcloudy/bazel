@@ -73,7 +73,7 @@ distrib_cc_binary(
 alias(
     name = "cpp_plugin",
     actual = select({
-        "//src/conditions:debian_build": "@debian_bin_deps//:grpc-cpp-plugin",
+        # "//src/conditions:debian_build": "@debian_bin_deps//:grpc-cpp-plugin",
         "//conditions:default": "@com_github_grpc_grpc//src/compiler:grpc_cpp_plugin",
     }),
 )
@@ -81,7 +81,7 @@ alias(
 alias(
     name = "grpc++_codegen_proto",
     actual = select({
-        "//src/conditions:debian_build": "@debian_cc_deps//:grpc++_unsecure",
+        # "//src/conditions:debian_build": "@debian_cc_deps//:grpc++_unsecure",
         "//conditions:default": "@com_github_grpc_grpc//:grpc++_codegen_proto",
     }),
 )
@@ -89,7 +89,7 @@ alias(
 alias(
     name = "grpc++_unsecure",
     actual = select({
-        "//src/conditions:debian_build": "@debian_cc_deps//:grpc++_unsecure",
+        # "//src/conditions:debian_build": "@debian_cc_deps//:grpc++_unsecure",
         "//conditions:default": "@com_github_grpc_grpc//:grpc++_unsecure",
     }),
 )
