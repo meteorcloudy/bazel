@@ -333,7 +333,7 @@ java_import(
 
 distrib_java_import(
     name = "checker_framework_annotations",
-    enable_distributions = ["debian"],
+    # enable_distributions = ["debian"],
     jars = ["checker_framework_annotations/checker-qual-3.2.0.jar"],
     srcjar = "checker_framework_annotations/checker-qual-3.2.0-sources.jar",
 )
@@ -465,7 +465,7 @@ distrib_java_import(
 
 distrib_java_import(
     name = "flogger",
-    enable_distributions = ["debian"],
+    # enable_distributions = ["debian"],
     jars = [
         "flogger/flogger-0.5.1.jar",
         "flogger/flogger-system-backend-0.5.1.jar",
@@ -480,12 +480,12 @@ distrib_jar_filegroup(
         "flogger/flogger-system-backend-0.5.1.jar",
         "flogger/google-extensions-0.5.1.jar",
     ],
-    enable_distributions = ["debian"],
+    # enable_distributions = ["debian"],
 )
 
 distrib_java_import(
     name = "opencensus-api",
-    enable_distributions = ["debian"],
+    # enable_distributions = ["debian"],
     jars = [
         "opencensus/opencensus-api-0.24.0.jar",
         "opencensus/opencensus-contrib-grpc-metrics-0.24.0.jar",
