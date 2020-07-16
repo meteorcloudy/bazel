@@ -39,11 +39,7 @@ export EXTRA_BAZEL_ARGS="${EXTRA_BAZEL_ARGS} --repository_cache="
 
 export PROTOC=/usr/bin/protoc
 
-g++ third_party/grpc/compiler/src/java_plugin/cpp/java_generator.cpp \
-	third_party/grpc/compiler/src/java_plugin/cpp/java_generator.h \
-	third_party/grpc/compiler/src/java_plugin/cpp/java_plugin.cpp \
-	-o grpc-java-plugin -lprotobuf -lprotoc -lpthread
-export GRPC_JAVA_PLUGIN=./grpc-java-plugin
+export GRPC_JAVA_PLUGIN=/usr/bin/grpc_java_plugin
 
 export VERBOSE=yes
 
