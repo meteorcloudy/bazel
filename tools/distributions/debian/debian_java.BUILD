@@ -439,7 +439,7 @@ java_import(
 filegroup(
     name = "bootstrap-grpc-jars",
     srcs = [
-        "grpc-api.jar",
+        # "grpc-api.jar",
         "grpc-auth.jar",
         "grpc-context.jar",
         "grpc-core.jar",
