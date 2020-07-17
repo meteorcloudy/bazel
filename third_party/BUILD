@@ -485,7 +485,7 @@ distrib_jar_filegroup(
 
 distrib_java_import(
     name = "opencensus-api",
-    # enable_distributions = ["debian"],
+    enable_distributions = ["debian"],
     jars = [
         "opencensus/opencensus-api-0.24.0.jar",
         "opencensus/opencensus-contrib-grpc-metrics-0.24.0.jar",

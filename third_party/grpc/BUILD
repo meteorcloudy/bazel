@@ -41,7 +41,7 @@ distrib_jar_filegroup(
         "grpc-protobuf-lite-1.26.0.jar",
         "grpc-stub-1.26.0.jar",
     ],
-    # enable_distributions = ["debian"],
+    enable_distributions = ["debian"],
 )
 
 distrib_java_import(
@@ -55,7 +55,7 @@ distrib_java_import(
     deps = [
         "//third_party:guava",
     ],
-    # enable_distributions = ["debian"],
+    enable_distributions = ["debian"],
 )
 
 distrib_cc_binary(
