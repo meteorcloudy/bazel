@@ -465,7 +465,7 @@ distrib_java_import(
 
 distrib_java_import(
     name = "flogger",
-    # enable_distributions = ["debian"],
+    enable_distributions = ["debian"],
     jars = [
         "flogger/flogger-0.5.1.jar",
         "flogger/flogger-system-backend-0.5.1.jar",
@@ -475,12 +475,12 @@ distrib_java_import(
 
 distrib_jar_filegroup(
     name = "flogger-jars",
+    enable_distributions = ["debian"],
     srcs = [
         "flogger/flogger-0.5.1.jar",
         "flogger/flogger-system-backend-0.5.1.jar",
         "flogger/google-extensions-0.5.1.jar",
     ],
-    # enable_distributions = ["debian"],
 )
 
 distrib_java_import(
