@@ -333,7 +333,7 @@ distrib_java_import(
     name = "checker_framework_annotations",
     jars = ["checker_framework_annotations/checker-qual-3.2.0.jar"],
     srcjar = "checker_framework_annotations/checker-qual-3.2.0-sources.jar",
-    enable_distributions = ["debian"],
+    # enable_distributions = ["debian"],
 )
 
 java_import(
