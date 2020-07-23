@@ -1,26 +1,20 @@
-commit 49b3aaa8f5c614c5b855e276157fe244f92c01cf
+Description: Create mock repositories to prevent packaging binary archives
+ Workaround created for Debian by upstream to prevent packaging archive files
+ in Debian "source." This recreates only the portions of those .zip and .tar.gz
+ files that are required for building Bazel on Debian.
 Author: Yun Peng <pcloudy@google.com>
-Date:   Thu Jul 23 11:58:20 2020 +0200
+Origin: upstream, https://github.com/meteorcloudy/bazel/commit/1c38681aec9dee4eeeeac6196154c01e67878d65
+Forwarded: not-needed
+Last-Update: 2020-07-22
 
-    Add mock repos
-
-diff --git a/mock_repos/bazel_skydoc/BUILD b/mock_repos/bazel_skydoc/BUILD
-new file mode 100644
-index 0000000000..8b13789179
 --- /dev/null
 +++ b/mock_repos/bazel_skydoc/BUILD
 @@ -0,0 +1 @@
 +
-diff --git a/mock_repos/bazel_skydoc/WORKSPACE b/mock_repos/bazel_skydoc/WORKSPACE
-new file mode 100644
-index 0000000000..8b13789179
 --- /dev/null
 +++ b/mock_repos/bazel_skydoc/WORKSPACE
 @@ -0,0 +1 @@
 +
-diff --git a/mock_repos/bazel_skydoc/setup.bzl b/mock_repos/bazel_skydoc/setup.bzl
-new file mode 100644
-index 0000000000..37987d4eb1
 --- /dev/null
 +++ b/mock_repos/bazel_skydoc/setup.bzl
 @@ -0,0 +1,18 @@
@@ -42,12 +36,10 @@ index 0000000000..37987d4eb1
 +
 +def stardoc_repositories(**kwargs):
 +    pass
-diff --git a/mock_repos/bazel_skydoc/stardoc/BUILD b/mock_repos/bazel_skydoc/stardoc/BUILD
-new file mode 100644
-index 0000000000..e69de29bb2
-diff --git a/mock_repos/bazel_skydoc/stardoc/html_tables_stardoc.bzl b/mock_repos/bazel_skydoc/stardoc/html_tables_stardoc.bzl
-new file mode 100644
-index 0000000000..bf2ed65b0a
+--- /dev/null
++++ b/mock_repos/bazel_skydoc/stardoc/BUILD
+@@ -0,0 +1 @@
++
 --- /dev/null
 +++ b/mock_repos/bazel_skydoc/stardoc/html_tables_stardoc.bzl
 @@ -0,0 +1,18 @@
@@ -69,9 +61,6 @@ index 0000000000..bf2ed65b0a
 +
 +def html_tables_stardoc(**kwargs):
 +    pass
-diff --git a/mock_repos/bazel_skydoc/stardoc/stardoc.bzl b/mock_repos/bazel_skydoc/stardoc/stardoc.bzl
-new file mode 100644
-index 0000000000..81cd44c916
 --- /dev/null
 +++ b/mock_repos/bazel_skydoc/stardoc/stardoc.bzl
 @@ -0,0 +1,18 @@
@@ -93,23 +82,14 @@ index 0000000000..81cd44c916
 +
 +def stardoc(**kwargs):
 +    pass
-diff --git a/mock_repos/bazel_skylib/BUILD b/mock_repos/bazel_skylib/BUILD
-new file mode 100644
-index 0000000000..8b13789179
 --- /dev/null
 +++ b/mock_repos/bazel_skylib/BUILD
 @@ -0,0 +1 @@
 +
-diff --git a/mock_repos/bazel_skylib/WORKSPACE b/mock_repos/bazel_skylib/WORKSPACE
-new file mode 100644
-index 0000000000..8b13789179
 --- /dev/null
 +++ b/mock_repos/bazel_skylib/WORKSPACE
 @@ -0,0 +1 @@
 +
-diff --git a/mock_repos/bazel_skylib/bzl_library.bzl b/mock_repos/bazel_skylib/bzl_library.bzl
-new file mode 100644
-index 0000000000..caddb5cda0
 --- /dev/null
 +++ b/mock_repos/bazel_skylib/bzl_library.bzl
 @@ -0,0 +1,18 @@
@@ -131,9 +111,6 @@ index 0000000000..caddb5cda0
 +
 +def bzl_library(**kwargs):
 +    pass
-diff --git a/mock_repos/platforms/BUILD b/mock_repos/platforms/BUILD
-new file mode 100644
-index 0000000000..d73ff9229a
 --- /dev/null
 +++ b/mock_repos/platforms/BUILD
 @@ -0,0 +1,15 @@
@@ -152,16 +129,10 @@ index 0000000000..d73ff9229a
 +        "//os:srcs",
 +    ],
 +)
-diff --git a/mock_repos/platforms/WORKSPACE b/mock_repos/platforms/WORKSPACE
-new file mode 100644
-index 0000000000..f1874ea621
 --- /dev/null
 +++ b/mock_repos/platforms/WORKSPACE
 @@ -0,0 +1 @@
 +workspace(name = "platforms")
-diff --git a/mock_repos/platforms/cpu/BUILD b/mock_repos/platforms/cpu/BUILD
-new file mode 100644
-index 0000000000..80c9c38174
 --- /dev/null
 +++ b/mock_repos/platforms/cpu/BUILD
 @@ -0,0 +1,76 @@
@@ -241,9 +212,6 @@ index 0000000000..80c9c38174
 +    name = "x86_64",
 +    constraint_setting = ":cpu",
 +)
-diff --git a/mock_repos/platforms/os/BUILD b/mock_repos/platforms/os/BUILD
-new file mode 100644
-index 0000000000..16df5d3aaa
 --- /dev/null
 +++ b/mock_repos/platforms/os/BUILD
 @@ -0,0 +1,78 @@
@@ -325,9 +293,6 @@ index 0000000000..16df5d3aaa
 +    name = "qnx",
 +    constraint_setting = ":os",
 +)
-diff --git a/mock_repos/remote_java_tools_linux/BUILD b/mock_repos/remote_java_tools_linux/BUILD
-new file mode 100644
-index 0000000000..a5b8a7e5a0
 --- /dev/null
 +++ b/mock_repos/remote_java_tools_linux/BUILD
 @@ -0,0 +1,7 @@
@@ -338,30 +303,18 @@ index 0000000000..a5b8a7e5a0
 +    srcs = ["java_tools/JacocoCoverage_jarjar_deploy.jar"],
 +)
 +
-diff --git a/mock_repos/remote_java_tools_linux/WORKSPACE b/mock_repos/remote_java_tools_linux/WORKSPACE
-new file mode 100644
-index 0000000000..8b13789179
 --- /dev/null
 +++ b/mock_repos/remote_java_tools_linux/WORKSPACE
 @@ -0,0 +1 @@
 +
-diff --git a/mock_repos/rules_cc/WORKSPACE b/mock_repos/rules_cc/WORKSPACE
-new file mode 100644
-index 0000000000..8b13789179
 --- /dev/null
 +++ b/mock_repos/rules_cc/WORKSPACE
 @@ -0,0 +1 @@
 +
-diff --git a/mock_repos/rules_cc/cc/BUILD b/mock_repos/rules_cc/cc/BUILD
-new file mode 100644
-index 0000000000..8b13789179
 --- /dev/null
 +++ b/mock_repos/rules_cc/cc/BUILD
 @@ -0,0 +1 @@
 +
-diff --git a/mock_repos/rules_cc/cc/defs.bzl b/mock_repos/rules_cc/cc/defs.bzl
-new file mode 100644
-index 0000000000..993e77f613
 --- /dev/null
 +++ b/mock_repos/rules_cc/cc/defs.bzl
 @@ -0,0 +1,36 @@
@@ -401,23 +354,14 @@ index 0000000000..993e77f613
 +
 +def cc_toolchain_suite(**kwargs):
 +    native.cc_toolchain_suite(**kwargs)
-diff --git a/mock_repos/rules_java/WORKSPACE b/mock_repos/rules_java/WORKSPACE
-new file mode 100644
-index 0000000000..8b13789179
 --- /dev/null
 +++ b/mock_repos/rules_java/WORKSPACE
 @@ -0,0 +1 @@
 +
-diff --git a/mock_repos/rules_java/java/BUILD b/mock_repos/rules_java/java/BUILD
-new file mode 100644
-index 0000000000..8b13789179
 --- /dev/null
 +++ b/mock_repos/rules_java/java/BUILD
 @@ -0,0 +1 @@
 +
-diff --git a/mock_repos/rules_java/java/defs.bzl b/mock_repos/rules_java/java/defs.bzl
-new file mode 100644
-index 0000000000..152a2ad828
 --- /dev/null
 +++ b/mock_repos/rules_java/java/defs.bzl
 @@ -0,0 +1,39 @@
@@ -460,23 +404,14 @@ index 0000000000..152a2ad828
 +
 +def java_plugin(**kwargs):
 +    native.java_plugin(**kwargs)
-diff --git a/mock_repos/rules_pkg/BUILD b/mock_repos/rules_pkg/BUILD
-new file mode 100644
-index 0000000000..8b13789179
 --- /dev/null
 +++ b/mock_repos/rules_pkg/BUILD
 @@ -0,0 +1 @@
 +
-diff --git a/mock_repos/rules_pkg/WORKSPACE b/mock_repos/rules_pkg/WORKSPACE
-new file mode 100644
-index 0000000000..8b13789179
 --- /dev/null
 +++ b/mock_repos/rules_pkg/WORKSPACE
 @@ -0,0 +1 @@
 +
-diff --git a/mock_repos/rules_pkg/deps.bzl b/mock_repos/rules_pkg/deps.bzl
-new file mode 100644
-index 0000000000..df62c5bc96
 --- /dev/null
 +++ b/mock_repos/rules_pkg/deps.bzl
 @@ -0,0 +1,18 @@
@@ -498,9 +433,6 @@ index 0000000000..df62c5bc96
 +
 +def rules_pkg_dependencies(**kwargs):
 +    pass
-diff --git a/mock_repos/rules_pkg/pkg.bzl b/mock_repos/rules_pkg/pkg.bzl
-new file mode 100644
-index 0000000000..8ddf7fbdae
 --- /dev/null
 +++ b/mock_repos/rules_pkg/pkg.bzl
 @@ -0,0 +1,18 @@
@@ -522,23 +454,14 @@ index 0000000000..8ddf7fbdae
 +
 +def pkg_tar(**kwargs):
 +    pass
-diff --git a/mock_repos/rules_proto/WORKSPACE b/mock_repos/rules_proto/WORKSPACE
-new file mode 100644
-index 0000000000..39859cc299
 --- /dev/null
 +++ b/mock_repos/rules_proto/WORKSPACE
 @@ -0,0 +1 @@
 +workspace(name = "rules_proto")
-diff --git a/mock_repos/rules_proto/proto/BUILD b/mock_repos/rules_proto/proto/BUILD
-new file mode 100644
-index 0000000000..5990249153
 --- /dev/null
 +++ b/mock_repos/rules_proto/proto/BUILD
 @@ -0,0 +1 @@
 +# Intentionally left empty (for now).
-diff --git a/mock_repos/rules_proto/proto/defs.bzl b/mock_repos/rules_proto/proto/defs.bzl
-new file mode 100644
-index 0000000000..fdb8b22ccd
 --- /dev/null
 +++ b/mock_repos/rules_proto/proto/defs.bzl
 @@ -0,0 +1,27 @@
@@ -569,16 +492,10 @@ index 0000000000..fdb8b22ccd
 +
 +https://docs.bazel.build/versions/master/skylark/lib/ProtoInfo.html
 +"""
-diff --git a/mock_repos/rules_proto/proto/private/BUILD b/mock_repos/rules_proto/proto/private/BUILD
-new file mode 100644
-index 0000000000..5990249153
 --- /dev/null
 +++ b/mock_repos/rules_proto/proto/private/BUILD
 @@ -0,0 +1 @@
 +# Intentionally left empty (for now).
-diff --git a/mock_repos/rules_proto/proto/private/native.bzl b/mock_repos/rules_proto/proto/private/native.bzl
-new file mode 100644
-index 0000000000..55856eaca0
 --- /dev/null
 +++ b/mock_repos/rules_proto/proto/private/native.bzl
 @@ -0,0 +1,24 @@
