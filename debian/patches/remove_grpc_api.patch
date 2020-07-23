@@ -1,0 +1,18 @@
+commit f5b11517a895abb8520df8da07daf1b6ee464613
+Author: Yun Peng <pcloudy@google.com>
+Date:   Wed Jul 22 11:26:21 2020 +0000
+
+    Remove grpc-api.jar
+
+diff --git a/tools/distributions/debian/debian_java.BUILD b/tools/distributions/debian/debian_java.BUILD
+index 76eff0928c..18e74c2188 100644
+--- a/tools/distributions/debian/debian_java.BUILD
++++ b/tools/distributions/debian/debian_java.BUILD
+@@ -439,7 +439,6 @@ java_import(
+ filegroup(
+     name = "bootstrap-grpc-jars",
+     srcs = [
+-        "grpc-api.jar",
+         "grpc-auth.jar",
+         "grpc-context.jar",
+         "grpc-core.jar",

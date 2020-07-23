@@ -1,0 +1,82 @@
+commit 0014cb0892e13f6fe02d8db4414399818724984b
+Author: Yun Peng <pcloudy@google.com>
+Date:   Thu Jul 16 07:10:04 2020 -0700
+
+    Replace grpc-java-plugin with Debian system bin
+
+diff --git a/third_party/grpc/BUILD b/third_party/grpc/BUILD
+index 4ebb842f4e..71fc09eec2 100644
+--- a/third_party/grpc/BUILD
++++ b/third_party/grpc/BUILD
+@@ -14,7 +14,7 @@
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
+ 
+-load("//tools/distributions:distribution_rules.bzl", "distrib_java_import", "distrib_jar_filegroup")
++load("//tools/distributions:distribution_rules.bzl", "distrib_java_import", "distrib_jar_filegroup", "distrib_cc_binary")
+ 
+ licenses(["notice"])  # Apache v2
+ 
+@@ -58,8 +58,9 @@ distrib_java_import(
+     enable_distributions = ["debian"],
+ )
+ 
+-cc_binary(
++distrib_cc_binary(
+     name = "grpc-java-plugin",
++    enable_distributions = ["debian"],
+     srcs = [
+         "compiler/src/java_plugin/cpp/java_generator.cpp",
+         "compiler/src/java_plugin/cpp/java_generator.h",
+diff --git a/tools/distributions/debian/debian_bin.BUILD b/tools/distributions/debian/debian_bin.BUILD
+index 9d9ea53eb1..7731a1ec77 100644
+--- a/tools/distributions/debian/debian_bin.BUILD
++++ b/tools/distributions/debian/debian_bin.BUILD
+@@ -25,3 +25,9 @@ filegroup(
+     name = "grpc-cpp-plugin",
+     srcs = ["grpc_cpp_plugin"],
+ )
++
++# protobuf-compiler-grpc-java-plugin
++filegroup(
++    name = "grpc-java-plugin",
++    srcs = ["grpc_java_plugin"],
++)
+diff --git a/tools/distributions/debian/deps.bzl b/tools/distributions/debian/deps.bzl
+index 26d59a8ab5..4cbbfb518d 100644
+--- a/tools/distributions/debian/deps.bzl
++++ b/tools/distributions/debian/deps.bzl
+@@ -58,6 +58,7 @@ def debian_bin_deps():
+         symlinks = {
+             "protoc": "/usr/bin/protoc",
+             "grpc_cpp_plugin": "/usr/bin/grpc_cpp_plugin",
++            "grpc_java_plugin": "/usr/bin/grpc_java_plugin",
+         },
+         build_file = "//tools/distributions/debian:debian_bin.BUILD",
+     )
+diff --git a/tools/distributions/distribution_rules.bzl b/tools/distributions/distribution_rules.bzl
+index 8a5ae9fdbd..e8b0f196ed 100644
+--- a/tools/distributions/distribution_rules.bzl
++++ b/tools/distributions/distribution_rules.bzl
+@@ -44,6 +44,21 @@ def distrib_cc_library(name, visibility = None, enable_distributions = [], **kwa
+ 
+     native.alias(name = name, actual = select(conditions), visibility = visibility)
+ 
++def distrib_cc_binary(name, visibility = None, enable_distributions = [], **kwargs):
++    """A macro for cc_binary rule to support distributions build (eg. Debian)"""
++    checked_in_name = name + "_checked_in"
++
++    native.cc_binary(name = checked_in_name, visibility = visibility, **kwargs)
++
++    conditions = {
++        "//conditions:default": ":" + checked_in_name,
++    }
++
++    if "debian" in enable_distributions:
++        conditions["//src/conditions:debian_build"] = "@debian_bin_deps//:" + name
++
++    native.alias(name = name, actual = select(conditions), visibility = visibility)
++
+ def distrib_jar_filegroup(name, visibility = None, enable_distributions = [], **kwargs):
+     """A macro for filegroup rule to support distributions build (eg. Debian)"""
+     checked_in_name = name + "_checked_in"

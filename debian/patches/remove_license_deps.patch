@@ -1,0 +1,50 @@
+diff --git a/src/main/java/com/google/devtools/build/lib/runtime/commands/license/BUILD b/src/main/java/com/google/devtools/build/lib/runtime/commands/license/BUILD
+index 884b564782..4edb763ba0 100644
+--- a/src/main/java/com/google/devtools/build/lib/runtime/commands/license/BUILD
++++ b/src/main/java/com/google/devtools/build/lib/runtime/commands/license/BUILD
+@@ -11,11 +11,8 @@ filegroup(
+ )
+ 
+ # Satisfy the rules in runtime/commands/BUILD which use a generated LICENSE file in Bazel open source
+-merge_licenses(
++genrule(
+     name = "license",
+-    srcs = [
+-        "//:LICENSE",
+-        "//third_party:srcs",
+-    ],
+-    out = "LICENSE",
++    cmd = "touch $@",
++    outs = ["LICENSE"],
+ )
+commit e1698bc1b28de7082889f33c45cce3153b7123b4
+Author: Yun Peng <pcloudy@google.com>
+Date:   Wed Jul 22 11:49:55 2020 +0000
+
+    Remove license files
+
+diff --git a/third_party/jarjar/BUILD b/third_party/jarjar/BUILD
+index c9e4d4a95b..8bf20cf6cf 100644
+--- a/third_party/jarjar/BUILD
++++ b/third_party/jarjar/BUILD
+@@ -13,7 +13,6 @@ filegroup(
+     name = "embedded_build_and_license",
+     srcs = [
+         "BUILD.tools",
+-        "LICENSE",
+     ],
+ )
+ 
+diff --git a/third_party/zlib/BUILD b/third_party/zlib/BUILD
+index f1aa936c9a..1940266d78 100644
+--- a/third_party/zlib/BUILD
++++ b/third_party/zlib/BUILD
+@@ -10,7 +10,7 @@ filegroup(
+ 
+ filegroup(
+     name = "embedded_tools",
+-    srcs = glob(["*.c"]) + glob(["*.h"]) + [":embedded_build_file"] + ["LICENSE.txt"],
++    srcs = glob(["*.c"]) + glob(["*.h"]) + [":embedded_build_file"],
+     visibility = ["//visibility:public"],
+ )
+ 

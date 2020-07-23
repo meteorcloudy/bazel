@@ -1,0 +1,165 @@
+diff --git a/src/java_tools/buildjar/BUILD b/src/java_tools/buildjar/BUILD
+index 74f960425f..f9cf2050ef 100644
+--- a/src/java_tools/buildjar/BUILD
++++ b/src/java_tools/buildjar/BUILD
+@@ -61,7 +61,6 @@ java_toolchain(
+     genclass = ["bootstrap_genclass_deploy.jar"],
+     ijar = ["//third_party/ijar"],
+     javabuilder = ["bootstrap_VanillaJavaBuilder_deploy.jar"],
+-    javac = ["//third_party/java/jdk/langtools:javac_jar"],
+     jvm_opts = [
+         # Prevent "Could not reserve enough space for object heap" errors on Windows.
+         "-Xmx512m",
+diff --git a/src/java_tools/buildjar/java/com/google/devtools/build/buildjar/BUILD b/src/java_tools/buildjar/java/com/google/devtools/build/buildjar/BUILD
+index 1e3dd493ad..dae57ccea3 100644
+--- a/src/java_tools/buildjar/java/com/google/devtools/build/buildjar/BUILD
++++ b/src/java_tools/buildjar/java/com/google/devtools/build/buildjar/BUILD
+@@ -55,7 +55,6 @@ java_library(
+         "//third_party:auto_value",
+         "//third_party:guava",
+         "//third_party:jsr305",
+-        "//third_party/java/jdk/langtools:javac",
+     ],
+ )
+ 
+@@ -93,7 +92,6 @@ java_library(
+         "//third_party:guava",
+         "//third_party:jsr305",
+         "//third_party/java/jacoco:core",
+-        "//third_party/java/jdk/langtools:javac",
+     ],
+ )
+ 
+@@ -164,7 +162,6 @@ bootstrap_java_library(
+         "//third_party/grpc:bootstrap-grpc-jars",
+         "//third_party:tomcat_annotations_api-jars",
+     ],
+-    neverlink_jars = ["//third_party/java/jdk/langtools:javac_jar"],
+     tags = ["manual"],
+ )
+ 
+diff --git a/src/java_tools/buildjar/java/com/google/devtools/build/buildjar/javac/plugins/BUILD b/src/java_tools/buildjar/java/com/google/devtools/build/buildjar/javac/plugins/BUILD
+index 59131bf227..db8c2c9246 100644
+--- a/src/java_tools/buildjar/java/com/google/devtools/build/buildjar/javac/plugins/BUILD
++++ b/src/java_tools/buildjar/java/com/google/devtools/build/buildjar/javac/plugins/BUILD
+@@ -13,7 +13,6 @@ java_library(
+         "//src/java_tools/buildjar/java/com/google/devtools/build/buildjar:invalid_command_line_exception",
+         "//src/java_tools/buildjar/java/com/google/devtools/build/buildjar/javac/statistics",
+         "//third_party:guava",
+-        "//third_party/java/jdk/langtools:javac",
+     ],
+ )
+ 
+@@ -28,7 +27,6 @@ java_library(
+         "//third_party:auto_value",
+         "//third_party:guava",
+         "//third_party:tomcat_annotations_api",
+-        "//third_party/java/jdk/langtools:javac",
+     ],
+ )
+ 
+@@ -41,7 +39,6 @@ java_library(
+         "//src/java_tools/buildjar/java/com/google/devtools/build/buildjar/javac/statistics",
+         "//third_party:error_prone",
+         "//third_party:guava",
+-        "//third_party/java/jdk/langtools:javac",
+     ],
+ )
+ 
+@@ -52,7 +49,6 @@ java_library(
+         ":plugins",
+         "//src/main/protobuf:java_compilation_java_proto",
+         "//third_party:guava",
+-        "//third_party/java/jdk/langtools:javac",
+     ],
+ )
+ 
+diff --git a/src/java_tools/buildjar/java/com/google/devtools/build/buildjar/javac/statistics/BUILD b/src/java_tools/buildjar/java/com/google/devtools/build/buildjar/javac/statistics/BUILD
+index fb13c94114..b0594afa75 100644
+--- a/src/java_tools/buildjar/java/com/google/devtools/build/buildjar/javac/statistics/BUILD
++++ b/src/java_tools/buildjar/java/com/google/devtools/build/buildjar/javac/statistics/BUILD
+@@ -8,7 +8,6 @@ java_library(
+     deps = [
+         "//third_party:auto_value",
+         "//third_party:guava",
+-        "//third_party/java/jdk/langtools:javac",
+     ],
+ )
+ 
+diff --git a/src/java_tools/buildjar/java/com/google/devtools/build/java/turbine/javac/BUILD b/src/java_tools/buildjar/java/com/google/devtools/build/java/turbine/javac/BUILD
+index 3c0864bef1..bf16dae6cf 100644
+--- a/src/java_tools/buildjar/java/com/google/devtools/build/java/turbine/javac/BUILD
++++ b/src/java_tools/buildjar/java/com/google/devtools/build/java/turbine/javac/BUILD
+@@ -25,7 +25,6 @@ java_library(
+         "//third_party:guava",
+         "//third_party:jsr305",
+         "//third_party:turbine",
+-        "//third_party/java/jdk/langtools:javac",
+     ],
+ )
+ 
+@@ -37,7 +36,6 @@ java_library(
+         "//src/java_tools/buildjar/java/com/google/devtools/build/buildjar/javac/plugins:dependency",
+         "//third_party:guava",
+         "//third_party:jsr305",
+-        "//third_party/java/jdk/langtools:javac",
+     ],
+ )
+ 
+@@ -48,7 +46,6 @@ java_library(
+         ":formatted_diagnostic",
+         "//third_party:guava",
+         "//third_party:jsr305",
+-        "//third_party/java/jdk/langtools:javac",
+     ],
+ )
+ 
+@@ -66,7 +63,6 @@ java_library(
+         "//third_party:guava",
+         "//third_party:jimfs",
+         "//third_party:jsr305",
+-        "//third_party/java/jdk/langtools:javac",
+     ],
+ )
+ 
+@@ -79,7 +75,6 @@ java_library(
+         "//src/java_tools/buildjar/java/com/google/devtools/build/buildjar/javac/plugins:dependency",
+         "//src/java_tools/buildjar/java/com/google/devtools/build/buildjar/javac/statistics",
+         "//third_party:jsr305",
+-        "//third_party/java/jdk/langtools:javac",
+     ],
+ )
+ 
+@@ -91,7 +86,6 @@ java_library(
+         "//third_party:guava",
+         "//third_party:jsr305",
+         "//third_party:turbine",
+-        "//third_party/java/jdk/langtools:javac",
+     ],
+ )
+ 
+@@ -100,7 +94,6 @@ java_library(
+     srcs = ["ZipUtil.java"],
+     deps = [
+         "//third_party:jsr305",
+-        "//third_party/java/jdk/langtools:javac",
+     ],
+ )
+ 
+@@ -110,16 +103,12 @@ java_library(
+     deps = [
+         "//third_party:guava",
+         "//third_party:jsr305",
+-        "//third_party/java/jdk/langtools:javac",
+     ],
+ )
+ 
+ java_library(
+     name = "formatted_diagnostic",
+     srcs = ["FormattedDiagnostic.java"],
+-    deps = [
+-        "//third_party/java/jdk/langtools:javac",
+-    ],
+ )
+ 
+ filegroup(

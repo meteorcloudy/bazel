@@ -1,0 +1,608 @@
+commit 49b3aaa8f5c614c5b855e276157fe244f92c01cf
+Author: Yun Peng <pcloudy@google.com>
+Date:   Thu Jul 23 11:58:20 2020 +0200
+
+    Add mock repos
+
+diff --git a/mock_repos/bazel_skydoc/BUILD b/mock_repos/bazel_skydoc/BUILD
+new file mode 100644
+index 0000000000..8b13789179
+--- /dev/null
++++ b/mock_repos/bazel_skydoc/BUILD
+@@ -0,0 +1 @@
++
+diff --git a/mock_repos/bazel_skydoc/WORKSPACE b/mock_repos/bazel_skydoc/WORKSPACE
+new file mode 100644
+index 0000000000..8b13789179
+--- /dev/null
++++ b/mock_repos/bazel_skydoc/WORKSPACE
+@@ -0,0 +1 @@
++
+diff --git a/mock_repos/bazel_skydoc/setup.bzl b/mock_repos/bazel_skydoc/setup.bzl
+new file mode 100644
+index 0000000000..37987d4eb1
+--- /dev/null
++++ b/mock_repos/bazel_skydoc/setup.bzl
+@@ -0,0 +1,18 @@
++# Copyright 2020 The Bazel Authors. All rights reserved.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#    http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++"""Mocks rules defined in io_bazel_skydoc."""
++
++def stardoc_repositories(**kwargs):
++    pass
+diff --git a/mock_repos/bazel_skydoc/stardoc/BUILD b/mock_repos/bazel_skydoc/stardoc/BUILD
+new file mode 100644
+index 0000000000..e69de29bb2
+diff --git a/mock_repos/bazel_skydoc/stardoc/html_tables_stardoc.bzl b/mock_repos/bazel_skydoc/stardoc/html_tables_stardoc.bzl
+new file mode 100644
+index 0000000000..bf2ed65b0a
+--- /dev/null
++++ b/mock_repos/bazel_skydoc/stardoc/html_tables_stardoc.bzl
+@@ -0,0 +1,18 @@
++# Copyright 2020 The Bazel Authors. All rights reserved.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#    http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++"""Mocks rules defined in io_bazel_skydoc."""
++
++def html_tables_stardoc(**kwargs):
++    pass
+diff --git a/mock_repos/bazel_skydoc/stardoc/stardoc.bzl b/mock_repos/bazel_skydoc/stardoc/stardoc.bzl
+new file mode 100644
+index 0000000000..81cd44c916
+--- /dev/null
++++ b/mock_repos/bazel_skydoc/stardoc/stardoc.bzl
+@@ -0,0 +1,18 @@
++# Copyright 2020 The Bazel Authors. All rights reserved.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#    http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++"""Mocks rules defined in io_bazel_skydoc."""
++
++def stardoc(**kwargs):
++    pass
+diff --git a/mock_repos/bazel_skylib/BUILD b/mock_repos/bazel_skylib/BUILD
+new file mode 100644
+index 0000000000..8b13789179
+--- /dev/null
++++ b/mock_repos/bazel_skylib/BUILD
+@@ -0,0 +1 @@
++
+diff --git a/mock_repos/bazel_skylib/WORKSPACE b/mock_repos/bazel_skylib/WORKSPACE
+new file mode 100644
+index 0000000000..8b13789179
+--- /dev/null
++++ b/mock_repos/bazel_skylib/WORKSPACE
+@@ -0,0 +1 @@
++
+diff --git a/mock_repos/bazel_skylib/bzl_library.bzl b/mock_repos/bazel_skylib/bzl_library.bzl
+new file mode 100644
+index 0000000000..caddb5cda0
+--- /dev/null
++++ b/mock_repos/bazel_skylib/bzl_library.bzl
+@@ -0,0 +1,18 @@
++# Copyright 2020 The Bazel Authors. All rights reserved.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#    http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++"""Mocks rules defined in bazel_skylib."""
++
++def bzl_library(**kwargs):
++    pass
+diff --git a/mock_repos/platforms/BUILD b/mock_repos/platforms/BUILD
+new file mode 100644
+index 0000000000..d73ff9229a
+--- /dev/null
++++ b/mock_repos/platforms/BUILD
+@@ -0,0 +1,15 @@
++package(default_visibility = ["//visibility:public"])
++
++licenses(["notice"])
++
++exports_files(["LICENSE"])
++
++filegroup(
++    name = "srcs",
++    srcs = [
++        "BUILD",
++        "WORKSPACE",
++        "//cpu:srcs",
++        "//os:srcs",
++    ],
++)
+diff --git a/mock_repos/platforms/WORKSPACE b/mock_repos/platforms/WORKSPACE
+new file mode 100644
+index 0000000000..f1874ea621
+--- /dev/null
++++ b/mock_repos/platforms/WORKSPACE
+@@ -0,0 +1 @@
++workspace(name = "platforms")
+diff --git a/mock_repos/platforms/cpu/BUILD b/mock_repos/platforms/cpu/BUILD
+new file mode 100644
+index 0000000000..80c9c38174
+--- /dev/null
++++ b/mock_repos/platforms/cpu/BUILD
+@@ -0,0 +1,76 @@
++# Standard cpu name constraint_setting and constraint_values
++licenses(["notice"])
++
++package(
++    default_visibility = ["//visibility:public"],
++)
++
++filegroup(
++    name = "srcs",
++    srcs = glob(["**"]),
++)
++
++# To add a new constraint_value see https://github.com/bazelbuild/platforms.
++constraint_setting(name = "cpu")
++
++# TODO(b/136237408): Remove this generic CPU name and replace with a specific one.
++constraint_value(
++    name = "aarch64",
++    constraint_setting = ":cpu",
++)
++
++# TODO(b/136237408): Remove this generic CPU name and replace with a specific one.
++constraint_value(
++    name = "arm",
++    constraint_setting = ":cpu",
++)
++
++constraint_value(
++    name = "arm64_32",
++    constraint_setting = ":cpu",
++)
++
++constraint_value(
++    name = "arm64",
++    constraint_setting = ":cpu",
++)
++
++constraint_value(
++    name = "arm64e",
++    constraint_setting = ":cpu",
++)
++
++constraint_value(
++    name = "armv7",
++    constraint_setting = ":cpu",
++)
++
++constraint_value(
++    name = "armv7k",
++    constraint_setting = ":cpu",
++)
++
++constraint_value(
++    name = "i386",
++    constraint_setting = ":cpu",
++)
++
++constraint_value(
++    name = "ppc",
++    constraint_setting = ":cpu",
++)
++
++constraint_value(
++    name = "s390x",
++    constraint_setting = ":cpu",
++)
++
++constraint_value(
++    name = "x86_32",
++    constraint_setting = ":cpu",
++)
++
++constraint_value(
++    name = "x86_64",
++    constraint_setting = ":cpu",
++)
+diff --git a/mock_repos/platforms/os/BUILD b/mock_repos/platforms/os/BUILD
+new file mode 100644
+index 0000000000..16df5d3aaa
+--- /dev/null
++++ b/mock_repos/platforms/os/BUILD
+@@ -0,0 +1,78 @@
++# Standard constraint_setting and constraint_values to be used in platforms.
++licenses(["notice"])
++
++package(
++    default_visibility = ["//visibility:public"],
++)
++
++filegroup(
++    name = "srcs",
++    srcs = glob(["**"]),
++)
++
++# To add a new constraint_value see https://github.com/bazelbuild/platforms.
++constraint_setting(name = "os")
++
++constraint_value(
++    name = "freebsd",
++    constraint_setting = ":os",
++)
++
++constraint_value(
++    name = "openbsd",
++    constraint_setting = ":os",
++)
++
++constraint_value(
++    name = "android",
++    constraint_setting = ":os",
++)
++
++constraint_value(
++    name = "linux",
++    constraint_setting = ":os",
++)
++
++constraint_value(
++    name = "windows",
++    constraint_setting = ":os",
++)
++
++# For platforms with no OS, like microcontrollers.
++constraint_value(
++    name = "none",
++    constraint_setting = ":os",
++)
++
++### Apple OS Values
++
++constraint_value(
++    name = "ios",
++    constraint_setting = ":os",
++)
++
++# TODO(b/138656886): Rename this to macos instead of osx.
++constraint_value(
++    name = "osx",
++    constraint_setting = ":os",
++)
++
++alias(
++    name = "macos",
++    actual = ":osx",
++)
++
++constraint_value(
++    name = "tvos",
++    constraint_setting = ":os",
++)
++
++constraint_value(
++    name = "watchos",
++    constraint_setting = ":os",
++)
++
++constraint_value(
++    name = "qnx",
++    constraint_setting = ":os",
++)
+diff --git a/mock_repos/remote_java_tools_linux/BUILD b/mock_repos/remote_java_tools_linux/BUILD
+new file mode 100644
+index 0000000000..a5b8a7e5a0
+--- /dev/null
++++ b/mock_repos/remote_java_tools_linux/BUILD
+@@ -0,0 +1,7 @@
++package(default_visibility = ["//visibility:public"])
++
++filegroup(
++    name = "JacocoCoverage",
++    srcs = ["java_tools/JacocoCoverage_jarjar_deploy.jar"],
++)
++
+diff --git a/mock_repos/remote_java_tools_linux/WORKSPACE b/mock_repos/remote_java_tools_linux/WORKSPACE
+new file mode 100644
+index 0000000000..8b13789179
+--- /dev/null
++++ b/mock_repos/remote_java_tools_linux/WORKSPACE
+@@ -0,0 +1 @@
++
+diff --git a/mock_repos/rules_cc/WORKSPACE b/mock_repos/rules_cc/WORKSPACE
+new file mode 100644
+index 0000000000..8b13789179
+--- /dev/null
++++ b/mock_repos/rules_cc/WORKSPACE
+@@ -0,0 +1 @@
++
+diff --git a/mock_repos/rules_cc/cc/BUILD b/mock_repos/rules_cc/cc/BUILD
+new file mode 100644
+index 0000000000..8b13789179
+--- /dev/null
++++ b/mock_repos/rules_cc/cc/BUILD
+@@ -0,0 +1 @@
++
+diff --git a/mock_repos/rules_cc/cc/defs.bzl b/mock_repos/rules_cc/cc/defs.bzl
+new file mode 100644
+index 0000000000..993e77f613
+--- /dev/null
++++ b/mock_repos/rules_cc/cc/defs.bzl
+@@ -0,0 +1,36 @@
++# Copyright 2020 The Bazel Authors. All rights reserved.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#    http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++"""Mocks rules defined in rules_cc."""
++
++def cc_binary(**kwargs):
++    native.cc_binary(**kwargs)
++
++def cc_library(**kwargs):
++    native.cc_library(**kwargs)
++
++def cc_test(**kwargs):
++    native.cc_test(**kwargs)
++
++def objc_library(**kwargs):
++    native.objc_library(**kwargs)
++
++def cc_proto_library(**kwargs):
++    native.cc_proto_library(**kwargs)
++
++def cc_toolchain(**kwargs):
++    native.cc_toolchain(**kwargs)
++
++def cc_toolchain_suite(**kwargs):
++    native.cc_toolchain_suite(**kwargs)
+diff --git a/mock_repos/rules_java/WORKSPACE b/mock_repos/rules_java/WORKSPACE
+new file mode 100644
+index 0000000000..8b13789179
+--- /dev/null
++++ b/mock_repos/rules_java/WORKSPACE
+@@ -0,0 +1 @@
++
+diff --git a/mock_repos/rules_java/java/BUILD b/mock_repos/rules_java/java/BUILD
+new file mode 100644
+index 0000000000..8b13789179
+--- /dev/null
++++ b/mock_repos/rules_java/java/BUILD
+@@ -0,0 +1 @@
++
+diff --git a/mock_repos/rules_java/java/defs.bzl b/mock_repos/rules_java/java/defs.bzl
+new file mode 100644
+index 0000000000..152a2ad828
+--- /dev/null
++++ b/mock_repos/rules_java/java/defs.bzl
+@@ -0,0 +1,39 @@
++# Copyright 2020 The Bazel Authors. All rights reserved.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#    http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++"""Mocks rules defined in rules_java."""
++
++def java_binary(**kwargs):
++    native.java_binary(**kwargs)
++
++def java_library(**kwargs):
++    native.java_library(**kwargs)
++
++def java_test(**kwargs):
++    native.java_test(**kwargs)
++
++def java_proto_library(**kwargs):
++    native.java_proto_library(**kwargs)
++
++def java_import(**kwargs):
++    native.java_import(**kwargs)
++
++def java_toolchain(**kwargs):
++    native.java_toolchain(**kwargs)
++
++def java_runtime(**kwargs):
++    native.java_runtime(**kwargs)
++
++def java_plugin(**kwargs):
++    native.java_plugin(**kwargs)
+diff --git a/mock_repos/rules_pkg/BUILD b/mock_repos/rules_pkg/BUILD
+new file mode 100644
+index 0000000000..8b13789179
+--- /dev/null
++++ b/mock_repos/rules_pkg/BUILD
+@@ -0,0 +1 @@
++
+diff --git a/mock_repos/rules_pkg/WORKSPACE b/mock_repos/rules_pkg/WORKSPACE
+new file mode 100644
+index 0000000000..8b13789179
+--- /dev/null
++++ b/mock_repos/rules_pkg/WORKSPACE
+@@ -0,0 +1 @@
++
+diff --git a/mock_repos/rules_pkg/deps.bzl b/mock_repos/rules_pkg/deps.bzl
+new file mode 100644
+index 0000000000..df62c5bc96
+--- /dev/null
++++ b/mock_repos/rules_pkg/deps.bzl
+@@ -0,0 +1,18 @@
++# Copyright 2020 The Bazel Authors. All rights reserved.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#    http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++"""Mocks rules defined in rules_pkg."""
++
++def rules_pkg_dependencies(**kwargs):
++    pass
+diff --git a/mock_repos/rules_pkg/pkg.bzl b/mock_repos/rules_pkg/pkg.bzl
+new file mode 100644
+index 0000000000..8ddf7fbdae
+--- /dev/null
++++ b/mock_repos/rules_pkg/pkg.bzl
+@@ -0,0 +1,18 @@
++# Copyright 2020 The Bazel Authors. All rights reserved.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#    http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++"""Mocks rules defined in rules_pkg."""
++
++def pkg_tar(**kwargs):
++    pass
+diff --git a/mock_repos/rules_proto/WORKSPACE b/mock_repos/rules_proto/WORKSPACE
+new file mode 100644
+index 0000000000..39859cc299
+--- /dev/null
++++ b/mock_repos/rules_proto/WORKSPACE
+@@ -0,0 +1 @@
++workspace(name = "rules_proto")
+diff --git a/mock_repos/rules_proto/proto/BUILD b/mock_repos/rules_proto/proto/BUILD
+new file mode 100644
+index 0000000000..5990249153
+--- /dev/null
++++ b/mock_repos/rules_proto/proto/BUILD
+@@ -0,0 +1 @@
++# Intentionally left empty (for now).
+diff --git a/mock_repos/rules_proto/proto/defs.bzl b/mock_repos/rules_proto/proto/defs.bzl
+new file mode 100644
+index 0000000000..fdb8b22ccd
+--- /dev/null
++++ b/mock_repos/rules_proto/proto/defs.bzl
+@@ -0,0 +1,27 @@
++# Copyright 2019 The Bazel Authors. All rights reserved.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#    http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++load("//proto/private:native.bzl", "NativeProtoInfo", "native_proto_common")
++
++def proto_lang_toolchain(**attrs):
++    native.proto_lang_toolchain(**attrs)
++
++def proto_library(**attrs):
++    native.proto_library(**attrs)
++
++ProtoInfo = NativeProtoInfo
++"""Encapsulates information provided by `proto_library`.
++
++https://docs.bazel.build/versions/master/skylark/lib/ProtoInfo.html
++"""
+diff --git a/mock_repos/rules_proto/proto/private/BUILD b/mock_repos/rules_proto/proto/private/BUILD
+new file mode 100644
+index 0000000000..5990249153
+--- /dev/null
++++ b/mock_repos/rules_proto/proto/private/BUILD
+@@ -0,0 +1 @@
++# Intentionally left empty (for now).
+diff --git a/mock_repos/rules_proto/proto/private/native.bzl b/mock_repos/rules_proto/proto/private/native.bzl
+new file mode 100644
+index 0000000000..55856eaca0
+--- /dev/null
++++ b/mock_repos/rules_proto/proto/private/native.bzl
+@@ -0,0 +1,24 @@
++# Copyright 2019 The Bazel Authors. All rights reserved.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#    http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++# Redefine native symbols with a new name as a workaround for
++# exporting them in `//proto:defs.bzl` with their original name.
++#
++# While we cannot force users to load these symbol due to the lack of a
++# whitelisting mechanism, we can still export them and tell users to
++# load it to make a future migration to pure Starlark easier.
++
++NativeProtoInfo = ProtoInfo
++
++native_proto_common = proto_common
