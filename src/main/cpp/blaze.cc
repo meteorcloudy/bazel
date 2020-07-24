@@ -1009,17 +1009,17 @@ static DurationMillis ExtractData(const string &self_path,
     }
     blaze_util::Path install_dir(install_base);
     // Check that all files are present and have timestamps from BlessFiles().
-    std::unique_ptr<blaze_util::IFileMtime> mtime(
-        blaze_util::CreateFileMtime());
-    for (const auto &it : archive_contents) {
-      blaze_util::Path path = install_dir.GetRelative(it);
-      if (!mtime->IsUntampered(path)) {
-        BAZEL_DIE(blaze_exit_code::LOCAL_ENVIRONMENTAL_ERROR)
-            << "corrupt installation: file '" << path.AsPrintablePath()
-            << "' is missing or modified.  Please remove '" << install_base
-            << "' and try again.";
-      }
-    }
+    // std::unique_ptr<blaze_util::IFileMtime> mtime(
+    //     blaze_util::CreateFileMtime());
+    // for (const auto &it : archive_contents) {
+    //   blaze_util::Path path = install_dir.GetRelative(it);
+    //   if (!mtime->IsUntampered(path)) {
+    //     BAZEL_DIE(blaze_exit_code::LOCAL_ENVIRONMENTAL_ERROR)
+    //         << "corrupt installation: file '" << path.AsPrintablePath()
+    //         << "' is missing or modified.  Please remove '" << install_base
+    //         << "' and try again.";
+    //   }
+    // }
     // Also check that the installed files claim to match this binary.
     // We check this afterward because the above diagnostic is better
     // for a missing install_base_key file.
