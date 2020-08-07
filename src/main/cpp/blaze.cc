@@ -1007,6 +1007,10 @@ static DurationMillis ExtractData(const string &self_path,
           << "install base directory '" << install_base
           << "' could not be created. It exists but is not a directory.";
     }
+    // If --trust_install_base is true, we skip the following checks.
+    if (startup_options.trust_install_base) {
+      return DurationMillis();
+    }
     blaze_util::Path install_dir(install_base);
     // Check that all files are present and have timestamps from BlessFiles().
     std::unique_ptr<blaze_util::IFileMtime> mtime(
@@ -1198,7 +1202,10 @@ static void EnsureCorrectRunningVersion(const StartupOptions &startup_options,
     // find install bases that haven't been used for a long time
     std::unique_ptr<blaze_util::IFileMtime> mtime(
         blaze_util::CreateFileMtime());
-    if (!mtime->SetToNow(blaze_util::Path(startup_options.install_base))) {
+    // We skip the check if --trust_install_base is provided, because
+    // the provided install base might not be writable
+    if (!startup_options.trust_install_base &&
+        !mtime->SetToNow(blaze_util::Path(startup_options.install_base))) {
       string err = GetLastErrorString();
       BAZEL_DIE(blaze_exit_code::LOCAL_ENVIRONMENTAL_ERROR)
           << "failed to set timestamp on '" << startup_options.install_base
@@ -1486,9 +1493,21 @@ static int GetExitCodeForAbruptExit(const blaze_util::Path &output_base) {
   return custom_exit_code;
 }
 
-void PrintVersionInfo(const string &self_path, const string &product_name) {
+void PrintVersionInfo(const string &self_path,
+                      const string &product_name,
+                      const StartupOptions &startup_options) {
   string build_label;
-  ExtractBuildLabel(self_path, &build_label);
+  if (startup_options.trust_install_base) {
+    blaze_util::Path install_base(startup_options.install_base);
+    string build_label_path = install_base.GetRelative("build-label.txt").AsNativePath();
+    if (!blaze_util::ReadFile(build_label_path, &build_label)) {
+      BAZEL_DIE(blaze_exit_code::LOCAL_ENVIRONMENTAL_ERROR)
+        << "Cannot read build-label.txt file from install base: "
+        << build_label_path;
+    }
+  } else {
+    ExtractBuildLabel(self_path, &build_label);
+  }
   printf("%s %s\n", product_name.c_str(), build_label.c_str());
 }
 
@@ -1582,11 +1601,6 @@ int Main(int argc, const char *const *argv, WorkspaceLayout *workspace_layout,
 
   const string self_path = GetSelfPath(argv[0]);
 
-  if (argc == 2 && strcmp(argv[1], "--version") == 0) {
-    PrintVersionInfo(self_path, option_processor->GetLowercaseProductName());
-    return blaze_exit_code::SUCCESS;
-  }
-
   string cwd = GetCanonicalCwd();
   LoggingInfo logging_info(CheckAndGetBinaryPath(cwd, argv[0]), start_time);
 
@@ -1617,10 +1631,22 @@ int Main(int argc, const char *const *argv, WorkspaceLayout *workspace_layout,
   StartupOptions *startup_options = option_processor->GetParsedStartupOptions();
   startup_options->MaybeLogStartupOptionWarnings();
 
+  // Check --install_base is provided when --trust_install_base is enabled
+  if (startup_options->trust_install_base && startup_options->install_base.empty()) {
+    BAZEL_DIE(blaze_exit_code::BAD_ARGV)
+        << "--trust_install_base requires --install_base to be provided";
+  }
+
   SetDebugLog(startup_options->client_debug);
+
   // If client_debug was false, this is ignored, so it's accurate.
   BAZEL_LOG(INFO) << "Debug logging requested, sending all client log "
                      "statements to stderr";
+
+  if (startup_options->version) {
+    PrintVersionInfo(self_path, option_processor->GetLowercaseProductName(), *startup_options);
+    return blaze_exit_code::SUCCESS;
+  }
 
   if (startup_options->unlimit_coredumps) {
     UnlimitCoredumps();
@@ -1637,7 +1663,28 @@ int Main(int argc, const char *const *argv, WorkspaceLayout *workspace_layout,
 
   vector<string> archive_contents;
   string install_md5;
-  DetermineArchiveContents(self_path, &archive_contents, &install_md5);
+  if (startup_options->trust_install_base) {
+    blaze_util::Path install_base(startup_options->install_base);
+
+    // Read install_md5 value from <install_base>/install_base_key
+    string install_key_path = install_base.GetRelative("install_base_key").AsNativePath();
+    if (!blaze_util::ReadFile(install_key_path, &install_md5)) {
+      BAZEL_DIE(blaze_exit_code::LOCAL_ENVIRONMENTAL_ERROR)
+        << "Cannot read install_base_key file from install base: "
+        << install_key_path;
+    }
+
+    // Read all archive content entries
+    blaze_util::GetAllFilesUnder(startup_options->install_base, &archive_contents);
+    std::size_t pos = install_base.AsNativePath().length() + 1;
+    for (int i = 0; i < archive_contents.size(); i++) {
+      blaze_util::Path entry(archive_contents[i]);
+      archive_contents[i] = entry.AsNativePath().substr(pos);
+    }
+    std::sort(archive_contents.begin(), archive_contents.end());
+  } else {
+    DetermineArchiveContents(self_path, &archive_contents, &install_md5);
+  }
 
   UpdateConfiguration(install_md5, workspace,
                       IsServerMode(option_processor->GetCommand()),
