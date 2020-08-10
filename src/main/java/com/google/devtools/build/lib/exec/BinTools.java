@@ -133,6 +133,7 @@ public final class BinTools {
           : relative + "/" + dirent.getName();
       switch (dirent.getType()) {
         case FILE:
+        case SYMLINK:
           result.add(childRelative);
           break;
 
