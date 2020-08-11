@@ -63,16 +63,19 @@ display "."
 log "Building output/bazel"
 # We set host and target platform directly because we are building for the local
 # host.
-bazel_build "src:bazel_nojdk${EXE_EXT}" \
+bazel_build "src:bazel_nojdk${EXE_EXT}" "//scripts:bash_completion" \
   --action_env=PATH \
   --host_platform=@local_config_platform//:host \
   --platforms=@local_config_platform//:host \
   || fail "Could not build Bazel"
 bazel_bin_path="$(get_bazel_bin_path)/src/bazel_nojdk${EXE_EXT}"
+bash_completion_path="$(get_bazel_bin_path)/scripts/bazel-complete.bash"
 [ -e "$bazel_bin_path" ] \
   || fail "Could not find freshly built Bazel binary at '$bazel_bin_path'"
 cp -f "$bazel_bin_path" "output/bazel${EXE_EXT}" \
   || fail "Could not copy '$bazel_bin_path' to 'output/bazel${EXE_EXT}'"
+cp -f "$bash_completion_path" "output/bazel-complete.bash" \
+  || fail "Could not copy '$bash_completion_path' to 'output/bazel-complete.bash'"
 chmod 0755 "output/bazel${EXE_EXT}"
 BAZEL="$(pwd)/output/bazel${EXE_EXT}"
 
