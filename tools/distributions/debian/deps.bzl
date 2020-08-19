@@ -37,7 +37,10 @@ def debian_cc_deps():
         # /usr/lib is the default library search path for every cc compile in Debian,
         # we use -l as linkopts in debian_cc.BUILD so we actually don't have to link
         # any system paths for this repo.
-        symlinks = {},
+        symlinks = {
+            "include": "/usr/include",
+            "lib": "/usr/lib/x86_64-linux-gnu",
+        },
         build_file = "//tools/distributions/debian:debian_cc.BUILD",
     )
 

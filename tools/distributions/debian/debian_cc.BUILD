@@ -14,12 +14,25 @@
 
 package(default_visibility = ["//visibility:public"])
 
+cc_import(
+  name = "libz",
+  static_library = "lib/libz.a", # If static_library is specified, it will be the default.
+  shared_library = "lib/libz.so",
+)
+
 # zlib1g-dev
 cc_library(
     name = "zlib",
-    linkopts = ["-lz"],
+    hdrs = [
+        "include/zconf.h",
+        "include/zlib.h",
+    ],
+    deps = [":libz"],
+    includes = ["include"],
     visibility = ["//visibility:public"],
 )
+
+
 
 # libprotobuf-dev
 cc_library(
