@@ -63,6 +63,13 @@ cc_binary(
     deps = [":hello-lib"],
 )
 
+genrule(
+   name = "gen",
+   cmd = "$(location :hello-world) > $@",
+   outs = ["output"],
+   tools = [":hello-world"],
+)
+
 cc_test(
     name = "hello-success_test",
     srcs = ["hello-world.cc"],
