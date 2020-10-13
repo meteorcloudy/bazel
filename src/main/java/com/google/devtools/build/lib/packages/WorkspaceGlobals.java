@@ -70,6 +70,7 @@ public class WorkspaceGlobals implements WorkspaceGlobalsApi {
   public NoneType workspace(
       String name,
       Dict<?, ?> managedDirectories, // <String, Object>
+      Sequence<?> repo_deps, // <String>
       StarlarkThread thread)
       throws EvalException, InterruptedException {
     if (!allowOverride) {
@@ -105,6 +106,13 @@ public class WorkspaceGlobals implements WorkspaceGlobalsApi {
     // treats references to @name as a separate external repo
     builder.addRepositoryMappingEntry(
         RepositoryName.MAIN, RepositoryName.createFromValidStrippedName(name), RepositoryName.MAIN);
+    for (String repo: Sequence.cast(repo_deps, String.class, "repo_deps")) {
+      builder
+          .addRepositoryMappingEntry(
+              RepositoryName.MAIN,
+              RepositoryName.createFromValidStrippedName(repo),
+              RepositoryName.createFromValidStrippedName(repo));
+    }
     parseManagedDirectories(
         Dict.cast(managedDirectories, String.class, Object.class, "managed_directories"));
     return NONE;

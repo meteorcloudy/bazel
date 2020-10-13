@@ -9,4 +9,7 @@ maybe(
 maybe(
     local_config_platform,
     "local_config_platform",
+    repo_mapping = {
+        "@platforms": "@platforms",
+    },
 )

@@ -175,8 +175,16 @@ cc_autoconf = repository_rule(
 
 def cc_configure():
     """A C++ configuration rules that generate the crosstool file."""
-    cc_autoconf_toolchains(name = "local_config_cc_toolchains")
-    cc_autoconf(name = "local_config_cc")
+    cc_autoconf_toolchains(name = "local_config_cc_toolchains",
+                           repo_mapping = {
+                               "@platforms": "@platforms",
+                               "@local_config_cc": "@local_config_cc",
+                           })
+    cc_autoconf(name = "local_config_cc",
+                repo_mapping = {
+                    "@local_config_cc_toolchains": "@local_config_cc_toolchains",
+                    "@rules_cc": "@rules_cc",
+                })
     native.bind(name = "cc_toolchain", actual = "@local_config_cc//:toolchain")
     native.register_toolchains(
         # Use register_toolchain's target pattern expansion to register all toolchains in the package.

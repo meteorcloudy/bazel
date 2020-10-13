@@ -77,11 +77,20 @@ public interface WorkspaceGlobalsApi {
                     + " they incrementally update."
                     + "\nManaged directories must be excluded from the source tree by listing"
                     + " them (or their parent directories) in the .bazelignore file."),
+          @Param(
+              name = "repo_deps",
+              type = Sequence.class,
+              generic1 = String.class,
+              doc = "",
+              named = true,
+              defaultValue = "[]",
+              positional = false),
       },
       useStarlarkThread = true)
   NoneType workspace(
       String name,
       Dict<?, ?> managedDirectories, // <String, Sequence<String>>
+      Sequence<?> repo_deps,
       StarlarkThread thread)
       throws EvalException, InterruptedException;
 

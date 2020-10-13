@@ -152,9 +152,20 @@ public final class PackageIdentifier implements Comparable<PackageIdentifier>, S
       throw new LabelSyntaxException(error);
     }
 
-    if (repositoryMapping != null) {
+    // 1) repositoryMapping.isEmpty() here means all repos are allowed, this happens while
+    //    1. Parsing labels in WORKSPACE file
+    //    2. Parsing labels from command lines
+    // 2) If repo name is not starting with "@", it means it's referring targets in the same repo.
+    if (repositoryMapping != null && !repositoryMapping.isEmpty() && repo.startsWith("@")) {
       RepositoryName repositoryName = RepositoryName.create(repo);
-      repositoryName = repositoryMapping.getOrDefault(repositoryName, repositoryName);
+      ImmutableMap.Builder<RepositoryName, RepositoryName> newRepositoryMapping = ImmutableMap.builder();
+      repositoryMapping = newRepositoryMapping
+          .putAll(repositoryMapping)
+          // @bazel_tools should always be allowed, because many implicit dependencies on it,
+          // For example, in workspace prefixes, like cc_configure.WORKSPACE
+          .put(RepositoryName.create("@bazel_tools"), RepositoryName.create("@bazel_tools"))
+          .build();
+      repositoryName = repositoryMapping.getOrDefault(repositoryName, RepositoryName.create("@not_visibile_" + repo.substring(1)));
       return create(repositoryName, PathFragment.create(packageName));
     } else {
       return create(repo, PathFragment.create(packageName));
