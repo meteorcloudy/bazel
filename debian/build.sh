@@ -21,6 +21,8 @@ rm -rf derived
 export http_proxy=127.0.0.1:9
 export https_proxy=127.0.0.1:9
 
+source ./build_derived_java_src.sh
+
 export DEFAULT_ARGS="\
     --spawn_strategy=standalone \
     --nojava_header_compilation \
