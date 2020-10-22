@@ -21,6 +21,17 @@ rm -rf derived
 export http_proxy=127.0.0.1:9
 export https_proxy=127.0.0.1:9
 
+export DEFAULT_ARGS="\
+    --spawn_strategy=standalone \
+    --nojava_header_compilation \
+    --strategy=Javac=worker --worker_quit_after_build --ignore_unsupported_sandboxing \
+    --compilation_mode=opt \
+    --java_toolchain=//src/java_tools/buildjar:bootstrap_toolchain \
+    --host_java_toolchain=//src/java_tools/buildjar:bootstrap_toolchain \
+    --action_env=PATH \
+    --host_platform=@local_config_platform//:host \
+    --platforms=@local_config_platform//:host \
+    "
 export EXTRA_BAZEL_ARGS="\
     --define=distribution=debian \
     --host_javabase=@local_jdk//:jdk \
@@ -38,13 +49,8 @@ export EXTRA_BAZEL_ARGS="\
 # Only for testing, to make sure we don't use any repository cache. Can be removed.
 export EXTRA_BAZEL_ARGS="${EXTRA_BAZEL_ARGS} --repository_cache="
 
-export PROTOC=/usr/bin/protoc
 
-export GRPC_JAVA_PLUGIN=/usr/bin/grpc_java_plugin
-
-export VERBOSE=yes
-
-./compile.sh
+bazel build $DEFAULT_ARGS $EXTRA_BAZEL_ARGS  //src:bazel_nojdk
 
 # Revert files after build
 git checkout -f
