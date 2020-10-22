@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -x
+set -e
 
 # Revert files before patching
 git checkout -f
@@ -20,6 +21,8 @@ rm -rf derived
 # Ensure packages build with no Internet access
 export http_proxy=127.0.0.1:9
 export https_proxy=127.0.0.1:9
+
+./debian/build_derived_java_src.sh
 
 export DEFAULT_ARGS="\
     --spawn_strategy=standalone \
