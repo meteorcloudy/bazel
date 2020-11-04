@@ -14,6 +14,7 @@ patch -p1 < debian/patches/remove_javac.patch
 patch -p1 < debian/patches/replace_grpc_java_plugin.patch
 rm -r mock_repos
 patch -p1 < debian/patches/mock_repos.patch
+patch -p1 < debian/patches/remove_android_rules.patch
 
 # Delete derived directory in case it exists
 rm -rf derived
