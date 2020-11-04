@@ -1,0 +1,241 @@
+diff --git a/scripts/bootstrap/compile.sh b/scripts/bootstrap/compile.sh
+index de9a56fb0a..2fc74f046a 100755
+--- a/scripts/bootstrap/compile.sh
++++ b/scripts/bootstrap/compile.sh
+@@ -43,7 +43,7 @@ DIRS=$(echo src/{java_tools/singlejar/java/com/google/devtools/build/zip,main/ja
+ EXCLUDE_FILES="src/main/java/com/google/devtools/build/lib/server/GrpcServerImpl.java src/java_tools/buildjar/java/com/google/devtools/build/buildjar/javac/testing/* src/main/java/com/google/devtools/build/lib/collect/nestedset/NestedSetCodecTestUtils.java"
+ # Exclude whole directories under the bazel src tree that bazel itself
+ # doesn't depend on.
+-EXCLUDE_DIRS="src/main/java/com/google/devtools/build/skydoc src/main/java/com/google/devtools/build/docgen tools/java/runfiles/testing src/main/java/com/google/devtools/build/lib/skyframe/serialization/testutils src/main/java/com/google/devtools/common/options/testing"
++EXCLUDE_DIRS="src/main/java/com/google/devtools/build/lib/rules/android src/main/java/com/google/devtools/build/lib/bazel/rules/android src/main/java/com/google/devtools/build/skydoc src/main/java/com/google/devtools/build/docgen tools/java/runfiles/testing src/main/java/com/google/devtools/build/lib/skyframe/serialization/testutils src/main/java/com/google/devtools/common/options/testing"
+ for d in $EXCLUDE_DIRS ; do
+   for f in $(find $d -type f) ; do
+     EXCLUDE_FILES+=" $f"
+diff --git a/src/main/java/com/google/devtools/build/lib/bazel/BUILD b/src/main/java/com/google/devtools/build/lib/bazel/BUILD
+index b491c9433c..68ae5a1c12 100644
+--- a/src/main/java/com/google/devtools/build/lib/bazel/BUILD
++++ b/src/main/java/com/google/devtools/build/lib/bazel/BUILD
+@@ -30,7 +30,6 @@ java_library(
+         "//src/main/java/com/google/devtools/build/lib/bazel/repository/cache",
+         "//src/main/java/com/google/devtools/build/lib/bazel/repository/downloader",
+         "//src/main/java/com/google/devtools/build/lib/bazel/repository/starlark",
+-        "//src/main/java/com/google/devtools/build/lib/bazel/rules/android",
+         "//src/main/java/com/google/devtools/build/lib/cmdline",
+         "//src/main/java/com/google/devtools/build/lib/events",
+         "//src/main/java/com/google/devtools/build/lib/pkgcache",
+@@ -131,7 +130,6 @@ java_library(
+         "//src/main/java/com/google/devtools/build/lib/profiler/callcounts:callcounts_module",
+         "//src/main/java/com/google/devtools/build/lib/profiler/memory:allocationtracker_module",
+         "//src/main/java/com/google/devtools/build/lib/remote",
+-        "//src/main/java/com/google/devtools/build/lib/runtime/mobileinstall",
+         "//src/main/java/com/google/devtools/build/lib/sandbox",
+         "//src/main/java/com/google/devtools/build/lib/ssd",
+         "//src/main/java/com/google/devtools/build/lib/standalone",
+diff --git a/src/main/java/com/google/devtools/build/lib/bazel/Bazel.java b/src/main/java/com/google/devtools/build/lib/bazel/Bazel.java
+index 807d74d835..7bd77142dd 100644
+--- a/src/main/java/com/google/devtools/build/lib/bazel/Bazel.java
++++ b/src/main/java/com/google/devtools/build/lib/bazel/Bazel.java
+@@ -45,7 +45,6 @@ public final class Bazel {
+           com.google.devtools.build.lib.runtime.CommandLogModule.class,
+           com.google.devtools.build.lib.platform.SleepPreventionModule.class,
+           com.google.devtools.build.lib.runtime.BazelFileSystemModule.class,
+-          com.google.devtools.build.lib.runtime.mobileinstall.MobileInstallModule.class,
+           com.google.devtools.build.lib.bazel.BazelWorkspaceStatusModule.class,
+           com.google.devtools.build.lib.bazel.BazelDiffAwarenessModule.class,
+           com.google.devtools.build.lib.remote.RemoteModule.class,
+diff --git a/src/main/java/com/google/devtools/build/lib/bazel/BazelRepositoryModule.java b/src/main/java/com/google/devtools/build/lib/bazel/BazelRepositoryModule.java
+index 2fa958ef38..98116f40a8 100644
+--- a/src/main/java/com/google/devtools/build/lib/bazel/BazelRepositoryModule.java
++++ b/src/main/java/com/google/devtools/build/lib/bazel/BazelRepositoryModule.java
+@@ -38,10 +38,6 @@ import com.google.devtools.build.lib.bazel.repository.downloader.DownloadManager
+ import com.google.devtools.build.lib.bazel.repository.downloader.HttpDownloader;
+ import com.google.devtools.build.lib.bazel.repository.starlark.StarlarkRepositoryFunction;
+ import com.google.devtools.build.lib.bazel.repository.starlark.StarlarkRepositoryModule;
+-import com.google.devtools.build.lib.bazel.rules.android.AndroidNdkRepositoryFunction;
+-import com.google.devtools.build.lib.bazel.rules.android.AndroidNdkRepositoryRule;
+-import com.google.devtools.build.lib.bazel.rules.android.AndroidSdkRepositoryFunction;
+-import com.google.devtools.build.lib.bazel.rules.android.AndroidSdkRepositoryRule;
+ import com.google.devtools.build.lib.cmdline.RepositoryName;
+ import com.google.devtools.build.lib.events.Event;
+ import com.google.devtools.build.lib.pkgcache.PackageOptions;
+@@ -153,8 +149,6 @@ public class BazelRepositoryModule extends BlazeModule {
+     return ImmutableMap.<String, RepositoryFunction>builder()
+         .put(LocalRepositoryRule.NAME, new LocalRepositoryFunction())
+         .put(NewLocalRepositoryRule.NAME, new NewLocalRepositoryFunction())
+-        .put(AndroidSdkRepositoryRule.NAME, new AndroidSdkRepositoryFunction())
+-        .put(AndroidNdkRepositoryRule.NAME, new AndroidNdkRepositoryFunction())
+         .put(LocalConfigPlatformRule.NAME, new LocalConfigPlatformFunction())
+         .build();
+   }
+diff --git a/src/main/java/com/google/devtools/build/lib/bazel/rules/BUILD b/src/main/java/com/google/devtools/build/lib/bazel/rules/BUILD
+index 9056ac3d74..8baefd4583 100644
+--- a/src/main/java/com/google/devtools/build/lib/bazel/rules/BUILD
++++ b/src/main/java/com/google/devtools/build/lib/bazel/rules/BUILD
+@@ -40,7 +40,6 @@ java_library(
+         "//src/main/java/com/google/devtools/build/lib/analysis:config/fragment_options",
+         "//src/main/java/com/google/devtools/build/lib/analysis:constraints/environment_rule",
+         "//src/main/java/com/google/devtools/build/lib/bazel/repository",
+-        "//src/main/java/com/google/devtools/build/lib/bazel/rules/android",
+         "//src/main/java/com/google/devtools/build/lib/bazel/rules/common",
+         "//src/main/java/com/google/devtools/build/lib/bazel/rules/cpp",
+         "//src/main/java/com/google/devtools/build/lib/bazel/rules/cpp:bazel_cpp_semantics",
+@@ -68,7 +67,6 @@ java_library(
+         "//src/main/java/com/google/devtools/build/lib/rules:repository/new_local_repository_rule",
+         "//src/main/java/com/google/devtools/build/lib/rules:test_rules",
+         "//src/main/java/com/google/devtools/build/lib/rules:toolchain_type",
+-        "//src/main/java/com/google/devtools/build/lib/rules/android",
+         "//src/main/java/com/google/devtools/build/lib/rules/config",
+         "//src/main/java/com/google/devtools/build/lib/rules/cpp",
+         "//src/main/java/com/google/devtools/build/lib/rules/cpp/proto:CcProtoLibrary",
+diff --git a/src/main/java/com/google/devtools/build/lib/bazel/rules/BazelRuleClassProvider.java b/src/main/java/com/google/devtools/build/lib/bazel/rules/BazelRuleClassProvider.java
+index f47b990951..883c21b409 100644
+--- a/src/main/java/com/google/devtools/build/lib/bazel/rules/BazelRuleClassProvider.java
++++ b/src/main/java/com/google/devtools/build/lib/bazel/rules/BazelRuleClassProvider.java
+@@ -32,19 +32,6 @@ import com.google.devtools.build.lib.analysis.config.BuildOptions;
+ import com.google.devtools.build.lib.analysis.config.CoreOptions;
+ import com.google.devtools.build.lib.analysis.config.FragmentOptions;
+ import com.google.devtools.build.lib.bazel.repository.LocalConfigPlatformRule;
+-import com.google.devtools.build.lib.bazel.rules.android.AndroidNdkRepositoryRule;
+-import com.google.devtools.build.lib.bazel.rules.android.AndroidSdkRepositoryRule;
+-import com.google.devtools.build.lib.bazel.rules.android.BazelAarImportRule;
+-import com.google.devtools.build.lib.bazel.rules.android.BazelAndroidBinaryRule;
+-import com.google.devtools.build.lib.bazel.rules.android.BazelAndroidDevice;
+-import com.google.devtools.build.lib.bazel.rules.android.BazelAndroidDeviceScriptFixture;
+-import com.google.devtools.build.lib.bazel.rules.android.BazelAndroidHostServiceFixture;
+-import com.google.devtools.build.lib.bazel.rules.android.BazelAndroidInstrumentationTestRule;
+-import com.google.devtools.build.lib.bazel.rules.android.BazelAndroidLibraryRule;
+-import com.google.devtools.build.lib.bazel.rules.android.BazelAndroidLocalTestRule;
+-import com.google.devtools.build.lib.bazel.rules.android.BazelAndroidSdkRule;
+-import com.google.devtools.build.lib.bazel.rules.android.BazelAndroidSemantics;
+-import com.google.devtools.build.lib.bazel.rules.android.BazelAndroidToolsDefaultsJar;
+ import com.google.devtools.build.lib.bazel.rules.cpp.BazelCppSemantics;
+ import com.google.devtools.build.lib.bazel.rules.cpp.proto.BazelCcProtoAspect;
+ import com.google.devtools.build.lib.bazel.rules.java.proto.BazelJavaLiteProtoAspect;
+@@ -58,27 +45,6 @@ import com.google.devtools.build.lib.bazel.rules.python.BazelPyTestRule;
+ import com.google.devtools.build.lib.bazel.rules.python.BazelPythonConfiguration;
+ import com.google.devtools.build.lib.cmdline.LabelConstants;
+ import com.google.devtools.build.lib.packages.RuleClass.Builder.ThirdPartyLicenseExistencePolicy;
+-import com.google.devtools.build.lib.rules.android.AarImportBaseRule;
+-import com.google.devtools.build.lib.rules.android.AndroidApplicationResourceInfo;
+-import com.google.devtools.build.lib.rules.android.AndroidConfiguration;
+-import com.google.devtools.build.lib.rules.android.AndroidDeviceBrokerInfo;
+-import com.google.devtools.build.lib.rules.android.AndroidDeviceRule;
+-import com.google.devtools.build.lib.rules.android.AndroidDeviceScriptFixtureRule;
+-import com.google.devtools.build.lib.rules.android.AndroidHostServiceFixtureRule;
+-import com.google.devtools.build.lib.rules.android.AndroidInstrumentationInfo;
+-import com.google.devtools.build.lib.rules.android.AndroidInstrumentationTestBaseRule;
+-import com.google.devtools.build.lib.rules.android.AndroidLibraryBaseRule;
+-import com.google.devtools.build.lib.rules.android.AndroidLocalTestBaseRule;
+-import com.google.devtools.build.lib.rules.android.AndroidLocalTestConfiguration;
+-import com.google.devtools.build.lib.rules.android.AndroidNativeLibsInfo;
+-import com.google.devtools.build.lib.rules.android.AndroidNeverlinkAspect;
+-import com.google.devtools.build.lib.rules.android.AndroidResourcesInfo;
+-import com.google.devtools.build.lib.rules.android.AndroidRuleClasses;
+-import com.google.devtools.build.lib.rules.android.AndroidRuleClasses.AndroidToolsDefaultsJarRule;
+-import com.google.devtools.build.lib.rules.android.AndroidSdkBaseRule;
+-import com.google.devtools.build.lib.rules.android.AndroidStarlarkCommon;
+-import com.google.devtools.build.lib.rules.android.ApkInfo;
+-import com.google.devtools.build.lib.rules.android.DexArchiveAspect;
+ import com.google.devtools.build.lib.rules.config.ConfigRules;
+ import com.google.devtools.build.lib.rules.core.CoreRules;
+ import com.google.devtools.build.lib.rules.cpp.proto.CcProtoAspect;
+@@ -98,7 +64,6 @@ import com.google.devtools.build.lib.rules.python.PythonConfigurationLoader;
+ import com.google.devtools.build.lib.rules.repository.CoreWorkspaceRules;
+ import com.google.devtools.build.lib.rules.repository.NewLocalRepositoryRule;
+ import com.google.devtools.build.lib.rules.test.TestingSupportRules;
+-import com.google.devtools.build.lib.skylarkbuildapi.android.AndroidBootstrap;
+ import com.google.devtools.build.lib.skylarkbuildapi.proto.ProtoBootstrap;
+ import com.google.devtools.build.lib.skylarkbuildapi.python.PyBootstrap;
+ import com.google.devtools.build.lib.skylarkbuildapi.stubs.ProviderStub;
+@@ -303,74 +268,6 @@ public class BazelRuleClassProvider {
+         }
+       };
+ 
+-  public static final RuleSet ANDROID_RULES =
+-      new RuleSet() {
+-        @Override
+-        public void init(ConfiguredRuleClassProvider.Builder builder) {
+-          String toolsRepository = checkNotNull(builder.getToolsRepository());
+-
+-          builder.addConfigurationFragment(new AndroidConfiguration.Loader());
+-          builder.addConfigurationFragment(new AndroidLocalTestConfiguration.Loader());
+-
+-          AndroidNeverlinkAspect androidNeverlinkAspect = new AndroidNeverlinkAspect();
+-          DexArchiveAspect dexArchiveAspect = new DexArchiveAspect(toolsRepository);
+-          builder.addNativeAspectClass(androidNeverlinkAspect);
+-          builder.addNativeAspectClass(dexArchiveAspect);
+-
+-          builder.addRuleDefinition(new AndroidSdkBaseRule());
+-          builder.addRuleDefinition(new BazelAndroidSdkRule());
+-          builder.addRuleDefinition(
+-              new AndroidToolsDefaultsJarRule(BazelAndroidToolsDefaultsJar.class));
+-          builder.addRuleDefinition(new AndroidRuleClasses.AndroidBaseRule());
+-          builder.addRuleDefinition(new AndroidRuleClasses.AndroidResourceSupportRule());
+-          builder.addRuleDefinition(
+-              new AndroidRuleClasses.AndroidBinaryBaseRule(
+-                  androidNeverlinkAspect, dexArchiveAspect));
+-          builder.addRuleDefinition(new AndroidLibraryBaseRule(androidNeverlinkAspect));
+-          builder.addRuleDefinition(new BazelAndroidLibraryRule());
+-          builder.addRuleDefinition(new BazelAndroidBinaryRule());
+-          builder.addRuleDefinition(new AarImportBaseRule());
+-          builder.addRuleDefinition(new BazelAarImportRule());
+-          builder.addRuleDefinition(new AndroidDeviceRule(BazelAndroidDevice.class));
+-          builder.addRuleDefinition(new AndroidLocalTestBaseRule());
+-          builder.addRuleDefinition(new BazelAndroidLocalTestRule());
+-          builder.addRuleDefinition(new AndroidInstrumentationTestBaseRule());
+-          builder.addRuleDefinition(new BazelAndroidInstrumentationTestRule());
+-          builder.addRuleDefinition(
+-              new AndroidDeviceScriptFixtureRule(BazelAndroidDeviceScriptFixture.class));
+-          builder.addRuleDefinition(
+-              new AndroidHostServiceFixtureRule(BazelAndroidHostServiceFixture.class));
+-
+-          AndroidBootstrap bootstrap =
+-              new AndroidBootstrap(
+-                  new AndroidStarlarkCommon(),
+-                  ApkInfo.PROVIDER,
+-                  AndroidInstrumentationInfo.PROVIDER,
+-                  AndroidDeviceBrokerInfo.PROVIDER,
+-                  AndroidResourcesInfo.PROVIDER,
+-                  AndroidNativeLibsInfo.PROVIDER,
+-                  AndroidApplicationResourceInfo.PROVIDER);
+-          builder.addStarlarkBootstrap(bootstrap);
+-
+-          try {
+-            builder.addWorkspaceFilePrefix(
+-                ResourceFileLoader.loadResource(BazelAndroidSemantics.class, "android.WORKSPACE"));
+-            builder.addWorkspaceFileSuffix(
+-                ResourceFileLoader.loadResource(
+-                    BazelAndroidSemantics.class, "android_remote_tools.WORKSPACE"));
+-            builder.addWorkspaceFileSuffix(
+-                ResourceFileLoader.loadResource(JavaRules.class, "coverage.WORKSPACE"));
+-          } catch (IOException e) {
+-            throw new IllegalStateException(e);
+-          }
+-        }
+-
+-        @Override
+-        public ImmutableList<RuleSet> requires() {
+-          return ImmutableList.of(CoreRules.INSTANCE, CcRules.INSTANCE, JavaRules.INSTANCE);
+-        }
+-      };
+-
+   public static final RuleSet PYTHON_RULES =
+       new RuleSet() {
+         @Override
+@@ -412,8 +309,6 @@ public class BazelRuleClassProvider {
+         public void init(ConfiguredRuleClassProvider.Builder builder) {
+           // TODO(ulfjack): Split this up by conceptual units.
+           builder.addRuleDefinition(new NewLocalRepositoryRule());
+-          builder.addRuleDefinition(new AndroidSdkRepositoryRule());
+-          builder.addRuleDefinition(new AndroidNdkRepositoryRule());
+           builder.addRuleDefinition(new LocalConfigPlatformRule());
+ 
+           try {
+@@ -445,7 +340,6 @@ public class BazelRuleClassProvider {
+           CPP_PROTO_RULES,
+           JavaRules.INSTANCE,
+           JAVA_PROTO_RULES,
+-          ANDROID_RULES,
+           PYTHON_RULES,
+           ObjcRules.INSTANCE,
+           J2ObjcRules.INSTANCE,
