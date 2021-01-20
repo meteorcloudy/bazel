@@ -358,6 +358,40 @@ java_library(
 )
 
 java_library(
+    name = "repository/repo_function",
+    srcs = ["repository/RepoFunction.java"],
+    deps = [
+        ":repository/repo_rule",
+        ":repository/repository_directory_value",
+        ":repository/repository_function",
+        ":repository/workspace_attribute_mapper",
+        "//src/main/java/com/google/devtools/build/lib/analysis:analysis_cluster",
+        "//src/main/java/com/google/devtools/build/lib/analysis:blaze_directories",
+        "//src/main/java/com/google/devtools/build/lib/packages",
+        "//src/main/java/com/google/devtools/build/lib/shell",
+        "//src/main/java/com/google/devtools/build/lib/vfs",
+        "//src/main/java/com/google/devtools/build/lib/vfs:pathfragment",
+        "//src/main/java/com/google/devtools/build/skyframe",
+        "//src/main/java/com/google/devtools/build/skyframe:skyframe-objects",
+        "//src/main/java/net/starlark/java/eval",
+        "//third_party:guava_checked_in",
+        "//third_party:jsr305_checked_in",
+    ],
+)
+
+java_library(
+    name = "repository/repo_rule",
+    srcs = ["repository/RepoRule.java"],
+    deps = [
+        ":repository/workspace_base_rule",
+        ":repository/workspace_configured_target_factory",
+        "//src/main/java/com/google/devtools/build/lib/analysis:analysis_cluster",
+        "//src/main/java/com/google/devtools/build/lib/analysis:rule_definition_environment",
+        "//src/main/java/com/google/devtools/build/lib/packages",
+    ],
+)
+
+java_library(
     name = "repository/new_repository_file_handler",
     srcs = ["repository/NewRepositoryFileHandler.java"],
     deps = [

@@ -38,6 +38,8 @@ java_library(
         "//src/main/java/com/google/devtools/build/lib/rules:repository/managed_directories_knowledge_impl",
         "//src/main/java/com/google/devtools/build/lib/rules:repository/new_local_repository_function",
         "//src/main/java/com/google/devtools/build/lib/rules:repository/new_local_repository_rule",
+        "//src/main/java/com/google/devtools/build/lib/rules:repository/repo_function",
+        "//src/main/java/com/google/devtools/build/lib/rules:repository/repo_rule",
         "//src/main/java/com/google/devtools/build/lib/rules:repository/repository_function",
         "//src/main/java/com/google/devtools/build/lib/rules:repository/repository_loader_function",
         "//src/main/java/com/google/devtools/build/lib/skyframe:mutable_supplier",

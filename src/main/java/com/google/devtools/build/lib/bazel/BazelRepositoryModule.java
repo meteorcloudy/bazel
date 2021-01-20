@@ -51,6 +51,8 @@ import com.google.devtools.build.lib.rules.repository.ManagedDirectoriesKnowledg
 import com.google.devtools.build.lib.rules.repository.ManagedDirectoriesKnowledgeImpl.ManagedDirectoriesListener;
 import com.google.devtools.build.lib.rules.repository.NewLocalRepositoryFunction;
 import com.google.devtools.build.lib.rules.repository.NewLocalRepositoryRule;
+import com.google.devtools.build.lib.rules.repository.RepoFunction;
+import com.google.devtools.build.lib.rules.repository.RepoRule;
 import com.google.devtools.build.lib.rules.repository.RepositoryDelegatorFunction;
 import com.google.devtools.build.lib.rules.repository.RepositoryDirectoryDirtinessChecker;
 import com.google.devtools.build.lib.rules.repository.RepositoryFunction;
@@ -157,6 +159,7 @@ public class BazelRepositoryModule extends BlazeModule {
         .put(AndroidSdkRepositoryRule.NAME, new AndroidSdkRepositoryFunction())
         .put(AndroidNdkRepositoryRule.NAME, new AndroidNdkRepositoryFunction())
         .put(LocalConfigPlatformRule.NAME, new LocalConfigPlatformFunction())
+        .put(RepoRule.NAME, new RepoFunction())
         .build();
   }
 
