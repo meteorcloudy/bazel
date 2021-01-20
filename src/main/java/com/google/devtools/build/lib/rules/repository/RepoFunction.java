@@ -36,6 +36,11 @@ public class RepoFunction extends RepositoryFunction {
       Environment env, Map<String, String> markerData, SkyKey key)
       throws InterruptedException, RepositoryFunctionException {
     WorkspaceAttributeMapper mapper = WorkspaceAttributeMapper.of(rule);
+    List<String> envKeys = RepoFunction.getAttribute(mapper, RepoRule.ENVIRON, Type.STRING_LIST);
+    Map<String, String> environ = declareEnvironmentDependencies(markerData, env, envKeys);
+    if (environ == null) {
+      return null;
+    }
     List<String> args = RepoFunction.getAttribute(mapper, RepoRule.FETCH_COMMAND, Type.STRING_LIST);
     String[] argsArray = new String[args.size()];
     args.toArray(argsArray);
@@ -90,6 +95,15 @@ public class RepoFunction extends RepositoryFunction {
   @Override
   protected boolean isLocal(Rule rule) {
     return false;
+  }
+
+  @Override
+  public boolean verifyMarkerData(Rule rule, Map<String, String> markerData, Environment env)
+      throws InterruptedException, RepositoryFunctionException {
+    WorkspaceAttributeMapper mapper = WorkspaceAttributeMapper.of(rule);
+    List<String> keys = RepoFunction.getAttribute(mapper, RepoRule.ENVIRON, Type.STRING_LIST);
+    return super.verifyEnvironMarkerData(markerData, env, keys)
+        && super.verifyMarkerData(rule, markerData, env);
   }
 
   @Override

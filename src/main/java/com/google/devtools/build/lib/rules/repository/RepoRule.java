@@ -28,7 +28,7 @@ public class RepoRule implements RuleDefinition {
         .add(attr(FETCH_COMMAND, STRING_LIST).mandatory())
         .add(attr(FINGERPRINT, STRING).mandatory())
         .add(attr(REPO_DEPS, STRING_LIST))
-        .add(attr(ENVIRON, STRING_DICT))
+        .add(attr(ENVIRON, STRING_LIST))
         .setWorkspaceOnly()
         .build();
   }
