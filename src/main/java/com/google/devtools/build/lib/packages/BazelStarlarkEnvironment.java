@@ -57,6 +57,8 @@ public final class BazelStarlarkEnvironment {
   private final ImmutableMap<String, Object> workspaceBzlEnv;
   /** The top-level predeclared symbols for a bzl module in the {@code @_builtins} pseudo-repo. */
   private final ImmutableMap<String, Object> builtinsBzlEnv;
+  /** The top-level predeclared symbols for a bzlmod bzl module. */
+  private final ImmutableMap<String, Object> bzlmodBzlEnv;
 
   BazelStarlarkEnvironment(
       RuleClassProvider ruleClassProvider,
@@ -78,6 +80,7 @@ public final class BazelStarlarkEnvironment {
             ruleClassProvider, uninjectedBuildBzlNativeBindings, uninjectedBuildBzlEnv);
     this.uninjectedBuildEnv =
         createUninjectedBuildEnv(ruleFunctions, packageFunction, environmentExtensions);
+    this.bzlmodBzlEnv = createBzlmodBzlEnv(ruleClassProvider);
   }
 
   /**
@@ -124,6 +127,11 @@ public final class BazelStarlarkEnvironment {
   /** Returns the environment for bzl files in the {@code @_builtins} pseudo-repository. */
   public ImmutableMap<String, Object> getBuiltinsBzlEnv() {
     return builtinsBzlEnv;
+  }
+
+  /** Returns the environment for bzlmod-loaded bzl files. */
+  public ImmutableMap<String, Object> getBzlmodBzlEnv() {
+    return bzlmodBzlEnv;
   }
 
   /**
@@ -193,6 +201,11 @@ public final class BazelStarlarkEnvironment {
     env.put("native", createNativeModule(workspaceBzlNativeBindings));
 
     return ImmutableMap.copyOf(env);
+  }
+
+  private static ImmutableMap<String, Object> createBzlmodBzlEnv(
+      RuleClassProvider ruleClassProvider) {
+    return ruleClassProvider.getEnvironment();
   }
 
   private static ImmutableMap<String, Object> createBuiltinsBzlEnv(
