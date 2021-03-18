@@ -11,11 +11,15 @@ import com.google.devtools.build.lib.bazel.bzlmod.ResolvedBazelModuleRepositorie
 import com.google.devtools.build.lib.bazel.bzlmod.ResolvedModuleRuleRepositoriesValue;
 import com.google.devtools.build.lib.cmdline.Label;
 import com.google.devtools.build.lib.cmdline.PackageIdentifier;
+import com.google.devtools.build.lib.events.StoredEventHandler;
 import com.google.devtools.build.lib.packages.NoSuchPackageException;
 import com.google.devtools.build.lib.packages.Package;
 import com.google.devtools.build.lib.packages.PackageFactory;
 import com.google.devtools.build.lib.packages.Rule;
+import com.google.devtools.build.lib.packages.RuleClass;
 import com.google.devtools.build.lib.packages.RuleClassProvider;
+import com.google.devtools.build.lib.packages.RuleFactory;
+import com.google.devtools.build.lib.packages.RuleFactory.BuildLangTypedAttributeValuesMap;
 import com.google.devtools.build.lib.packages.RuleFactory.InvalidRuleException;
 import com.google.devtools.build.lib.util.Pair;
 import com.google.devtools.build.lib.vfs.PathFragment;
@@ -28,6 +32,7 @@ import com.google.devtools.build.skyframe.SkyValue;
 
 import net.starlark.java.eval.Module;
 import net.starlark.java.eval.StarlarkSemantics;
+import net.starlark.java.eval.StarlarkThread.CallStackEntry;
 import net.starlark.java.syntax.Location;
 
 import javax.annotation.Nullable;
@@ -81,6 +86,47 @@ public class BzlmodRepoRuleFunction implements SkyFunction {
       return BzlmodRepoRuleValue.REPO_RULE_NOT_FOUND_VALUE;
     }
 
+    if (isNativeRepoRule(repositoryInfo)) {
+      return getNativeRepoRule(repositoryInfo, starlarkSemantics, env);
+    } else {
+      return getStarlarkRepoRule(repositoryInfo, starlarkSemantics, env);
+    }
+  }
+
+  private boolean isNativeRepoRule(RepositoryInfo info) {
+    return info.getRuleClass().indexOf('%') == -1;
+  }
+
+  private BzlmodRepoRuleValue getNativeRepoRule(
+      RepositoryInfo repositoryInfo, StarlarkSemantics semantics, Environment env)
+      throws InterruptedException {
+    RootedPath bzlmodFile =
+        RootedPath.toRootedPath(
+            Root.fromPath(directories.getWorkspace()), PathFragment.create("Moduel.bazel"));
+
+    Package.Builder pkg =
+        packageFactory.newExternalPackageBuilder(
+            bzlmodFile, ruleClassProvider.getRunfilesPrefix(), semantics);
+
+    RuleClass ruleClass = ruleClassProvider.getRuleClassMap().get(repositoryInfo.getRuleClass());
+    BuildLangTypedAttributeValuesMap attributeValues =
+        new BuildLangTypedAttributeValuesMap(repositoryInfo.getAttributes());
+    StoredEventHandler eventHandler = new StoredEventHandler();
+    ImmutableList.Builder<CallStackEntry> callStack = ImmutableList.builder();
+    callStack.add(new CallStackEntry("RepositoryRuleFunction.createRule", Location.BUILTIN));
+    Rule rule = null;
+    try {
+      rule =
+          RuleFactory.createRule(pkg, ruleClass, attributeValues, eventHandler, semantics, callStack.build());
+    } catch (InvalidRuleException e) {
+      e.printStackTrace();
+    }
+    return new BzlmodRepoRuleValue(rule);
+  }
+
+  private BzlmodRepoRuleValue getStarlarkRepoRule(
+      RepositoryInfo repositoryInfo, StarlarkSemantics starlarkSemantics, Environment env)
+      throws InterruptedException {
     int pos = repositoryInfo.getRuleClass().indexOf("%");
     String bzlFile = repositoryInfo.getRuleClass().substring(0, pos);
     String ruleName = repositoryInfo.getRuleClass().substring(pos + 1);
