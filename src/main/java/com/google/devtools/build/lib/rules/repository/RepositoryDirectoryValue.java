@@ -188,6 +188,12 @@ public abstract class RepositoryDirectoryValue implements SkyValue {
     }
   }
 
+  public static class KeyForModuleRule extends RepositoryDirectoryValue.Key {
+    private KeyForModuleRule(RepositoryName arg) {
+      super(arg);
+    }
+  }
+
   public static Builder builder() {
     return new Builder();
   }

@@ -74,7 +74,7 @@ public class RuleFactory {
    * <p>It is the caller's responsibility to add the rule to the package (the caller may choose not
    * to do so if, for example, the rule has errors).
    */
-  static Rule createRule(
+  public static Rule createRule(
       Package.Builder pkgBuilder,
       RuleClass ruleClass,
       BuildLangTypedAttributeValuesMap attributeValues,
