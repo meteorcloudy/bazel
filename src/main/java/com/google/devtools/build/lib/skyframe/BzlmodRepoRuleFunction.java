@@ -66,15 +66,16 @@ public class BzlmodRepoRuleFunction implements SkyFunction {
     boolean forModuleRuleResolve = ((BzlmodRepoRuleKey) skyKey).isForModuleRuleResolve();
     RepositoryInfo repositoryInfo = null;
 
-    // Look for repository derived from native Bazel Modules
+    // Look for repositories derived from native Bazel Modules
     for (RepositoryInfo info : ResolvedBazelModuleRepositoriesValue.getRepo()) {
       if (info.getName().equals(repositoryName)) {
         repositoryInfo = info;
       }
     }
 
-    // Look for repository derived from module rules
-    if (repositoryInfo == null && forModuleRuleResolve) {
+    // Look for repositories derived from module rules if the repo is not requested for module rule
+    // resolution.
+    if (repositoryInfo == null && !forModuleRuleResolve) {
       for (RepositoryInfo info : ResolvedModuleRuleRepositoriesValue.getRepo()) {
         if (info.getName().equals(repositoryName)) {
           repositoryInfo = info;
