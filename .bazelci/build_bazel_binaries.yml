@@ -36,6 +36,16 @@ platforms:
     build_flags:
       - "-c"
       - "opt"
+  macos_arm64:
+    xcode_version: "12.4"
+    build_targets:
+      - "//src:bazel"
+      - "//src:bazel_nojdk"
+    build_flags:
+      - "-c"
+      - "opt"
+      # TODO(pcloudy): Remove this when macos_arm64 platform is actually using Apple Silicon machines.
+      - "--cpu=darwin_arm64"
   windows:
     build_flags:
       - "--copt=-w"
