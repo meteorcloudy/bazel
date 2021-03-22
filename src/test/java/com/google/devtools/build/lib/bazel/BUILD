@@ -7,6 +7,7 @@ filegroup(
     name = "srcs",
     testonly = 0,
     srcs = glob(["*"]) + [
+        "//src/test/java/com/google/devtools/build/lib/bazel/bzlmod:srcs",
         "//src/test/java/com/google/devtools/build/lib/bazel/debug:srcs",
         "//src/test/java/com/google/devtools/build/lib/bazel/execlog:srcs",
         "//src/test/java/com/google/devtools/build/lib/bazel/repository:srcs",
@@ -19,6 +20,7 @@ filegroup(
 java_library(
     name = "BazelTests_lib",
     exports = [
+        "//src/test/java/com/google/devtools/build/lib/bazel/bzlmod:BzlmodTests_lib",
         "//src/test/java/com/google/devtools/build/lib/bazel/debug:WorkspaceRuleEventTest_lib",
         "//src/test/java/com/google/devtools/build/lib/bazel/execlog:StableSortTest_lib",
         "//src/test/java/com/google/devtools/build/lib/bazel/repository:RepositoryTests_lib",
