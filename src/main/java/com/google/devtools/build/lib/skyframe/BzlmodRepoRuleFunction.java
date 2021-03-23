@@ -10,6 +10,7 @@ import com.google.devtools.build.lib.bazel.bzlmod.RepositoryInfo;
 import com.google.devtools.build.lib.bazel.bzlmod.ResolvedBazelModuleRepositoriesValue;
 import com.google.devtools.build.lib.bazel.bzlmod.ResolvedModuleRuleRepositoriesValue;
 import com.google.devtools.build.lib.cmdline.Label;
+import com.google.devtools.build.lib.cmdline.LabelConstants;
 import com.google.devtools.build.lib.cmdline.PackageIdentifier;
 import com.google.devtools.build.lib.events.StoredEventHandler;
 import com.google.devtools.build.lib.packages.NoSuchPackageException;
@@ -142,19 +143,12 @@ public class BzlmodRepoRuleFunction implements SkyFunction {
       System.out.println("Load label failed!");
     }
 
-    RootedPath bzlmodFile =
-        RootedPath.toRootedPath(
-            Root.fromPath(directories.getWorkspace()), PathFragment.create("Moduel.bazel"));
-
     // Compute key for each load label.
     ImmutableList.Builder<BzlLoadValue.Key> keys =
         ImmutableList.builderWithExpectedSize(loadLabels.size());
     for (Label loadLabel : loadLabels) {
       keys.add(
-          BzlLoadValue.keyForWorkspace(
-              loadLabel,
-              0,
-              bzlmodFile));
+          BzlLoadValue.keyForBzlmod(loadLabel));
     }
 
     // Load .bzl modules in parallel.
@@ -173,6 +167,10 @@ public class BzlmodRepoRuleFunction implements SkyFunction {
 
     BzlmodRepoRuleCreator repoRuleBuilder  = (BzlmodRepoRuleCreator) loadedModules.get(bzlFile).getGlobal(ruleName);
 
+    RootedPath bzlmodFile =
+        RootedPath.toRootedPath(
+            Root.fromPath(directories.getWorkspace()), LabelConstants.MODULE_DOT_BAZEL_FILE_NAME);
+
     Package.Builder pkg =
         packageFactory.newExternalPackageBuilder(
             bzlmodFile, ruleClassProvider.getRunfilesPrefix(), starlarkSemantics);
@@ -180,7 +178,8 @@ public class BzlmodRepoRuleFunction implements SkyFunction {
     Rule rule = null;
     try {
       rule = repoRuleBuilder.createRule(pkg, starlarkSemantics, repositoryInfo.getAttributes());
-    } catch (InvalidRuleException e) {
+      pkg.build();
+    } catch (InvalidRuleException | NoSuchPackageException e) {
       e.printStackTrace();
     }
 
