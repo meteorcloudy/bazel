@@ -23,7 +23,6 @@ import com.google.devtools.build.lib.packages.RuleFactory;
 import com.google.devtools.build.lib.packages.RuleFactory.BuildLangTypedAttributeValuesMap;
 import com.google.devtools.build.lib.packages.RuleFactory.InvalidRuleException;
 import com.google.devtools.build.lib.util.Pair;
-import com.google.devtools.build.lib.vfs.PathFragment;
 import com.google.devtools.build.lib.vfs.Root;
 import com.google.devtools.build.lib.vfs.RootedPath;
 import com.google.devtools.build.skyframe.SkyFunction;
@@ -64,7 +63,7 @@ public class BzlmodRepoRuleFunction implements SkyFunction {
     }
 
     String repositoryName = ((BzlmodRepoRuleKey) skyKey).getRepositoryName();
-    boolean forModuleRuleResolve = ((BzlmodRepoRuleKey) skyKey).isForModuleRuleResolve();
+    boolean forModuleRuleResolution = ((BzlmodRepoRuleKey) skyKey).isForModuleRuleResolution();
     RepositoryInfo repositoryInfo = null;
 
     // Look for repositories derived from native Bazel Modules
@@ -76,7 +75,7 @@ public class BzlmodRepoRuleFunction implements SkyFunction {
 
     // Look for repositories derived from module rules if the repo is not requested for module rule
     // resolution.
-    if (repositoryInfo == null && !forModuleRuleResolve) {
+    if (repositoryInfo == null && !forModuleRuleResolution) {
       for (RepositoryInfo info : ResolvedModuleRuleRepositoriesValue.getRepo()) {
         if (info.getName().equals(repositoryName)) {
           repositoryInfo = info;
@@ -104,7 +103,7 @@ public class BzlmodRepoRuleFunction implements SkyFunction {
       throws InterruptedException {
     RootedPath bzlmodFile =
         RootedPath.toRootedPath(
-            Root.fromPath(directories.getWorkspace()), PathFragment.create("Moduel.bazel"));
+            Root.fromPath(directories.getWorkspace()), LabelConstants.MODULE_DOT_BAZEL_FILE_NAME);
 
     Package.Builder pkg =
         packageFactory.newExternalPackageBuilder(
@@ -115,7 +114,7 @@ public class BzlmodRepoRuleFunction implements SkyFunction {
         new BuildLangTypedAttributeValuesMap(repositoryInfo.getAttributes());
     StoredEventHandler eventHandler = new StoredEventHandler();
     ImmutableList.Builder<CallStackEntry> callStack = ImmutableList.builder();
-    callStack.add(new CallStackEntry("RepositoryRuleFunction.createRule", Location.BUILTIN));
+    callStack.add(new CallStackEntry("BzlmodRepoRuleFunction.getNativeRepoRule", Location.BUILTIN));
     Rule rule = null;
     try {
       rule =
@@ -165,7 +164,7 @@ public class BzlmodRepoRuleFunction implements SkyFunction {
       return null;
     }
 
-    BzlmodRepoRuleCreator repoRuleBuilder  = (BzlmodRepoRuleCreator) loadedModules.get(bzlFile).getGlobal(ruleName);
+    BzlmodRepoRuleCreator repoRuleBuilder = (BzlmodRepoRuleCreator) loadedModules.get(bzlFile).getGlobal(ruleName);
 
     RootedPath bzlmodFile =
         RootedPath.toRootedPath(

@@ -228,10 +228,10 @@ public class StarlarkRepositoryModule implements RepositoryModuleApi {
       BuildLangTypedAttributeValuesMap attributeValues = new BuildLangTypedAttributeValuesMap(kwargs);
       StoredEventHandler eventHandler = new StoredEventHandler();
       ImmutableList.Builder<CallStackEntry> callStack = ImmutableList.builder();
+      // TODO(pcloudy): Optimize the callstack
       callStack.add(new CallStackEntry("RepositoryRuleFunction.createRule", Location.BUILTIN));
-      Rule rule =
-          RuleFactory.createRule(pkg, ruleClass, attributeValues, eventHandler, semantics, callStack.build());
-      return rule;
+      return RuleFactory.createRule(
+          pkg, ruleClass, attributeValues, eventHandler, semantics, callStack.build());
     }
   }
 

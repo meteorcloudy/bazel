@@ -25,8 +25,8 @@ public class BzlmodRepoRuleValue implements SkyValue {
     return rule;
   }
 
-  public static BzlmodRepoRuleKey key(String repositoryName, boolean forModuleRuleResolve) {
-    return BzlmodRepoRuleKey.create(repositoryName, forModuleRuleResolve);
+  public static BzlmodRepoRuleKey key(String repositoryName, boolean forModuleRuleResolution) {
+    return BzlmodRepoRuleKey.create(repositoryName, forModuleRuleResolution);
   }
 
   /** Represents an unsuccessful repository lookup. */
@@ -50,27 +50,27 @@ public class BzlmodRepoRuleValue implements SkyValue {
     private static final Interner<BzlmodRepoRuleValue.BzlmodRepoRuleKey> interner = BlazeInterners.newWeakInterner();
 
     private final String repositoryName;
-    private final boolean forModuleRuleResolve;
+    private final boolean forModuleRuleResolution;
 
-    private BzlmodRepoRuleKey(String repositoryName, boolean forModuleRuleResolve) {
+    private BzlmodRepoRuleKey(String repositoryName, boolean forModuleRuleResolution) {
       this.repositoryName = repositoryName;
-      this.forModuleRuleResolve = forModuleRuleResolve;
+      this.forModuleRuleResolution = forModuleRuleResolution;
     }
 
     @AutoCodec.VisibleForSerialization
     @AutoCodec.Instantiator
     static BzlmodRepoRuleValue.BzlmodRepoRuleKey create(
-        String repositoryName, boolean forModuleRuleResolve) {
+        String repositoryName, boolean forModuleRuleResolution) {
       return interner.intern(
-          new BzlmodRepoRuleValue.BzlmodRepoRuleKey(repositoryName, forModuleRuleResolve));
+          new BzlmodRepoRuleValue.BzlmodRepoRuleKey(repositoryName, forModuleRuleResolution));
     }
 
     public String getRepositoryName() {
       return repositoryName;
     }
 
-    public boolean isForModuleRuleResolve() {
-      return forModuleRuleResolve;
+    public boolean isForModuleRuleResolution() {
+      return forModuleRuleResolution;
     }
 
     @Override
@@ -88,12 +88,12 @@ public class BzlmodRepoRuleValue implements SkyValue {
       }
       BzlmodRepoRuleValue.BzlmodRepoRuleKey other = (BzlmodRepoRuleValue.BzlmodRepoRuleKey) obj;
       return this.repositoryName.equals(other.repositoryName)
-          && this.forModuleRuleResolve == other.forModuleRuleResolve;
+          && this.forModuleRuleResolution == other.forModuleRuleResolution;
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(BzlmodRepoRuleKey.class, repositoryName, forModuleRuleResolve);
+      return Objects.hash(BzlmodRepoRuleKey.class, repositoryName, forModuleRuleResolution);
     }
   }
 }
