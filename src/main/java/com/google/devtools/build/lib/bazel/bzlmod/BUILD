@@ -22,6 +22,7 @@ java_library(
 java_library(
     name = "fetch",
     srcs = [
+        "ArchiveFetcher.java",
         "EarlyFetcher.java",
         "Fetcher.java",
         "FetcherFactory.java",
@@ -30,6 +31,7 @@ java_library(
     deps = [
         ":common",
         "//src/main/java/com/google/devtools/build/lib/vfs",
+        "//third_party:guava",
     ]
 )
 
@@ -37,11 +39,18 @@ java_library(
     name = "registry",
     srcs = [
         "Registry.java",
+        "IndexRegistry.java",
         "RegistryFactory.java",
+        "RegistryFactoryImpl.java",
     ],
     deps = [
         ":common",
         ":fetch",
+        "//src/main/java/com/google/devtools/build/lib/bazel/repository/downloader",
+        "//src/main/java/com/google/devtools/build/lib/events",
+        "//src/main/java/com/google/devtools/build/lib/vfs",
+        "//third_party:gson",
+        "//third_party:guava",
     ],
 )
 

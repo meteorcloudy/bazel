@@ -26,6 +26,7 @@ import com.google.devtools.build.lib.events.ExtendedEventHandler;
 import com.google.devtools.build.lib.util.JavaSleeper;
 import com.google.devtools.build.lib.util.Sleeper;
 import com.google.devtools.build.lib.vfs.Path;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.io.OutputStream;
@@ -135,5 +136,36 @@ public class HttpDownloader implements Downloader {
 
       throw exception;
     }
+  }
+
+  public byte[] downloadAndReadOneUrl(URL url, ExtendedEventHandler eventHandler,
+      Map<String, String> clientEnv) throws IOException, InterruptedException {
+
+    Clock clock = new JavaClock();
+    Sleeper sleeper = new JavaSleeper();
+    Locale locale = Locale.getDefault();
+    ProxyHelper proxyHelper = new ProxyHelper(clientEnv);
+    HttpConnector connector =
+        new HttpConnector(locale, eventHandler, proxyHelper, sleeper, timeoutScaling);
+    ProgressInputStream.Factory progressInputStreamFactory =
+        new ProgressInputStream.Factory(locale, clock, eventHandler);
+    HttpStream.Factory httpStreamFactory = new HttpStream.Factory(progressInputStreamFactory);
+    HttpConnectorMultiplexer multiplexer =
+        new HttpConnectorMultiplexer(eventHandler, connector, httpStreamFactory, clock, sleeper);
+
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    try (HttpStream payload = multiplexer
+        .connect(Collections.singletonList(url), Optional.absent(), Collections.emptyMap(),
+            Optional.absent())) {
+      ByteStreams.copy(payload, out);
+    } catch (SocketTimeoutException e) {
+      // SocketTimeoutExceptions are InterruptedIOExceptions; however they do not signify
+      // an external interruption, but simply a failed download due to some server timing
+      // out. So rethrow them as ordinary IOExceptions.
+      throw new IOException(e);
+    } catch (InterruptedIOException e) {
+      throw new InterruptedException(e.getMessage());
+    }
+    return out.toByteArray();
   }
 }

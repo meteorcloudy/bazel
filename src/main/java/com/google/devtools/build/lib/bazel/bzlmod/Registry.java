@@ -1,5 +1,7 @@
 package com.google.devtools.build.lib.bazel.bzlmod;
 
+import com.google.devtools.build.lib.events.ExtendedEventHandler;
+import java.io.IOException;
 import java.util.Optional;
 
 public interface Registry {
@@ -9,10 +11,9 @@ public interface Registry {
   /**
    * Returns Optional.empty() when the module is not found in this registry.
    */
-  Optional<byte[]> getModuleFile(ModuleKey key);
+  Optional<byte[]> getModuleFile(ModuleKey key, ExtendedEventHandler eventHandler)
+      throws IOException, InterruptedException;
 
-  /**
-   * Returns Optional.empty() when the module is not found in this registry.
-   */
-  Optional<Fetcher> getFetcher(ModuleKey key);
+  Fetcher getFetcher(ModuleKey key, ExtendedEventHandler eventHandler)
+      throws IOException, InterruptedException;
 }

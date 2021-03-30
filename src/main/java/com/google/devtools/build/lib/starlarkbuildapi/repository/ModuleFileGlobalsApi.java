@@ -17,15 +17,15 @@ package com.google.devtools.build.lib.starlarkbuildapi.repository;
 
 import com.google.devtools.build.docgen.annot.DocumentMethods;
 import net.starlark.java.annot.Param;
+import net.starlark.java.annot.ParamType;
 import net.starlark.java.annot.StarlarkMethod;
 import net.starlark.java.eval.EvalException;
-import net.starlark.java.eval.StarlarkThread;
 
 /**
  * A collection of global Starlark build API functions that apply to WORKSPACE files.
  */
 @DocumentMethods
-public interface ModuleFileGlobalsApi {
+public interface ModuleFileGlobalsApi<ModuleFileFunctionExceptionT extends Exception> {
 
   @StarlarkMethod(
       name = "module",
@@ -115,7 +115,11 @@ public interface ModuleFileGlobalsApi {
       doc = "TODO",
       parameters = {
           @Param(
-              name = "url",
+              name = "urls",
+              allowedTypes = {
+                  @ParamType(type = String.class),
+                  @ParamType(type = Iterable.class, generic1 = String.class),
+              },
               doc = "TODO",
               named = true,
               positional = false),
@@ -125,9 +129,16 @@ public interface ModuleFileGlobalsApi {
               named = true,
               positional = false,
               defaultValue = "''"),
-          // TODO: strip_prefix, patch_files, patch_strip
+          @Param(
+              name = "strip_prefix",
+              doc = "TODO",
+              named = true,
+              positional = false,
+              defaultValue = "''"),
+          // TODO: patch_files, patch_strip
       })
-  StarlarkOverrideApi archiveOverride(String url, String integrity);
+  StarlarkOverrideApi archiveOverride(Object urls, String integrity, String stripPrefix)
+      throws ModuleFileFunctionExceptionT;
 
   @StarlarkMethod(
       name = "local_path_override",

@@ -1,5 +1,6 @@
 package com.google.devtools.build.lib.bazel.bzlmod;
 
+import com.google.devtools.build.lib.events.ExtendedEventHandler;
 import com.google.devtools.build.lib.util.Pair;
 import java.util.HashMap;
 import java.util.Map;
@@ -25,13 +26,13 @@ public class FakeRegistry implements Registry {
   }
 
   @Override
-  public Optional<byte[]> getModuleFile(ModuleKey key) {
+  public Optional<byte[]> getModuleFile(ModuleKey key, ExtendedEventHandler eventHandler) {
     return Optional.ofNullable(modules.get(key)).map(Pair::getFirst);
   }
 
   @Override
-  public Optional<Fetcher> getFetcher(ModuleKey key) {
-    return Optional.ofNullable(modules.get(key)).map(Pair::getSecond);
+  public Fetcher getFetcher(ModuleKey key, ExtendedEventHandler eventHandler) {
+    return modules.get(key).getSecond();
   }
 
   public static class Factory implements RegistryFactory {

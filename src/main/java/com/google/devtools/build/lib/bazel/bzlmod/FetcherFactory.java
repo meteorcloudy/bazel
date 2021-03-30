@@ -1,6 +1,8 @@
 package com.google.devtools.build.lib.bazel.bzlmod;
 
+import com.google.common.collect.ImmutableList;
 import com.google.devtools.build.lib.vfs.Path;
+import java.net.URL;
 
 public class FetcherFactory {
 
@@ -10,8 +12,10 @@ public class FetcherFactory {
     this.workspaceRoot = workspaceRoot;
   }
 
-  public EarlyFetcher createArchiveFetcher(String url, String integrity) {
-    return null;
+  public EarlyFetcher createArchiveFetcher(ImmutableList<URL> urls, String integrity,
+      String stripPrefix) {
+    // TODO: add patches
+    return new ArchiveFetcher(urls, integrity, stripPrefix);
   }
 
   public LocalPathFetcher createLocalPathFetcher(String path) {
