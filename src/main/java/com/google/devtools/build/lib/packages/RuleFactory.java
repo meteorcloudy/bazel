@@ -210,7 +210,7 @@ public class RuleFactory {
    * not be constructed. It contains an error message.
    */
   public static class InvalidRuleException extends Exception {
-    private InvalidRuleException(String message) {
+    public InvalidRuleException(String message) {
       super(message);
     }
   }

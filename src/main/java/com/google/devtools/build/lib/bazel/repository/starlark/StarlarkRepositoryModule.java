@@ -27,7 +27,6 @@ import com.google.devtools.build.lib.bazel.bzlmod.BzlmodRepoRuleCreator;
 import com.google.devtools.build.lib.cmdline.Label;
 import com.google.devtools.build.lib.cmdline.LabelSyntaxException;
 import com.google.devtools.build.lib.events.EventHandler;
-import com.google.devtools.build.lib.events.StoredEventHandler;
 import com.google.devtools.build.lib.packages.AttributeValueSource;
 import com.google.devtools.build.lib.packages.BazelModuleContext;
 import com.google.devtools.build.lib.packages.BazelStarlarkContext;
@@ -45,7 +44,7 @@ import com.google.devtools.build.lib.packages.StarlarkExportable;
 import com.google.devtools.build.lib.packages.WorkspaceFactoryHelper;
 import com.google.devtools.build.lib.packages.semantics.BuildLanguageOptions;
 import com.google.devtools.build.lib.starlarkbuildapi.repository.RepositoryModuleApi;
-import java.util.Map;
+
 import net.starlark.java.annot.StarlarkBuiltin;
 import net.starlark.java.eval.Dict;
 import net.starlark.java.eval.EvalException;
@@ -59,6 +58,8 @@ import net.starlark.java.eval.StarlarkThread;
 import net.starlark.java.eval.StarlarkThread.CallStackEntry;
 import net.starlark.java.eval.Tuple;
 import net.starlark.java.syntax.Location;
+
+import java.util.Map;
 
 /**
  * The Starlark module containing the definition of {@code repository_rule} function to define a
@@ -222,16 +223,15 @@ public class StarlarkRepositoryModule implements RepositoryModuleApi {
     }
 
     @Override
-    public Rule createRule(Package.Builder pkg, StarlarkSemantics semantics, Map<String, Object> kwargs)
+    public Rule createRule(Package.Builder pkg, StarlarkSemantics semantics, Map<String, Object> kwargs, EventHandler handler)
         throws InterruptedException, InvalidRuleException {
       RuleClass ruleClass = builder.build(exportedName, exportedName);
       BuildLangTypedAttributeValuesMap attributeValues = new BuildLangTypedAttributeValuesMap(kwargs);
-      StoredEventHandler eventHandler = new StoredEventHandler();
       ImmutableList.Builder<CallStackEntry> callStack = ImmutableList.builder();
       // TODO(pcloudy): Optimize the callstack
       callStack.add(new CallStackEntry("RepositoryRuleFunction.createRule", Location.BUILTIN));
       return RuleFactory.createRule(
-          pkg, ruleClass, attributeValues, eventHandler, semantics, callStack.build());
+          pkg, ruleClass, attributeValues, handler, semantics, callStack.build());
     }
   }
 

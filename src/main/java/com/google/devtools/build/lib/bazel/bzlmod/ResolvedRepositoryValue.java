@@ -53,7 +53,9 @@ public abstract class ResolvedRepositoryValue {
       JsonObject repo = repoElement.getAsJsonObject();
 
       ImmutableMap.Builder<String, Object> attributesBuilder = ImmutableMap.builder();
-      attributesBuilder.put("visibility", ImmutableList.of());
+      if (repo.get("rule_class").getAsString().contains("%")) {
+        attributesBuilder.put("visibility", ImmutableList.of());
+      }
       for (Entry<String, JsonElement> entry : repo.get("attributes").getAsJsonObject().entrySet()) {
         attributesBuilder.put(entry.getKey(), convertToJavaObject(entry.getValue()));
       }
