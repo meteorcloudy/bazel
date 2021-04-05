@@ -8,11 +8,9 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 
-import java.io.FileNotFoundException;
-import java.io.FileReader;
 import java.util.Map.Entry;
 
-public abstract class ResolvedRepositoryValue {
+public abstract class LockFileParser {
   private static Object convertToJavaObject(JsonElement element) {
     if (element.isJsonNull()) {
       return null;
@@ -42,12 +40,11 @@ public abstract class ResolvedRepositoryValue {
     throw new IllegalArgumentException("Wrong element type");
   }
 
-  static ImmutableList<RepositoryInfo> loadRepositoryFromFile(String file)
-      throws FileNotFoundException {
+  static ImmutableMap<String, RepositoryInfo> loadRepositoryInfos(String content) {
     JsonParser parser = new JsonParser();
-    JsonElement json = parser.parse(new FileReader(file));
+    JsonElement json = parser.parse(content);
 
-    ImmutableList.Builder<RepositoryInfo> repositoryInfoList = ImmutableList.builder();
+    ImmutableMap.Builder<String, RepositoryInfo> repositoryInfos = ImmutableMap.builder();
 
     for (JsonElement repoElement: json.getAsJsonObject().get("repositories").getAsJsonArray()) {
       JsonObject repo = repoElement.getAsJsonObject();
@@ -61,7 +58,8 @@ public abstract class ResolvedRepositoryValue {
       }
 
       RepositoryInfo.Builder builder = new Builder();
-      RepositoryInfo repositoryInfo = builder.setName("@" + repo.get("name").getAsString())
+      String name = "@" + repo.get("name").getAsString();
+      RepositoryInfo repositoryInfo = builder.setName(name)
           .setRuleClass(repo.get("rule_class").getAsString())
           .setAttributes(attributesBuilder.build())
           .setRepoDeps((ImmutableList) convertToJavaObject(repo.get("repo_deps")))
@@ -69,9 +67,9 @@ public abstract class ResolvedRepositoryValue {
           .setVendorDir(repo.get("vendor_dir").getAsString())
           .build();
 
-      repositoryInfoList.add(repositoryInfo);
+      repositoryInfos.put(name, repositoryInfo);
     }
 
-    return repositoryInfoList.build();
+    return repositoryInfos.build();
   }
 }

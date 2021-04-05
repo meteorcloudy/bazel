@@ -31,6 +31,10 @@ import com.google.devtools.build.lib.analysis.BlazeDirectories;
 import com.google.devtools.build.lib.analysis.ConfiguredRuleClassProvider;
 import com.google.devtools.build.lib.analysis.ServerDirectories;
 import com.google.devtools.build.lib.bazel.bzlmod.BzlmodRepoRuleValue;
+import com.google.devtools.build.lib.bazel.bzlmod.ResolvedBazelModuleRepositoriesFunction;
+import com.google.devtools.build.lib.bazel.bzlmod.ResolvedBazelModuleRepositoriesValue;
+import com.google.devtools.build.lib.bazel.bzlmod.ResolvedModuleRuleRepositoriesFunction;
+import com.google.devtools.build.lib.bazel.bzlmod.ResolvedModuleRuleRepositoriesValue;
 import com.google.devtools.build.lib.clock.BlazeClock;
 import com.google.devtools.build.lib.cmdline.PackageIdentifier;
 import com.google.devtools.build.lib.concurrent.AbstractQueueVisitor;
@@ -497,6 +501,10 @@ public abstract class AbstractPackageLoader implements PackageLoader {
         .put(
             BzlmodRepoRuleValue.BZLMOD_REPO_RULE,
             new BzlmodRepoRuleFunction(pkgFactory, ruleClassProvider, directories))
+        .put(ResolvedBazelModuleRepositoriesValue.RESOLVED_BAZEL_MODULE_REPOS,
+            new ResolvedBazelModuleRepositoriesFunction())
+        .put(ResolvedModuleRuleRepositoriesValue.RESOLVED_MODULE_RULE_REPOS,
+            new ResolvedModuleRuleRepositoriesFunction())
         .put(SkyFunctions.EXTERNAL_PACKAGE, new ExternalPackageFunction(getExternalPackageHelper()))
         .put(SkyFunctions.REPOSITORY_MAPPING, new RepositoryMappingFunction())
         .put(

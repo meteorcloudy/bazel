@@ -1,25 +1,39 @@
 package com.google.devtools.build.lib.bazel.bzlmod;
 
-import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.devtools.build.lib.concurrent.ThreadSafety.Immutable;
+import com.google.devtools.build.skyframe.SkyFunctionName;
+import com.google.devtools.build.skyframe.SkyKey;
 import com.google.devtools.build.skyframe.SkyValue;
 
-import java.io.FileNotFoundException;
-
 // TODO(pcloudy): implement the actual SkyFunction for this
-public class ResolvedModuleRuleRepositoriesValue extends ResolvedRepositoryValue implements SkyValue {
-  private static ImmutableList<RepositoryInfo> repositories;
+public class ResolvedModuleRuleRepositoriesValue implements SkyValue {
+  public static final SkyFunctionName RESOLVED_MODULE_RULE_REPOS =
+      SkyFunctionName.createHermetic("RESOLVED_MODULE_RULE_REPOS");
 
-  public static ImmutableList<RepositoryInfo> getRepo() {
-    if (repositories != null) {
-      return repositories;
+  @Immutable
+  public static class ResolvedModuleRuleRepositoriesKey implements SkyKey {
+    private static final ResolvedModuleRuleRepositoriesKey KEY = new ResolvedModuleRuleRepositoriesKey();
+
+    private ResolvedModuleRuleRepositoriesKey() {}
+
+    @Override
+    public SkyFunctionName functionName() {
+      return RESOLVED_MODULE_RULE_REPOS;
     }
+  }
 
-    try {
-      repositories = ResolvedRepositoryValue.loadRepositoryFromFile("/Users/pcloudy/workspace/bazel/module_rule_repos.json");
-    } catch (FileNotFoundException e) {
-      e.printStackTrace();
-    }
+  public static ResolvedModuleRuleRepositoriesKey key() {
+    return ResolvedModuleRuleRepositoriesKey.KEY;
+  }
 
-    return repositories;
+  private final ImmutableMap<String, RepositoryInfo> repositories;
+
+  public ResolvedModuleRuleRepositoriesValue(ImmutableMap<String, RepositoryInfo> repositories) {
+    this.repositories = repositories;
+  }
+
+  public RepositoryInfo getRepository(String repositoryName) {
+    return repositories.getOrDefault(repositoryName, null);
   }
 }

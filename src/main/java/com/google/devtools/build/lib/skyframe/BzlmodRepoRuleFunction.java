@@ -67,27 +67,23 @@ public class BzlmodRepoRuleFunction implements SkyFunction {
 
     String repositoryName = ((BzlmodRepoRuleKey) skyKey).getRepositoryName();
     boolean forModuleRuleResolution = ((BzlmodRepoRuleKey) skyKey).isForModuleRuleResolution();
-    RepositoryInfo repositoryInfo = null;
+    RepositoryInfo repositoryInfo;
 
     // Look for repositories derived from native Bazel Modules
-    // TODO(pcloudy): Implement this lookup logic properly after we have the actual resolution
-    //  implemented.
-    for (RepositoryInfo info : ResolvedBazelModuleRepositoriesValue.getRepo()) {
-      if (info.getName().equals(repositoryName)) {
-        repositoryInfo = info;
-      }
+    ResolvedBazelModuleRepositoriesValue bazelModuleRepos = (ResolvedBazelModuleRepositoriesValue) env.getValue(ResolvedBazelModuleRepositoriesValue.key());
+    if (bazelModuleRepos == null) {
+      return null;
     }
+    repositoryInfo = bazelModuleRepos.getRepository(repositoryName);
 
     // Look for repositories derived from module rules if the repo is not requested for module rule
     // resolution.
-    // TODO(pcloudy): Implement this lookup logic properly after we have the actual resolution
-    //  implemented.
     if (repositoryInfo == null && !forModuleRuleResolution) {
-      for (RepositoryInfo info : ResolvedModuleRuleRepositoriesValue.getRepo()) {
-        if (info.getName().equals(repositoryName)) {
-          repositoryInfo = info;
-        }
+      ResolvedModuleRuleRepositoriesValue moduleRuleRepos = (ResolvedModuleRuleRepositoriesValue) env.getValue(ResolvedModuleRuleRepositoriesValue.key());
+      if (moduleRuleRepos == null) {
+        return null;
       }
+      repositoryInfo = moduleRuleRepos.getRepository(repositoryName);
     }
 
     if (repositoryInfo == null) {
