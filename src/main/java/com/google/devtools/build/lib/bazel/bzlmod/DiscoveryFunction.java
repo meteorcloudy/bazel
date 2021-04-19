@@ -48,7 +48,8 @@ public class DiscoveryFunction implements SkyFunction {
     if (env.valuesMissing()) {
       return null;
     }
-    return DiscoveryValue.create(root.getModule().getName(), depGraph, overrides);
+    return DiscoveryValue.create(
+        root.getModule().getName(), ImmutableMap.copyOf(depGraph), overrides);
   }
 
   private static Module rewriteDepKeys(Module module,

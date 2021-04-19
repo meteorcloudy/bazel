@@ -151,6 +151,8 @@ public final class SkyFunctions {
       SkyFunctionName.createHermetic("DISCOVERY");
   public static final SkyFunctionName MODULE_FILE =
       SkyFunctionName.createNonHermetic("MODULE_FILE");
+  public static final SkyFunctionName SELECTION =
+      SkyFunctionName.createHermetic("SELECTION");
 
   public static Predicate<SkyKey> isSkyFunction(final SkyFunctionName functionName) {
     return new Predicate<SkyKey>() {
