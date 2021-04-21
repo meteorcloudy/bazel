@@ -35,20 +35,28 @@ build events will resemble the graph below. The arrows indicate the
 aforementioned parent and child relationship. Note that some build events and
 most fields have been omitted for brevity.
 
-![bep-graph](/assets/bep-graph.svg)
+![bep-graph](/assets/bep-graph.png)
 
 Initially, a `BuildStarted` event is published. The event informs us that the
-build was invoked through the `bazel test` command and it also announces five
-child events: `OptionsParsed`, `WorkspaceStatus`, `CommandLine`,
-`PatternExpanded` and `Progress`. The first three events provide information
-about how Bazel was invoked. The `PatternExpanded` build event provides insight
+build was invoked through the `bazel test` command and announces child events:
+
+* `OptionsParsed`
+* `WorkspaceStatus`
+* `CommandLine`
+* `UnstructuredCommandLine`
+* `BuildMetadata`
+* `BuildFinished`
+* `PatternExpanded`
+* `Progress`
+
+The first three events provide information about how Bazel was invoked.
+
+The `PatternExpanded` build event provides insight
 into which specific targets the `...` pattern expanded to: `//:foo`,
 `//:foo_lib` and `//:foo_test`. It does so by declaring three `TargetConfigured`
-events as children.
-
-Note that the `TargetConfigured` event declares the `Configuration` event as a
-child event, even though `Configuration` has been posted before the
-`TargetConfigured` event.
+events as children. Note that the `TargetConfigured` event declares the
+`Configuration` event as a child event, even though `Configuration` has been
+posted before the `TargetConfigured` event.
 
 Besides the parent and child relationship, events may also refer to each other
 using their build event identifiers. For example, in the above graph the

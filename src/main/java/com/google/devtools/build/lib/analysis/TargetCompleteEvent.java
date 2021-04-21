@@ -66,6 +66,7 @@ import com.google.devtools.build.lib.util.OS;
 import com.google.devtools.build.lib.vfs.Path;
 import com.google.devtools.build.lib.vfs.PathFragment;
 import com.google.devtools.build.skyframe.SkyValue;
+import com.google.protobuf.util.Durations;
 import java.util.Collection;
 import java.util.function.Function;
 import javax.annotation.Nullable;
@@ -188,7 +189,8 @@ public final class TargetCompleteEvent
       AttributeMap attributes =
           ConfiguredAttributeMapper.of(
               (Rule) targetAndData.getTarget(),
-              targetAndData.getConfiguredTarget().getConfigConditions());
+              targetAndData.getConfiguredTarget().getConfigConditions(),
+              configuration.checksum());
       // Every build rule (implicitly) has a "tags" attribute. However other rule configured targets
       // are repository rules (which don't have a tags attribute); morevoer, thanks to the virtual
       // "external" package, they are user visible as targets and can create a completed event as
@@ -434,6 +436,7 @@ public final class TargetCompleteEvent
     builder.addAllOutputGroup(getOutputFilesByGroup(converters.artifactGroupNamer()));
 
     if (isTest) {
+      builder.setTestTimeout(Durations.fromSeconds(testTimeoutSeconds));
       builder.setTestTimeoutSeconds(testTimeoutSeconds);
     }
 

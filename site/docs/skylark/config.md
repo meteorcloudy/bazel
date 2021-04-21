@@ -7,10 +7,9 @@ category: extending
 # Configurations
 
 
-This page covers the benefits and basic usage of Starlark configurations. It
-includes how to define build settings and provides examples.
-
-Starlark configuration is Bazel's API for customizing how your project builds.
+This page covers the benefits and basic usage of Starlark configurations,
+Bazel's API for customizing how your project builds. It includes how to define
+build settings and provides examples.
 
 This makes it possible to:
 
@@ -145,8 +144,8 @@ $ bazel build //my/target --//example:roasts=blonde \
     --//example:roasts=medium,dark
 ```
 
-The above will be parsed to {//example:roasts:["blonde", "medium,dark"]} and
-`ctx.build_setting_value` will return a list ["blonde", "medium,dark"].
+The above is parsed to `{"//example:roasts": ["blonde", "medium,dark"]}` and
+`ctx.build_setting_value` returns the list `["blonde", "medium,dark"]`.
 
 #### Instantiating build settings
 
@@ -198,7 +197,7 @@ string_flag(
 ```
 
 For a complete list, see
-[Common build setting rules](https://github.com/bazelbuild/bazel-skylib/blob/master/rules/common_settings.bzl).
+[Common build setting rules](https://github.com/bazelbuild/bazel-skylib/blob/main/rules/common_settings.bzl).
 
 ### Using build settings
 

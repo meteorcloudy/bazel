@@ -84,6 +84,7 @@ import com.google.devtools.build.lib.events.Event;
 import com.google.devtools.build.lib.events.EventHandler;
 import com.google.devtools.build.lib.events.ExtendedEventHandler;
 import com.google.devtools.build.lib.events.Reporter;
+import com.google.devtools.build.lib.exec.ExecutionOptions;
 import com.google.devtools.build.lib.profiler.Profiler;
 import com.google.devtools.build.lib.profiler.ProfilerTask;
 import com.google.devtools.build.lib.profiler.SilentCloseable;
@@ -215,6 +216,7 @@ public final class SkyframeActionExecutor {
   private boolean useAsyncExecution;
   private boolean hadExecutionError;
   private boolean replayActionOutErr;
+  private boolean freeDiscoveredInputsAfterExecution;
   private MetadataProvider perBuildFileCache;
   private ActionInputPrefetcher actionInputPrefetcher;
   /** These variables are nulled out between executions. */
@@ -227,18 +229,21 @@ public final class SkyframeActionExecutor {
   private final Supplier<ImmutableList<Root>> sourceRootSupplier;
 
   private NestedSetExpander nestedSetExpander;
+  private final PathFragment relativeOutputPath;
 
   SkyframeActionExecutor(
       ActionKeyContext actionKeyContext,
       MetadataConsumerForMetrics outputArtifactsSeen,
       MetadataConsumerForMetrics outputArtifactsFromActionCache,
       AtomicReference<ActionExecutionStatusReporter> statusReporterRef,
-      Supplier<ImmutableList<Root>> sourceRootSupplier) {
+      Supplier<ImmutableList<Root>> sourceRootSupplier,
+      PathFragment relativeOutputPath) {
     this.actionKeyContext = actionKeyContext;
     this.outputArtifactsSeen = outputArtifactsSeen;
     this.outputArtifactsFromActionCache = outputArtifactsFromActionCache;
     this.statusReporterRef = statusReporterRef;
     this.sourceRootSupplier = sourceRootSupplier;
+    this.relativeOutputPath = relativeOutputPath;
   }
 
   SharedActionCallback getSharedActionCallback(
@@ -267,7 +272,8 @@ public final class SkyframeActionExecutor {
       OptionsProvider options,
       ActionCacheChecker actionCacheChecker,
       TopDownActionCache topDownActionCache,
-      OutputService outputService) {
+      OutputService outputService,
+      boolean incrementalAnalysis) {
     this.reporter = Preconditions.checkNotNull(reporter);
     this.executorEngine = Preconditions.checkNotNull(executor);
     this.progressSuppressingEventHandler = new ProgressSuppressingEventHandler(reporter);
@@ -292,6 +298,11 @@ public final class SkyframeActionExecutor {
             .concurrencyLevel(Runtime.getRuntime().availableProcessors())
             .build();
     this.knownDirectories = cache.asMap();
+
+    // Retaining discovered inputs is only worthwhile for incremental builds or builds with extra
+    // actions, which consume their shadowed action's discovered inputs.
+    freeDiscoveredInputsAfterExecution =
+        !incrementalAnalysis && options.getOptions(CoreOptions.class).actionListeners.isEmpty();
   }
 
   public void setActionLogBufferPathGenerator(
@@ -314,8 +325,11 @@ public final class SkyframeActionExecutor {
     return executorEngine.getExecRoot();
   }
 
-  boolean useArchivedTreeArtifacts() {
-    return options.getOptions(CoreOptions.class).sendArchivedTreeArtifactInputs;
+  boolean useArchivedTreeArtifacts(ActionAnalysisMetadata action) {
+    return options
+        .getOptions(ExecutionOptions.class)
+        .archivedArtifactsMnemonicsFilter
+        .test(action.getMnemonic());
   }
 
   boolean publishTargetSummaries() {
@@ -987,7 +1001,8 @@ public final class SkyframeActionExecutor {
               action.prepare(
                   actionExecutionContext.getExecRoot(),
                   actionExecutionContext.getPathResolver(),
-                  outputService != null ? outputService.bulkDeleter() : null);
+                  outputService != null ? outputService.bulkDeleter() : null,
+                  useArchivedTreeArtifacts(action) ? relativeOutputPath : null);
             } catch (IOException e) {
               logger.atWarning().withCause(e).log(
                   "failed to delete output files before executing action: '%s'", action);
@@ -1131,7 +1146,7 @@ public final class SkyframeActionExecutor {
           actionExecutionValue =
               actuallyCompleteAction(eventHandler, nextActionContinuationOrResult.get());
         }
-        return new ActionCacheWriteStep(actionExecutionValue);
+        return new ActionPostprocessingStep(actionExecutionValue);
       } catch (ActionExecutionException e) {
         return ActionStepOrResult.of(e);
       } finally {
@@ -1274,11 +1289,14 @@ public final class SkyframeActionExecutor {
       }
     }
 
-    /** A closure to post-process the action and write the result to the action cache. */
-    private class ActionCacheWriteStep extends ActionStep {
+    /**
+     * A closure to post-process the executed action, doing work like updating cached state with any
+     * newly discovered inputs, and writing the result to the action cache.
+     */
+    private class ActionPostprocessingStep extends ActionStep {
       private final ActionExecutionValue value;
 
-      public ActionCacheWriteStep(ActionExecutionValue value) {
+      public ActionPostprocessingStep(ActionExecutionValue value) {
         this.value = value;
       }
 
@@ -1293,6 +1311,11 @@ public final class SkyframeActionExecutor {
           return ActionStepOrResult.of(e);
         } catch (ActionExecutionException e) {
           return ActionStepOrResult.of(e);
+        }
+
+        // Once the action has been written to the action cache, we can free its discovered inputs.
+        if (freeDiscoveredInputsAfterExecution && action.discoversInputs()) {
+          action.resetDiscoveredInputs();
         }
         return ActionStepOrResult.of(value);
       }

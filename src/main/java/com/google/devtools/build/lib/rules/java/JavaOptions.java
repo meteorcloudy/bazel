@@ -30,7 +30,6 @@ import com.google.devtools.common.options.Option;
 import com.google.devtools.common.options.OptionDocumentationCategory;
 import com.google.devtools.common.options.OptionEffectTag;
 import com.google.devtools.common.options.OptionMetadataTag;
-import com.google.devtools.common.options.TriState;
 import java.util.List;
 import java.util.Map;
 
@@ -427,25 +426,6 @@ public class JavaOptions extends FragmentOptions {
               + " *.pgcfg file extension.")
   public boolean enforceProguardFileExtension;
 
-  @Option(
-      name = "translations",
-      defaultValue = "auto",
-      documentationCategory = OptionDocumentationCategory.UNCATEGORIZED,
-      effectTags = {OptionEffectTag.UNKNOWN},
-      help =
-          "Translate Java messages; bundle all translations into the jar "
-              + "for each affected rule.")
-  public TriState bundleTranslations;
-
-  @Option(
-      name = "message_translations",
-      defaultValue = "null",
-      allowMultiple = true,
-      documentationCategory = OptionDocumentationCategory.UNCATEGORIZED,
-      effectTags = {OptionEffectTag.UNKNOWN},
-      help = "The message translations used for translating messages in Java targets.")
-  public List<String> translationTargets;
-
   @Deprecated
   @Option(
       name = "check_constraint",
@@ -650,6 +630,7 @@ public class JavaOptions extends FragmentOptions {
       help = "The Java language version used to execute the tools that are needed during a build")
   public String hostJavaLanguageVersion;
 
+  // TODO(b/180107817): delete flag after removing from global .blazerc
   @Option(
       name = "incompatible_dont_collect_so_artifacts",
       defaultValue = "false",
@@ -659,10 +640,16 @@ public class JavaOptions extends FragmentOptions {
         OptionMetadataTag.INCOMPATIBLE_CHANGE,
         OptionMetadataTag.TRIGGERED_BY_ALL_INCOMPATIBLE_CHANGES
       },
-      help =
-          "Disables collection of .so libraries as artifact (produced by filegroup or genrule); "
-              + " depend on cc_binary or cc_library directly.")
+      help = "This flag is a noop and scheduled for removal.")
   public boolean dontCollectSoArtifacts;
+
+  @Option(
+      name = "experimental_publish_javacclinkparamsinfo",
+      defaultValue = "true",
+      documentationCategory = OptionDocumentationCategory.UNDOCUMENTED,
+      effectTags = {OptionEffectTag.UNKNOWN},
+      help = "If enabled, JavaCcLinkParamsInfo is published as part of JavaInfo.")
+  public boolean experimentalPublishJavaCcLinkParamsInfo;
 
   Label defaultJavaBase() {
     return Label.parseAbsoluteUnchecked(DEFAULT_JAVABASE);
@@ -745,8 +732,8 @@ public class JavaOptions extends FragmentOptions {
     host.experimentalTurbineAnnotationProcessing = experimentalTurbineAnnotationProcessing;
 
     host.dontCollectSoArtifacts = dontCollectSoArtifacts;
+    host.experimentalPublishJavaCcLinkParamsInfo = experimentalPublishJavaCcLinkParamsInfo;
 
     return host;
   }
-
 }

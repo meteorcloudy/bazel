@@ -84,10 +84,7 @@ import org.junit.runners.JUnit4;
 public class StarlarkCcCommonTest extends BuildViewTestCase {
 
   @Before
-  public void setBuildLanguageOptions() throws Exception {
-    this.setBuildLanguageOptions(StarlarkCcCommonTestHelper.CC_STARLARK_WHITELIST_FLAG);
-    invalidatePackages();
-
+  public void setUp() throws Exception {
     scratch.file("myinfo/myinfo.bzl", "MyInfo = provider()");
 
     scratch.file("myinfo/BUILD");
@@ -7302,22 +7299,36 @@ public class StarlarkCcCommonTest extends BuildViewTestCase {
   }
 
   @Test
-  public void testDisallowedCcNativeLibraryRaisesError() throws Exception {
+  public void ccInfoLibraryInfo_cannotBeRetrievedIfNotAllowListed() throws Exception {
     scratch.file(
-        "b/BUILD", "load('//b:rule.bzl', 'test_rule')", "test_rule(", "  name = 'test',", ")");
+        "b/BUILD",
+        "load('//b:rule.bzl', 'test_rule')",
+        "test_rule(",
+        "  name = 'test',",
+        "  cc_dep = ':foo',",
+        ")",
+        "cc_library(",
+        "  name = 'foo',",
+        "  srcs = ['foo.cc'],",
+        ")");
     scratch.file(
         "b/rule.bzl",
         "def _impl(ctx):",
-        "  cc_common.get_CcNativeLibraryProvider()",
+        "  ctx.attr.cc_dep[CcInfo].library_info()",
         "  return DefaultInfo()",
-        "test_rule = rule(implementation = _impl)");
+        "test_rule = rule(",
+        "  implementation = _impl,",
+        "  attrs = {",
+        "    'cc_dep': attr.label(),",
+        "    },",
+        ")");
 
     AssertionError e = assertThrows(AssertionError.class, () -> getConfiguredTarget("//b:test"));
     assertThat(e).hasMessageThat().contains("Rule in 'b' cannot use private API");
   }
 
   @Test
-  public void testAllowedCcNativeLibraryProviderIsUsable() throws Exception {
+  public void ccInfoLibraryInfo_canBeRetrievedWhenInAllowList() throws Exception {
     scratch.file(
         "b/BUILD",
         "load('//bazel_internal/test_rules/cc:rule.bzl', 'test_rule')",
@@ -7333,8 +7344,7 @@ public class StarlarkCcCommonTest extends BuildViewTestCase {
     scratch.file(
         "bazel_internal/test_rules/cc/rule.bzl",
         "def _impl(ctx):",
-        "  CcNativeLibraryProvider = cc_common.get_CcNativeLibraryProvider()",
-        "  libs = ctx.attr.cc_dep[CcNativeLibraryProvider].libs",
+        "  libs = ctx.attr.cc_dep[CcInfo].library_info().libs",
         "  files = []",
         "  for l in libs.to_list():",
         "    files.append(l.dynamic_library)",
@@ -7357,6 +7367,53 @@ public class StarlarkCcCommonTest extends BuildViewTestCase {
             test.get(DefaultInfo.PROVIDER).getDefaultRunfiles().getAllArtifacts().toList().stream()
                 .map(Artifact::getFilename))
         .containsExactly("libfoo.a");
+  }
+
+  @Test
+  public void ccInfoLibraryInfo_severalLibrariesAreMerged() throws Exception {
+    scratch.file(
+        "b/BUILD",
+        "load('//bazel_internal/test_rules/cc:rule.bzl', 'test_rule')",
+        "test_rule(",
+        "  name = 'test',",
+        "  cc_dep = ':foo',",
+        ")",
+        "cc_library(",
+        "  name = 'foo',",
+        "  srcs = ['foo.cc'],",
+        "  deps = [':bar'],",
+        ")",
+        "cc_library(",
+        "  name = 'bar',",
+        "  srcs = ['bar.cc'],",
+        ")");
+    scratch.file("bazel_internal/test_rules/cc/BUILD");
+    scratch.file(
+        "bazel_internal/test_rules/cc/rule.bzl",
+        "def _impl(ctx):",
+        "  libs = ctx.attr.cc_dep[CcInfo].library_info().libs",
+        "  files = []",
+        "  for l in libs.to_list():",
+        "    files.append(l.dynamic_library)",
+        "    files.append(l.interface_library)",
+        "    files.append(l.static_library)",
+        "    files.append(l.pic_static_library)",
+        "  files = [f for f in files if f != None]",
+        "  runfiles = ctx.runfiles(files=files)",
+        "  return [DefaultInfo(runfiles=runfiles)]",
+        "test_rule = rule(",
+        "  implementation = _impl,",
+        "  attrs = {",
+        "    'cc_dep': attr.label(),",
+        "    },",
+        ")");
+
+    ConfiguredTarget test = getConfiguredTarget("//b:test");
+
+    assertThat(
+            test.get(DefaultInfo.PROVIDER).getDefaultRunfiles().getAllArtifacts().toList().stream()
+                .map(Artifact::getFilename))
+        .containsExactly("libfoo.a", "libbar.a");
   }
 
   @Test

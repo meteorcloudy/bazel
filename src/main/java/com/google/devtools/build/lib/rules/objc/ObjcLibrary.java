@@ -32,6 +32,7 @@ import com.google.devtools.build.lib.rules.cpp.CcInfo;
 import com.google.devtools.build.lib.rules.cpp.CcLinkingContext;
 import com.google.devtools.build.lib.rules.cpp.CcLinkingContext.LinkOptions;
 import com.google.devtools.build.lib.rules.cpp.CcLinkingContext.LinkerInput;
+import com.google.devtools.build.lib.rules.cpp.CppSemantics;
 import com.google.devtools.build.lib.rules.cpp.LibraryToLink;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +43,11 @@ import java.util.TreeMap;
  * Implementation for {@code objc_library}.
  */
 public class ObjcLibrary implements RuleConfiguredTargetFactory {
+  private final CppSemantics cppSemantics;
+
+  protected ObjcLibrary(CppSemantics cppSemantics) {
+    this.cppSemantics = cppSemantics;
+  }
 
   /**
    * Constructs an {@link ObjcCommon} instance based on the attributes of the given rule context.
@@ -72,17 +78,13 @@ public class ObjcLibrary implements RuleConfiguredTargetFactory {
     Map<String, NestedSet<Artifact>> outputGroupCollector = new TreeMap<>();
     ImmutableList.Builder<Artifact> objectFilesCollector = ImmutableList.builder();
     CompilationSupport compilationSupport =
-        new CompilationSupport.Builder()
-            .setRuleContext(ruleContext)
+        new CompilationSupport.Builder(ruleContext, cppSemantics)
             .setOutputGroupCollector(outputGroupCollector)
             .setObjectFilesCollector(objectFilesCollector)
             .build();
 
     compilationSupport
         .registerCompileAndArchiveActions(common)
-        .registerFullyLinkAction(
-            common.getObjcProvider(),
-            ruleContext.getImplicitOutputArtifact(CompilationSupport.FULLY_LINKED_LIB))
         .validateAttributes();
 
     J2ObjcMappingFileProvider j2ObjcMappingFileProvider =

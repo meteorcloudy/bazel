@@ -352,14 +352,6 @@ public class Package {
   }
 
   /**
-   * Sets the default 'applicable_licenses" value for this package attribute when not explicitly
-   * specified by the rule.
-   */
-  private void setDefaultApplicableLicenses(Set<Label> licenses) {
-    defaultApplicableLicenses = licenses;
-  }
-
-  /**
    * Sets the default value to use for a rule's {@link RuleClass#COMPATIBLE_ENVIRONMENT_ATTR}
    * attribute when not explicitly specified by the rule.
    */
@@ -466,6 +458,7 @@ public class Package {
     this.starlarkFileDependencies = builder.starlarkFileDependencies;
     this.defaultLicense = builder.defaultLicense;
     this.defaultDistributionSet = builder.defaultDistributionSet;
+    this.defaultApplicableLicenses = ImmutableSortedSet.copyOf(builder.defaultApplicableLicenses);
     this.features = ImmutableSortedSet.copyOf(builder.features);
     this.registeredExecutionPlatforms = ImmutableList.copyOf(builder.registeredExecutionPlatforms);
     this.registeredToolchains = ImmutableList.copyOf(builder.registeredToolchains);
@@ -936,7 +929,7 @@ public class Package {
     private final Package pkg;
 
     private final boolean noImplicitFileExport;
-    private final CallStack.Builder callStackBuilder = new CallStack.Builder();
+    private final CallStack.Factory callStackFactory = new CallStack.Factory();
 
     // The map from each repository to that repository's remappings map.
     // This is only used in the //external package, it is an empty map for all other packages.
@@ -1014,6 +1007,9 @@ public class Package {
 
     private ImmutableMap<Location, String> generatorMap = ImmutableMap.of();
 
+    private final TestSuiteImplicitTestsAccumulator testSuiteImplicitTestsAccumulator =
+        new TestSuiteImplicitTestsAccumulator();
+
     /** Returns the "generator_name" to use for a given call site location in a BUILD file. */
     @Nullable
     public String getGeneratorNameByLocation(Location loc) {
@@ -1026,10 +1022,20 @@ public class Package {
       return this;
     }
 
-    // Value of '$implicit_tests' attribute shared by all test_suite rules in the
-    // package that don't specify an explicit 'tests' attribute value.
-    // It contains the label of each non-manual test in the package, in label order.
-    final List<Label> testSuiteImplicitTests = new ArrayList<>();
+    /**
+     * Returns the value to use for {@code test_suite}s' {@code $implicit_tests} attribute, as-is,
+     * when the {@code test_suite} doesn't specify an explicit, non-empty {@code tests} value. The
+     * returned list is mutated by the package-building process - it may be observed to be empty or
+     * incomplete before package loading is complete. When package loading is complete it will
+     * contain the label of each non-manual test matching the provided tags in the package, in label
+     * order.
+     *
+     * <p>This method <b>MUST</b> be called before the package is built - otherwise the requested
+     * implicit tests won't be accumulated.
+     */
+    List<Label> getTestSuiteImplicitTestsRef(List<String> tags) {
+      return testSuiteImplicitTestsAccumulator.getTestSuiteImplicitTestsRefForTags(tags);
+    }
 
     @ThreadCompatible
     private static class ThreadCompatibleInterner<T> implements Interner<T> {
@@ -1356,7 +1362,7 @@ public class Package {
           licenses, "package " + pkg.getName(), attrName, location, this::addEvent)) {
         setContainsErrors();
       }
-      pkg.setDefaultApplicableLicenses(ImmutableSet.copyOf(licenses));
+      this.defaultApplicableLicenses = ImmutableList.copyOf(licenses);
     }
 
     ImmutableList<Label> getDefaultApplicableLicenses() {
@@ -1429,7 +1435,12 @@ public class Package {
         List<StarlarkThread.CallStackEntry> callstack,
         AttributeContainer attributeContainer) { // required by WorkspaceFactory.setParent hack
       return new Rule(
-          pkg, label, ruleClass, location, callStackBuilder.of(callstack), attributeContainer);
+          pkg,
+          label,
+          ruleClass,
+          location,
+          callStackFactory.createFrom(callstack),
+          attributeContainer);
     }
 
     /**
@@ -1449,7 +1460,7 @@ public class Package {
           label,
           ruleClass,
           location,
-          callStackBuilder.of(callstack),
+          callStackFactory.createFrom(callstack),
           AttributeContainer.newMutableInstance(ruleClass),
           implicitOutputsFunction);
     }
@@ -1699,7 +1710,10 @@ public class Package {
       // current instance here.
       buildFile = (InputFile) Preconditions.checkNotNull(targets.get(buildFileLabel.getName()));
 
-      List<Label> tests = new ArrayList<>();
+      // Clear tests before discovering them again in order to keep this method idempotent -
+      // otherwise we may double-count tests if we're called twice due to a skyframe restart, etc.
+      testSuiteImplicitTestsAccumulator.clearAccumulatedTests();
+
       Map<String, InputFile> newInputFiles = new HashMap<>();
       for (final Rule rule : getRules()) {
         if (discoverAssumedInputFiles) {
@@ -1722,21 +1736,11 @@ public class Package {
           }
         }
 
-        // "test_suite" rules have the idiosyncratic semantics of implicitly
-        // depending on all tests in the package, iff tests=[] and suites=[],
-        // which is about 20% of >1M test_suite instances in Google's corpus.
-        // Note, we implement this here when the Package is fully constructed,
-        // since clearly this information isn't available at Rule construction
-        // time, as forward references are permitted.
-        if (TargetUtils.isTestRule(rule) && !TargetUtils.hasManualTag(rule)) {
-          // Update the testSuiteImplicitTests list shared
-          // by all test_suite.$implicit_test attributes.
-          tests.add(rule.getLabel());
-        }
+        testSuiteImplicitTestsAccumulator.processRule(rule);
       }
 
-      Collections.sort(tests); // (for determinism)
-      this.testSuiteImplicitTests.addAll(tests);
+      // Make sure all accumulated values are sorted for determinism.
+      testSuiteImplicitTestsAccumulator.sortTests();
 
       for (InputFile file : newInputFiles.values()) {
         addInputFile(file);

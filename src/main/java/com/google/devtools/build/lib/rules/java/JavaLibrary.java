@@ -28,7 +28,7 @@ import com.google.devtools.build.lib.collect.nestedset.NestedSetBuilder;
 import com.google.devtools.build.lib.collect.nestedset.Order;
 import com.google.devtools.build.lib.rules.cpp.LibraryToLink;
 import com.google.devtools.build.lib.rules.java.JavaCompilationArgsProvider.ClasspathType;
-import com.google.devtools.build.lib.rules.java.JavaRuleOutputJarsProvider.OutputJar;
+import com.google.devtools.build.lib.rules.java.JavaRuleOutputJarsProvider.JavaOutput;
 import com.google.devtools.build.lib.rules.java.proto.GeneratedExtensionRegistryProvider;
 
 /** Implementation for the java_library rule. */
@@ -82,8 +82,7 @@ public class JavaLibrary implements RuleConfiguredTargetFactory {
 
     JavaTargetAttributes attributes = attributesBuilder.build();
     if (attributes.hasMessages()) {
-      helper.setTranslations(
-          semantics.translate(ruleContext, javaConfig, attributes.getMessages()));
+      helper.setTranslations(semantics.translate(ruleContext, attributes.getMessages()));
     }
 
     ruleContext.checkSrcsSamePackage(true);
@@ -117,17 +116,9 @@ public class JavaLibrary implements RuleConfiguredTargetFactory {
     if (attributes.hasSources() && jar != null) {
       iJar = helper.createCompileTimeJarAction(jar, javaArtifactsBuilder);
     }
-    JavaCompilationArtifacts javaArtifacts = javaArtifactsBuilder.build();
 
     JavaRuleOutputJarsProvider.Builder ruleOutputJarsProviderBuilder =
-        JavaRuleOutputJarsProvider.builder()
-            .addOutputJar(
-                OutputJar.builder()
-                    .fromJavaCompileOutputs(outputs)
-                    .setCompileJar(iJar)
-                    .setCompileJdeps(javaArtifacts.getCompileTimeDependencyArtifact())
-                    .addSourceJar(srcJar)
-                    .build());
+        JavaRuleOutputJarsProvider.builder();
 
     GeneratedExtensionRegistryProvider generatedExtensionRegistryProvider = null;
     if (includeGeneratedExtensionRegistry) {
@@ -142,6 +133,15 @@ public class JavaLibrary implements RuleConfiguredTargetFactory {
     }
 
     boolean neverLink = JavaCommon.isNeverLink(ruleContext);
+    JavaCompilationArtifacts javaArtifacts = javaArtifactsBuilder.build();
+
+    ruleOutputJarsProviderBuilder.addJavaOutput(
+        JavaOutput.builder()
+            .fromJavaCompileOutputs(outputs)
+            .setCompileJar(iJar)
+            .setCompileJdeps(javaArtifacts.getCompileTimeDependencyArtifact())
+            .addSourceJar(srcJar)
+            .build());
 
     common.setJavaCompilationArtifacts(javaArtifacts);
     common.setClassPathFragment(
@@ -155,7 +155,6 @@ public class JavaLibrary implements RuleConfiguredTargetFactory {
 
     RuleConfiguredTargetBuilder builder = new RuleConfiguredTargetBuilder(ruleContext);
 
-    semantics.addProviders(ruleContext, common, outputs.genSource(), builder);
     if (generatedExtensionRegistryProvider != null) {
       builder.addNativeDeclaredProvider(generatedExtensionRegistryProvider);
     }

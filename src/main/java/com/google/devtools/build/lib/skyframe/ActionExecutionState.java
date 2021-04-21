@@ -137,6 +137,10 @@ final class ActionExecutionState {
       throws ActionExecutionException, InterruptedException {
     ActionStepOrResult original;
     synchronized (this) {
+      if (state == Obsolete.INSTANCE) {
+        scheduleRestart(env);
+        return null;
+      }
       original = state;
     }
     ActionStepOrResult current = original;
@@ -165,11 +169,13 @@ final class ActionExecutionState {
       }
     } finally {
       synchronized (this) {
-        Preconditions.checkState(state == original, "Another thread modified state");
-        state = current;
-        if (current.isDone() && completionFuture != null) {
-          completionFuture.set(null);
-          completionFuture = null;
+        if (state != Obsolete.INSTANCE) {
+          Preconditions.checkState(state == original, "Another thread illegally modified state");
+          state = current;
+          if (current.isDone() && completionFuture != null) {
+            completionFuture.set(null);
+            completionFuture = null;
+          }
         }
       }
     }

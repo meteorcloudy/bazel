@@ -32,7 +32,7 @@ import com.google.devtools.build.lib.collect.nestedset.NestedSet;
 import com.google.devtools.build.lib.collect.nestedset.NestedSetBuilder;
 import com.google.devtools.build.lib.collect.nestedset.Order;
 import com.google.devtools.build.lib.rules.cpp.LibraryToLink;
-import com.google.devtools.build.lib.rules.java.JavaRuleOutputJarsProvider.OutputJar;
+import com.google.devtools.build.lib.rules.java.JavaRuleOutputJarsProvider.JavaOutput;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -110,15 +110,14 @@ public class JavaImport implements RuleConfiguredTargetFactory {
 
     ImmutableBiMap<Artifact, Artifact> compilationToRuntimeJarMap =
         compilationToRuntimeJarMapBuilder.build();
-    semantics.addProviders(ruleContext, common, /* gensrcJar= */ null, ruleBuilder);
 
     NestedSet<Artifact> filesToBuild = filesBuilder.build();
 
     JavaRuleOutputJarsProvider.Builder ruleOutputJarsProviderBuilder =
         JavaRuleOutputJarsProvider.builder();
     for (Artifact jar : jars) {
-      ruleOutputJarsProviderBuilder.addOutputJar(
-          OutputJar.builder()
+      ruleOutputJarsProviderBuilder.addJavaOutput(
+          JavaOutput.builder()
               .setClassJar(jar)
               .setCompileJar(compilationToRuntimeJarMap.inverse().get(jar))
               .addSourceJar(srcJar)

@@ -755,7 +755,7 @@ function test_aspect_analysis_failure_no_target_summary() {
   expect_log_once '^completed '  # target completes due to -k
   # One "aborted" for failed aspect analysis, another for target_summary_id
   # announced by "completed" event asserted above
-  expect_log_n '^aborted ' 2
+  expect_log_n 'aborted' 2
   expect_not_log '^target_summary '  # no summary due to analysis failure
 }
 
@@ -907,13 +907,18 @@ function test_root_cause_before_target_summary() {
 
 function test_action_conf() {
   # Verify that the expected configurations for actions are reported.
-  # The example contains a configuration transition (from building for
-  # target to building for host). As the action fails, we expect the
-  # configuration of the action to be reported as well.
-  (bazel build --build_event_text_file=$TEST_log \
+  # Expect the following configurations:
+  # 1. The top-level target configuration
+  # 2. Host configuration (since example contains transition to host).
+  # 3. Trimmed top-level target configuration (since non-test rule).
+  # As the action fails, we expect the configuration of the action to be
+  # reported as well.
+  # TODO(blaze-configurability-team): remove explicit trim_test_configuration
+  # once it is (very soon) default true.
+  (bazel build --trim_test_configuration --build_event_text_file=$TEST_log \
          -k failingtool/... && fail "build failure expected") || true
   count=`grep '^configuration' "${TEST_log}" | wc -l`
-  [ "${count}" -eq 2 ] || fail "Expected 2 configurations, found $count."
+  [ "${count}" -eq 3 ] || fail "Expected 3 configurations, found $count."
 }
 
 function test_loading_failure() {
@@ -1058,7 +1063,7 @@ function test_test_fails_to_build() {
   (bazel test --experimental_bep_target_summary \
          --build_event_text_file=$TEST_log \
          pkg:test_that_fails_to_build && fail "test failure expected") || true
-  expect_not_log '^test_summary'
+  expect_not_log 'test_summary'  # no test_summary events or references to them
   expect_log_once '^target_summary '
   expect_not_log 'overall_build_success'
   expect_log 'last_message: true'

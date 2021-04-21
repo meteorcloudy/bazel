@@ -15,9 +15,11 @@ package com.google.devtools.build.lib.rules.java;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
+import static com.google.common.truth.Truth8.assertThat;
 import static com.google.devtools.build.lib.actions.util.ActionsTestUtil.prettyArtifactNames;
 import static org.junit.Assert.assertThrows;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.devtools.build.lib.actions.Action;
@@ -32,7 +34,8 @@ import com.google.devtools.build.lib.collect.nestedset.NestedSet;
 import com.google.devtools.build.lib.packages.Provider;
 import com.google.devtools.build.lib.packages.StarlarkProvider;
 import com.google.devtools.build.lib.packages.StructImpl;
-import com.google.devtools.build.lib.rules.java.JavaRuleOutputJarsProvider.OutputJar;
+import com.google.devtools.build.lib.rules.cpp.LibraryToLink;
+import com.google.devtools.build.lib.rules.java.JavaRuleOutputJarsProvider.JavaOutput;
 import com.google.devtools.build.lib.testutil.TestConstants;
 import com.google.devtools.build.lib.util.FileType;
 import java.util.ArrayList;
@@ -286,13 +289,13 @@ public class JavaStarlarkApiTest extends BuildViewTestCase {
         .containsExactly("libdep.jar");
     assertThat(artifactFilesNames(sourceJars)).containsExactly("libdep-src.jar");
 
-    assertThat(outputs.getOutputJars()).hasSize(1);
-    OutputJar output = outputs.getOutputJars().get(0);
-    assertThat(output.getClassJar().getFilename()).isEqualTo("libdep.jar");
-    assertThat(output.getCompileJar().getFilename()).isEqualTo("libdep-hjar.jar");
-    assertThat(artifactFilesNames(output.getSourceJars())).containsExactly("libdep-src.jar");
-    assertThat(output.getJdeps().getFilename()).isEqualTo("libdep.jdeps");
-    assertThat(output.getCompileJdeps().getFilename()).isEqualTo("libdep-hjar.jdeps");
+    assertThat(outputs.getJavaOutputs()).hasSize(1);
+    JavaOutput javaOutput = outputs.getJavaOutputs().get(0);
+    assertThat(javaOutput.getClassJar().getFilename()).isEqualTo("libdep.jar");
+    assertThat(javaOutput.getCompileJar().getFilename()).isEqualTo("libdep-hjar.jar");
+    assertThat(artifactFilesNames(javaOutput.getSourceJars())).containsExactly("libdep-src.jar");
+    assertThat(javaOutput.getJdeps().getFilename()).isEqualTo("libdep.jdeps");
+    assertThat(javaOutput.getCompileJdeps().getFilename()).isEqualTo("libdep-hjar.jdeps");
   }
 
   @Test
@@ -397,16 +400,17 @@ public class JavaStarlarkApiTest extends BuildViewTestCase {
                     Label.parseAbsolute("//java/test:extension.bzl", ImmutableMap.of()), "result"));
 
     JavaRuleOutputJarsProvider outputs = ((JavaRuleOutputJarsProvider) info.getValue("outputs"));
-    assertThat(outputs.getOutputJars()).hasSize(1);
+    assertThat(outputs.getJavaOutputs()).hasSize(1);
 
-    OutputJar outputJar = outputs.getOutputJars().get(0);
-    assertThat(outputJar.getClassJar().getFilename()).isEqualTo("libdep.jar");
-    assertThat(outputJar.getCompileJar().getFilename()).isEqualTo("libdep-hjar.jar");
-    assertThat(prettyArtifactNames(outputJar.getSourceJars()))
+    JavaOutput javaOutput = outputs.getJavaOutputs().get(0);
+    assertThat(javaOutput.getClassJar().getFilename()).isEqualTo("libdep.jar");
+    assertThat(javaOutput.getCompileJar().getFilename()).isEqualTo("libdep-hjar.jar");
+    assertThat(prettyArtifactNames(javaOutput.getSourceJars()))
         .containsExactly("java/test/libdep-src.jar");
-    assertThat(outputJar.getJdeps().getFilename()).isEqualTo("libdep.jdeps");
-    assertThat(outputJar.getNativeHeadersJar().getFilename()).isEqualTo("libdep-native-header.jar");
-    assertThat(outputJar.getCompileJdeps().getFilename()).isEqualTo("libdep-hjar.jdeps");
+    assertThat(javaOutput.getJdeps().getFilename()).isEqualTo("libdep.jdeps");
+    assertThat(javaOutput.getNativeHeadersJar().getFilename())
+        .isEqualTo("libdep-native-header.jar");
+    assertThat(javaOutput.getCompileJdeps().getFilename()).isEqualTo("libdep-hjar.jdeps");
   }
 
   @Test
@@ -767,14 +771,14 @@ public class JavaStarlarkApiTest extends BuildViewTestCase {
     JavaInfo info = configuredTarget.get(JavaInfo.PROVIDER);
     Sequence<Artifact> sourceJars = info.getSourceJars();
     assertThat(artifactFilesNames(sourceJars)).containsExactly("libcustom-src.jar");
-    JavaRuleOutputJarsProvider outputJars = info.getOutputJars();
-    assertThat(outputJars.getOutputJars()).hasSize(1);
-    OutputJar outputJar = outputJars.getOutputJars().get(0);
-    assertThat(outputJar.getClassJar().getFilename()).isEqualTo("libcustom.jar");
-    assertThat(outputJar.getSrcJar().getFilename()).isEqualTo("libcustom-src.jar");
-    assertThat(outputJar.getCompileJar().getFilename()).isEqualTo("libcustom-hjar.jar");
-    assertThat(outputJar.getJdeps().getFilename()).isEqualTo("libcustom.jdeps");
-    assertThat(outputJar.getCompileJdeps().getFilename()).isEqualTo("libcustom-hjar.jdeps");
+    ImmutableList<JavaOutput> javaOutputs = info.getJavaOutputs();
+    assertThat(javaOutputs).hasSize(1);
+    JavaOutput javaOutput = javaOutputs.get(0);
+    assertThat(javaOutput.getClassJar().getFilename()).isEqualTo("libcustom.jar");
+    assertThat(javaOutput.getSrcJar().getFilename()).isEqualTo("libcustom-src.jar");
+    assertThat(javaOutput.getCompileJar().getFilename()).isEqualTo("libcustom-hjar.jar");
+    assertThat(javaOutput.getJdeps().getFilename()).isEqualTo("libcustom.jdeps");
+    assertThat(javaOutput.getCompileJdeps().getFilename()).isEqualTo("libcustom-hjar.jdeps");
   }
 
   @Test
@@ -816,11 +820,11 @@ public class JavaStarlarkApiTest extends BuildViewTestCase {
     JavaInfo info = configuredTarget.get(JavaInfo.PROVIDER);
     Sequence<Artifact> sourceJars = info.getSourceJars();
     assertThat(artifactFilesNames(sourceJars)).containsExactly("libcustom-src.jar");
-    JavaRuleOutputJarsProvider outputJars = info.getOutputJars();
-    assertThat(outputJars.getOutputJars()).hasSize(1);
-    OutputJar outputJar = outputJars.getOutputJars().get(0);
-    assertThat(outputJar.getClassJar().getFilename()).isEqualTo("libcustom.jar");
-    assertThat(outputJar.getSrcJar().getFilename()).isEqualTo("libcustom-src.jar");
+    ImmutableList<JavaOutput> javaOutputs = info.getJavaOutputs();
+    assertThat(javaOutputs).hasSize(1);
+    JavaOutput javaOutput = javaOutputs.get(0);
+    assertThat(javaOutput.getClassJar().getFilename()).isEqualTo("libcustom.jar");
+    assertThat(javaOutput.getSrcJar().getFilename()).isEqualTo("libcustom-src.jar");
   }
 
   @Test
@@ -867,14 +871,14 @@ public class JavaStarlarkApiTest extends BuildViewTestCase {
     JavaInfo info = configuredTarget.get(JavaInfo.PROVIDER);
     Sequence<Artifact> sourceJars = info.getSourceJars();
     assertThat(artifactFilesNames(sourceJars)).containsExactly("libcustom-mysrc.jar");
-    JavaRuleOutputJarsProvider outputJars = info.getOutputJars();
-    assertThat(outputJars.getOutputJars()).hasSize(1);
-    OutputJar outputJar = outputJars.getOutputJars().get(0);
-    assertThat(outputJar.getClassJar().getFilename()).isEqualTo("libcustom.jar");
-    assertThat(outputJar.getSrcJar().getFilename()).isEqualTo("libcustom-mysrc.jar");
-    assertThat(outputJar.getCompileJar().getFilename()).isEqualTo("libcustom-hjar.jar");
-    assertThat(outputJar.getJdeps().getFilename()).isEqualTo("libcustom.jdeps");
-    assertThat(outputJar.getCompileJdeps().getFilename()).isEqualTo("libcustom-hjar.jdeps");
+    ImmutableList<JavaOutput> javaOutputs = info.getJavaOutputs();
+    assertThat(javaOutputs).hasSize(1);
+    JavaOutput javaOutput = javaOutputs.get(0);
+    assertThat(javaOutput.getClassJar().getFilename()).isEqualTo("libcustom.jar");
+    assertThat(javaOutput.getSrcJar().getFilename()).isEqualTo("libcustom-mysrc.jar");
+    assertThat(javaOutput.getCompileJar().getFilename()).isEqualTo("libcustom-hjar.jar");
+    assertThat(javaOutput.getJdeps().getFilename()).isEqualTo("libcustom.jdeps");
+    assertThat(javaOutput.getCompileJdeps().getFilename()).isEqualTo("libcustom-hjar.jdeps");
   }
 
   @Test
@@ -1265,18 +1269,33 @@ public class JavaStarlarkApiTest extends BuildViewTestCase {
         "def _exports_impl(ctx):",
         "  f = make_file(ctx)",
         "  return JavaInfo(output_jar=f, compile_jar=f, exports=[f])",
+        "def _nativelibs_impl(ctx):",
+        "  f = make_file(ctx)",
+        "  return JavaInfo(output_jar=f, compile_jar=f, native_libraries=[f])",
         "bad_deps = rule(_deps_impl)",
         "bad_runtime_deps = rule(_runtime_deps_impl)",
-        "bad_exports = rule(_exports_impl)");
+        "bad_exports = rule(_exports_impl)",
+        "bad_libs = rule(_nativelibs_impl)");
     scratch.file(
         "foo/BUILD",
-        "load(':bad_rules.bzl', 'bad_deps', 'bad_runtime_deps', 'bad_exports')",
+        "load(':bad_rules.bzl', 'bad_deps', 'bad_runtime_deps', 'bad_exports', 'bad_libs')",
         "bad_deps(name='bad_deps')",
         "bad_runtime_deps(name='bad_runtime_deps')",
-        "bad_exports(name='bad_exports')");
-    checkError("//foo:bad_deps", "Expected 'sequence of JavaInfo'");
-    checkError("//foo:bad_runtime_deps", "Expected 'sequence of JavaInfo'");
-    checkError("//foo:bad_exports", "Expected 'sequence of JavaInfo'");
+        "bad_exports(name='bad_exports')",
+        "bad_libs(name='bad_libs')");
+
+    checkError(
+        "//foo:bad_deps",
+        "Error in JavaInfo: at index 0 of deps, got element of type File, want JavaInfo");
+    checkError(
+        "//foo:bad_runtime_deps",
+        "Error in JavaInfo: at index 0 of runtime_deps, got element of type File, want JavaInfo");
+    checkError(
+        "//foo:bad_exports",
+        "Error in JavaInfo: at index 0 of exports, got element of type File, want JavaInfo");
+    checkError(
+        "//foo:bad_libs",
+        "Error in JavaInfo: at index 0 of native_libraries, got element of type File, want CcInfo");
   }
 
   @Test
@@ -1497,6 +1516,176 @@ public class JavaStarlarkApiTest extends BuildViewTestCase {
         .containsExactly(Label.parseAbsolute("//foo:my_java_lib_b", ImmutableMap.of()));
   }
 
+  /** Tests that JavaInfo provides information about transitive native libraries in Starlark. */
+  @Test
+  public void javaInfo_getTransitiveNativeLibraries() throws Exception {
+    scratch.file(
+        "foo/extension.bzl",
+        "result = provider()",
+        "def _impl(ctx):",
+        "  return [result(property = ctx.attr.dep[JavaInfo].transitive_native_libraries)]",
+        "my_rule = rule(_impl, attrs = { 'dep' : attr.label() })");
+
+    scratch.file(
+        "foo/BUILD",
+        "load(':extension.bzl', 'my_rule')",
+        "cc_library(name = 'my_cc_lib_c.so', srcs = ['cc/c.cc'])",
+        "cc_library(name = 'my_cc_lib_b.so', srcs = ['cc/b.cc'])",
+        "cc_library(name = 'my_cc_lib_a.so', srcs = ['cc/a.cc'])",
+        "java_library(name = 'my_java_lib_c', srcs = ['java/C.java'], deps = ['my_cc_lib_c.so'])",
+        "java_library(name = 'my_java_lib_b', srcs = ['java/B.java'], deps = ['my_cc_lib_b.so'])",
+        "java_library(name = 'my_java_lib_a', srcs = ['java/A.java'], ",
+        "             deps = [':my_java_lib_b', ':my_java_lib_c', 'my_cc_lib_a.so'])",
+        "my_rule(name = 'my_starlark_rule', dep = ':my_java_lib_a')");
+    assertNoEvents();
+    ConfiguredTarget myRuleTarget = getConfiguredTarget("//foo:my_starlark_rule");
+    StructImpl info =
+        (StructImpl)
+            myRuleTarget.get(
+                new StarlarkProvider.Key(
+                    Label.parseAbsolute("//foo:extension.bzl", ImmutableMap.of()), "result"));
+
+    Depset nativeLibs = (Depset) info.getValue("property");
+
+    assertThat(
+            nativeLibs.getSet(LibraryToLink.class).toList().stream()
+                .map(LibraryToLink::getLibraryIdentifier))
+        .containsExactly("foo/libmy_cc_lib_a.so", "foo/libmy_cc_lib_b.so", "foo/libmy_cc_lib_c.so")
+        .inOrder();
+  }
+
+  /**
+   * Tests that java_library propagates direct native library information from JavaInfo provider.
+   */
+  @Test
+  public void javaLibrary_propagatesDirectNativeLibrariesInJavaInfo() throws Exception {
+    scratch.file(
+        "foo/extension.bzl",
+        "def _impl(ctx):",
+        "  dep_params = ctx.attr.dep[JavaInfo]",
+        "  cc_dep_params = ctx.attr.cc_dep[CcInfo]",
+        "  java_info = JavaInfo(output_jar = dep_params.java_outputs[0].class_jar,",
+        "    compile_jar = None,",
+        "    native_libraries = [cc_dep_params])",
+        "  return [java_common.merge([dep_params, java_info])]",
+        "my_rule = rule(_impl, attrs = { 'dep': attr.label(), 'cc_dep': attr.label() })");
+    scratch.file(
+        "foo/BUILD",
+        "load(':extension.bzl', 'my_rule')",
+        "cc_library(name = 'native', srcs = ['cc/x.cc'])",
+        "java_library(name = 'jl', srcs = ['java/A.java'], data = [':native'])",
+        "cc_library(name = 'ccl', srcs = ['cc/x.cc'])",
+        "my_rule(name = 'r', dep = ':jl', cc_dep = ':ccl')",
+        "java_library(name = 'jl_top', srcs = ['java/C.java'], deps = [':r'])");
+
+    ConfiguredTarget topJavaLibrary = getConfiguredTarget("//foo:jl_top");
+
+    NestedSet<LibraryToLink> librariesForTopTarget =
+        topJavaLibrary.get(JavaInfo.PROVIDER).getTransitiveNativeLibraries();
+    assertThat(librariesForTopTarget.toList().stream().map(LibraryToLink::getLibraryIdentifier))
+        .containsExactly("foo/libnative", "foo/libccl")
+        .inOrder();
+  }
+
+  /** Tests that java_library exposes native library info to Starlark. */
+  @Test
+  public void javaLibrary_exposesNativeLibraryInfoToStarlark() throws Exception {
+    scratch.file(
+        "foo/extension.bzl",
+        "my_provider = provider()",
+        "def _impl(ctx):",
+        "  dep_params = ctx.attr.dep[JavaInfo].transitive_native_libraries",
+        "  return [my_provider(p = dep_params)]",
+        "my_rule = rule(_impl, attrs = { 'dep' : attr.label() })");
+    scratch.file(
+        "foo/BUILD",
+        "load(':extension.bzl', 'my_rule')",
+        "cc_binary(name = 'native.so', srcs = ['cc/x.cc'], linkshared = True)",
+        "java_library(name = 'jl', srcs = ['java/A.java'], data = [':native.so'])",
+        "my_rule(name = 'r', dep = ':jl')");
+
+    ConfiguredTarget myRuleTarget = getConfiguredTarget("//foo:r");
+    ConfiguredTarget javaLibraryTarget = getConfiguredTarget("//foo:jl");
+
+    JavaInfo javaInfo = javaLibraryTarget.get(JavaInfo.PROVIDER);
+    StarlarkProvider.Key myProviderKey =
+        new StarlarkProvider.Key(
+            Label.parseAbsolute("//foo:extension.bzl", ImmutableMap.of()), "my_provider");
+    StructImpl declaredProvider = (StructImpl) myRuleTarget.get(myProviderKey);
+    Object nativeLibrariesFromStarlark = declaredProvider.getValue("p");
+    assertThat(nativeLibrariesFromStarlark)
+        .isEqualTo(javaInfo.getTransitiveNativeLibrariesForStarlark());
+    assertThat(
+            javaInfo
+                .getTransitiveNativeLibraries()
+                .getSingleton()
+                .getDynamicLibrary()
+                .getFilename())
+        .isEqualTo("native.so");
+  }
+
+  /** Tests that JavaInfo propagates native libraries from deps, runtime_deps, and exports. */
+  @Test
+  public void javaInfo_nativeLibrariesPropagate() throws Exception {
+    JavaToolchainTestUtil.writeBuildFileForJavaToolchain(scratch);
+    scratch.file(
+        "java/test/BUILD",
+        "load(':custom_rule.bzl', 'java_custom_library')",
+        "java_custom_library(",
+        "  name = 'custom',",
+        "  srcs = ['A.java'],",
+        "  deps = [':lib_deps'],",
+        "  runtime_deps = [':lib_runtime_deps'],",
+        "  exports = [':lib_exports'],",
+        ")",
+        "java_library(name = 'lib_deps', srcs = ['B.java'], deps = [':native_deps1.so'])",
+        "cc_library(name = 'native_deps1.so', srcs = ['a.cc'])",
+        "java_library(name = 'lib_runtime_deps', srcs = ['C.java'], deps = [':native_rdeps1.so'])",
+        "cc_library(name = 'native_rdeps1.so', srcs = ['c.cc'])",
+        "java_library(name = 'lib_exports', srcs = ['D.java'], deps = [':native_exports1.so'])",
+        "cc_library(name = 'native_exports1.so', srcs = ['e.cc'])");
+    scratch.file(
+        "java/test/custom_rule.bzl",
+        "def _impl(ctx):",
+        "  output_jar = ctx.actions.declare_file('lib' + ctx.label.name + '.jar')",
+        "  ctx.actions.write(output_jar, '')",
+        "  compilation_provider = JavaInfo(",
+        "    output_jar = output_jar,",
+        "    compile_jar = None,",
+        "    deps = [dep[JavaInfo] for dep in ctx.attr.deps if JavaInfo in dep],",
+        "    runtime_deps = [dep[JavaInfo] for dep in ctx.attr.runtime_deps if JavaInfo in dep],",
+        "    exports = [dep[JavaInfo] for dep in ctx.attr.exports if JavaInfo in dep],",
+        "  )",
+        "  return [",
+        "      compilation_provider",
+        "  ]",
+        "java_custom_library = rule(",
+        "  implementation = _impl,",
+        "  outputs = {",
+        "    'my_output': 'lib%{name}.jar'",
+        "  },",
+        "  attrs = {",
+        "    'srcs': attr.label_list(allow_files=True),",
+        "    'deps': attr.label_list(),",
+        "    'runtime_deps': attr.label_list(),",
+        "    'exports': attr.label_list(),",
+        "    '_java_toolchain': attr.label(default = Label('//java/com/google/test:toolchain')),",
+        "  },",
+        "  fragments = ['java']",
+        ")");
+
+    ConfiguredTarget configuredTarget = getConfiguredTarget("//java/test:custom");
+
+    JavaInfo info = configuredTarget.get(JavaInfo.PROVIDER);
+    NestedSet<LibraryToLink> nativeLibraries = info.getTransitiveNativeLibraries();
+    assertThat(nativeLibraries.toList().stream().map(LibraryToLink::getLibraryIdentifier))
+        .containsExactly(
+            "java/test/libnative_rdeps1.so",
+            "java/test/libnative_exports1.so",
+            "java/test/libnative_deps1.so")
+        .inOrder();
+  }
+
   private void writeJavaCustomLibraryWithLabels(String path) throws Exception {
     scratch.file(
         path,
@@ -1707,6 +1896,126 @@ public class JavaStarlarkApiTest extends BuildViewTestCase {
                 FileType.filter(
                     getRunfilesSupport(target).getRunfilesSymlinkTargets(), JavaSemantics.JAR)))
         .isEqualTo("plugin.jar libsomedep.jar");
+  }
+
+  /**
+   * Tests that java_common.compile propagates native libraries from deps, runtime_deps, and
+   * exports.
+   */
+  @Test
+  public void javaCommonCompile_nativeLibrariesPropagate() throws Exception {
+    JavaToolchainTestUtil.writeBuildFileForJavaToolchain(scratch);
+    scratch.file(
+        "java/test/BUILD",
+        "load(':custom_rule.bzl', 'java_custom_library')",
+        "java_custom_library(",
+        "  name = 'custom',",
+        "  srcs = ['A.java'],",
+        "  deps = [':lib_deps'],",
+        "  runtime_deps = [':lib_runtime_deps'],",
+        "  exports = [':lib_exports'],",
+        ")",
+        "java_library(name = 'lib_deps', srcs = ['B.java'], deps = [':native_deps1.so'])",
+        "cc_library(name = 'native_deps1.so', srcs = ['a.cc'])",
+        "java_library(name = 'lib_runtime_deps', srcs = ['C.java'], deps = [':native_rdeps1.so'])",
+        "cc_library(name = 'native_rdeps1.so', srcs = ['c.cc'])",
+        "java_library(name = 'lib_exports', srcs = ['D.java'], deps = [':native_exports1.so'])",
+        "cc_library(name = 'native_exports1.so', srcs = ['e.cc'])");
+    scratch.file(
+        "java/test/custom_rule.bzl",
+        "def _impl(ctx):",
+        "  output_jar = ctx.actions.declare_file('lib' + ctx.label.name + '.jar')",
+        "  compilation_provider = java_common.compile(",
+        "    ctx,",
+        "    source_files = ctx.files.srcs,",
+        "    output = output_jar,",
+        "    deps = [dep[JavaInfo] for dep in ctx.attr.deps if JavaInfo in dep],",
+        "    runtime_deps = [dep[JavaInfo] for dep in ctx.attr.runtime_deps if JavaInfo in dep],",
+        "    exports = [dep[JavaInfo] for dep in ctx.attr.exports if JavaInfo in dep],",
+        "    java_toolchain = ctx.attr._java_toolchain[java_common.JavaToolchainInfo],",
+        "  )",
+        "  return [",
+        "      compilation_provider",
+        "  ]",
+        "java_custom_library = rule(",
+        "  implementation = _impl,",
+        "  outputs = {",
+        "    'my_output': 'lib%{name}.jar'",
+        "  },",
+        "  attrs = {",
+        "    'srcs': attr.label_list(allow_files=True),",
+        "    'deps': attr.label_list(),",
+        "    'runtime_deps': attr.label_list(),",
+        "    'exports': attr.label_list(),",
+        "    '_java_toolchain': attr.label(default = Label('//java/com/google/test:toolchain')),",
+        "  },",
+        "  fragments = ['java']",
+        ")");
+
+    ConfiguredTarget configuredTarget = getConfiguredTarget("//java/test:custom");
+
+    JavaInfo info = configuredTarget.get(JavaInfo.PROVIDER);
+    NestedSet<LibraryToLink> nativeLibraries = info.getTransitiveNativeLibraries();
+    assertThat(nativeLibraries.toList().stream().map(LibraryToLink::getLibraryIdentifier))
+        .containsExactly(
+            "java/test/libnative_rdeps1.so",
+            "java/test/libnative_exports1.so",
+            "java/test/libnative_deps1.so")
+        .inOrder();
+  }
+
+  /**
+   * Tests that java_common.compile propagates native libraries passed by native_libraries argument.
+   */
+  @Test
+  public void javaCommonCompile_directNativeLibraries() throws Exception {
+    JavaToolchainTestUtil.writeBuildFileForJavaToolchain(scratch);
+    scratch.file(
+        "java/test/BUILD",
+        "load(':custom_rule.bzl', 'java_custom_library')",
+        "java_custom_library(",
+        "  name = 'custom',",
+        "  srcs = ['A.java'],",
+        "  ccdeps = [':native.so'],",
+        ")",
+        "cc_library(",
+        "  name = 'native.so',",
+        "  srcs = ['a.cc'],",
+        ")");
+    scratch.file(
+        "java/test/custom_rule.bzl",
+        "def _impl(ctx):",
+        "  output_jar = ctx.actions.declare_file('lib' + ctx.label.name + '.jar')",
+        "  compilation_provider = java_common.compile(",
+        "    ctx,",
+        "    source_files = ctx.files.srcs,",
+        "    output = output_jar,",
+        "    native_libraries = [dep[CcInfo] for dep in ctx.attr.ccdeps if CcInfo in dep],",
+        "    java_toolchain = ctx.attr._java_toolchain[java_common.JavaToolchainInfo],",
+        "  )",
+        "  return [",
+        "      compilation_provider",
+        "  ]",
+        "java_custom_library = rule(",
+        "  implementation = _impl,",
+        "  outputs = {",
+        "    'my_output': 'lib%{name}.jar'",
+        "  },",
+        "  attrs = {",
+        "    'srcs': attr.label_list(allow_files=True),",
+        "    'ccdeps': attr.label_list(),",
+        "    '_java_toolchain': attr.label(default = Label('//java/com/google/test:toolchain')),",
+        "  },",
+        "  fragments = ['java']",
+        ")");
+
+    ConfiguredTarget configuredTarget = getConfiguredTarget("//java/test:custom");
+
+    JavaInfo info = configuredTarget.get(JavaInfo.PROVIDER);
+    NestedSet<LibraryToLink> nativeLibraries = info.getTransitiveNativeLibraries();
+    assertThat(nativeLibraries.toList().stream().map(LibraryToLink::getLibraryIdentifier))
+        .containsExactly("java/test/libnative.so")
+        .inOrder();
   }
 
   @Test
@@ -2031,9 +2340,9 @@ public class JavaStarlarkApiTest extends BuildViewTestCase {
 
     ConfiguredTarget configuredTarget = getConfiguredTarget("//foo:b");
     JavaInfo info = configuredTarget.get(JavaInfo.PROVIDER);
-    JavaRuleOutputJarsProvider outputs = info.getOutputJars();
-    assertThat(outputs.getOutputJars()).hasSize(1);
-    OutputJar output = outputs.getOutputJars().get(0);
+    ImmutableList<JavaOutput> javaOutputs = info.getJavaOutputs();
+    assertThat(javaOutputs).hasSize(1);
+    JavaOutput output = javaOutputs.get(0);
     assertThat(output.getManifestProto().getFilename()).isEqualTo("libb.jar_manifest_proto");
   }
 
@@ -2115,9 +2424,9 @@ public class JavaStarlarkApiTest extends BuildViewTestCase {
         .containsExactly("libb.jar");
     assertThat(artifactFilesNames(info.getTransitiveCompileTimeJars().toList(Artifact.class)))
         .containsExactly("libb-hjar.jar");
-    JavaRuleOutputJarsProvider outputs = info.getOutputJars();
-    assertThat(outputs.getOutputJars()).hasSize(1);
-    OutputJar output = outputs.getOutputJars().get(0);
+    ImmutableList<JavaOutput> javaOutputs = info.getJavaOutputs();
+    assertThat(javaOutputs).hasSize(1);
+    JavaOutput output = javaOutputs.get(0);
     assertThat(output.getClassJar().getFilename()).isEqualTo("libc.jar");
     assertThat(output.getCompileJar()).isNull();
   }

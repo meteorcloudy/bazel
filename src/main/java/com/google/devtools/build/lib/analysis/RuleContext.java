@@ -679,7 +679,7 @@ public final class RuleContext extends TargetContext
   }
 
   @Override
-  public void registerAction(ActionAnalysisMetadata... action) {
+  public void registerAction(ActionAnalysisMetadata action) {
     getAnalysisEnvironment().registerAction(action);
   }
 
@@ -1109,9 +1109,11 @@ public final class RuleContext extends TargetContext
     }
 
     List<ConfiguredTargetAndData> prerequisiteConfiguredTargets;
-    // android_binary and android_test override deps to use a split transition.
+    // android_binary, android_test, and android_binary_internal override deps to use a split
+    // transition.
     if ((getRule().getRuleClass().equals("android_binary")
-            || getRule().getRuleClass().equals("android_test"))
+            || getRule().getRuleClass().equals("android_test")
+            || getRule().getRuleClass().equals("android_binary_internal"))
         && attributeName.equals("deps")
         && attributes().getAttributeDefinition(attributeName).getTransitionFactory().isSplit()) {
       // TODO(b/168038145): Restore legacy behavior of returning the prerequisites from the first
@@ -1913,7 +1915,8 @@ public final class RuleContext extends TargetContext
       Preconditions.checkNotNull(visibility);
       Preconditions.checkNotNull(constraintSemantics);
       AttributeMap attributes =
-          ConfiguredAttributeMapper.of(target.getAssociatedRule(), configConditions.asProviders());
+          ConfiguredAttributeMapper.of(
+              target.getAssociatedRule(), configConditions.asProviders(), configuration.checksum());
       checkAttributesNonEmpty(attributes);
       ListMultimap<String, ConfiguredTargetAndData> targetMap = createTargetMap();
       // This conditionally checks visibility on config_setting rules based on
@@ -2126,8 +2129,9 @@ public final class RuleContext extends TargetContext
           ctMap.put(
               AliasProvider.getDependencyLabel(prerequisite.getConfiguredTarget()), prerequisite);
         }
-        List<FilesetEntry> entries = ConfiguredAttributeMapper.of(rule, configConditions)
-            .get(attributeName, BuildType.FILESET_ENTRY_LIST);
+        List<FilesetEntry> entries =
+            ConfiguredAttributeMapper.of(rule, configConditions, configuration.checksum())
+                .get(attributeName, BuildType.FILESET_ENTRY_LIST);
         for (FilesetEntry entry : entries) {
           if (entry.getFiles() == null) {
             Label label = entry.getSrcLabel();
