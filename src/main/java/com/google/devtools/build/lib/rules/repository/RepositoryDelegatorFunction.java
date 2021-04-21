@@ -25,6 +25,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Ordering;
 import com.google.devtools.build.lib.actions.FileValue;
 import com.google.devtools.build.lib.analysis.BlazeDirectories;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue;
 import com.google.devtools.build.lib.cmdline.RepositoryName;
 import com.google.devtools.build.lib.events.Event;
 import com.google.devtools.build.lib.events.ExtendedEventHandler.FetchProgress;
@@ -34,6 +35,7 @@ import com.google.devtools.build.lib.repository.ExternalPackageException;
 import com.google.devtools.build.lib.repository.ExternalPackageHelper;
 import com.google.devtools.build.lib.repository.ExternalRuleNotFoundException;
 import com.google.devtools.build.lib.repository.RepositoryFailedEvent;
+import com.google.devtools.build.lib.rules.repository.RepositoryDirectoryValue.KeyForModuleRule;
 import com.google.devtools.build.lib.rules.repository.RepositoryFunction.AlreadyReportedRepositoryAccessException;
 import com.google.devtools.build.lib.rules.repository.RepositoryFunction.RepositoryFunctionException;
 import com.google.devtools.build.lib.skyframe.ManagedDirectoriesKnowledge;
@@ -47,6 +49,7 @@ import com.google.devtools.build.skyframe.SkyFunction;
 import com.google.devtools.build.skyframe.SkyFunctionException.Transience;
 import com.google.devtools.build.skyframe.SkyKey;
 import com.google.devtools.build.skyframe.SkyValue;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -58,6 +61,7 @@ import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+
 import javax.annotation.Nullable;
 
 /**
@@ -204,14 +208,25 @@ public final class RepositoryDelegatorFunction implements SkyFunction {
           overrides.get(repositoryName), env, repoRoot, repositoryName.strippedName());
     }
 
+    Optional<Rule> ruleFromBzlmod = getRepositoryForBzlmod(skyKey, env);
+
+    if (ruleFromBzlmod == null) {
+      return null;
+    }
+
     Rule rule;
-    try {
-      rule = getRepository(repositoryName, env);
-      if (rule == null) {
-        return null;
+    if (ruleFromBzlmod.isPresent()) {
+      rule = ruleFromBzlmod.get();
+    } else {
+      // fallback to look up the repository in WORKSPACE file.
+      try {
+        rule = getRepository(repositoryName, env);
+        if (rule == null) {
+          return null;
+        }
+      } catch (NoSuchRepositoryException e) {
+        return RepositoryDirectoryValue.NO_SUCH_REPOSITORY_VALUE;
       }
-    } catch (NoSuchRepositoryException e) {
-      return RepositoryDirectoryValue.NO_SUCH_REPOSITORY_VALUE;
     }
 
     RepositoryFunction handler = getHandler(rule);
@@ -368,6 +383,31 @@ public final class RepositoryDelegatorFunction implements SkyFunction {
     }
     env.getListener().post(new RepositoryFetching(repositoryName, true));
     return Preconditions.checkNotNull(repoBuilder);
+  }
+
+  /**
+   * Try to get a repository rule instance from bzlmod generated repos.
+   * @return Return null if required SkyValue is missing,
+   *         return Optional.empty() if the repository name is not found,
+   *         return Optional.of(rule) if the rule instance is generated.
+   */
+  public static Optional<Rule> getRepositoryForBzlmod(SkyKey skyKey, Environment env)
+      throws InterruptedException {
+    RepositoryName repositoryName = (RepositoryName) skyKey.argument();
+    boolean forModuleRuleResolve = skyKey instanceof KeyForModuleRule;
+
+    SkyKey repoInfoKey = BzlmodRepoRuleValue.key(repositoryName.getName(), forModuleRuleResolve);
+    BzlmodRepoRuleValue value = (BzlmodRepoRuleValue) env.getValue(repoInfoKey);
+
+    if (value == null) {
+      return null;
+    }
+
+    if (value == BzlmodRepoRuleValue.REPO_RULE_NOT_FOUND_VALUE) {
+      return Optional.empty();
+    }
+
+    return Optional.of(value.getRule());
   }
 
   /**

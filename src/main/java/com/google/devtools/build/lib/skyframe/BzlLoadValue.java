@@ -315,6 +315,57 @@ public class BzlLoadValue implements SkyValue {
     }
   }
 
+  /**
+   * A key for loading a .bzl to get the repo rule required by Bzlmod generated repositories.
+   */
+  @Immutable
+  @AutoCodec.VisibleForSerialization
+  static final class KeyForBzlmod extends Key {
+
+    private final Label label;
+
+    private KeyForBzlmod(Label label) {
+      this.label = Preconditions.checkNotNull(label);
+    }
+
+    @Override
+    Label getLabel() {
+      return label;
+    }
+
+    @Override
+    Key getKeyForLoad(Label loadLabel) {
+      return keyForBzlmod(loadLabel);
+    }
+
+    @Override
+    BzlCompileValue.Key getCompileKey(Root root) {
+      return BzlCompileValue.key(root, label);
+    }
+
+    @Override
+    public String toString() {
+      return label + " (in Bzlmod lock file)";
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (this == obj) {
+        return true;
+      }
+      if (!(obj instanceof KeyForBzlmod)) {
+        return false;
+      }
+      KeyForBzlmod other = (KeyForBzlmod) obj;
+      return label.equals(other.label);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(KeyForBzlmod.class, label);
+    }
+  }
+
   /** Constructs a key for loading a regular (non-workspace) .bzl file, from the .bzl's label. */
   static Key keyForBuild(Label label) {
     return keyInterner.intern(new KeyForBuild(label, /*isBuildPrelude=*/ false));
@@ -340,5 +391,10 @@ public class BzlLoadValue implements SkyValue {
   /** Constructs a key for loading the special prelude .bzl. */
   static Key keyForBuildPrelude(Label label) {
     return keyInterner.intern(new KeyForBuild(label, /*isBuildPrelude=*/ true));
+  }
+
+  /** Constructs a key for loading a .bzl for bzlmod repos */
+  static Key keyForBzlmod(Label label) {
+    return keyInterner.intern(new KeyForBzlmod(label));
   }
 }

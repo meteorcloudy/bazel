@@ -100,6 +100,11 @@ import com.google.devtools.build.lib.analysis.config.transitions.NullTransition;
 import com.google.devtools.build.lib.analysis.configuredtargets.MergedConfiguredTarget;
 import com.google.devtools.build.lib.analysis.starlark.StarlarkTransition;
 import com.google.devtools.build.lib.analysis.starlark.StarlarkTransition.TransitionException;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.BazelModuleRepoInfoFunction;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.BazelModuleRepoInfoValue;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.ModuleRuleRepoInfoFunction;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.ModuleRuleRepoInfoValue;
 import com.google.devtools.build.lib.buildtool.BuildRequestOptions;
 import com.google.devtools.build.lib.cmdline.Label;
 import com.google.devtools.build.lib.cmdline.PackageIdentifier;
@@ -595,6 +600,12 @@ public abstract class SkyframeExecutor implements WalkableGraphFactory, Configur
             pkgFactory,
             directories,
             bzlLoadFunctionForInliningPackageAndWorkspaceNodes));
+    map.put(BzlmodRepoRuleValue.BZLMOD_REPO_RULE,
+        new BzlmodRepoRuleFunction(pkgFactory, ruleClassProvider, directories));
+    map.put(BazelModuleRepoInfoValue.BAZEL_MODULE_REPO_INFO,
+        new BazelModuleRepoInfoFunction());
+    map.put(ModuleRuleRepoInfoValue.MODULE_RULE_REPO_INFO,
+        new ModuleRuleRepoInfoFunction());
     map.put(SkyFunctions.EXTERNAL_PACKAGE, new ExternalPackageFunction(externalPackageHelper));
     map.put(
         SkyFunctions.TARGET_COMPLETION,

@@ -74,7 +74,7 @@ public class RuleFactory {
    * <p>It is the caller's responsibility to add the rule to the package (the caller may choose not
    * to do so if, for example, the rule has errors).
    */
-  static Rule createRule(
+  public static Rule createRule(
       Package.Builder pkgBuilder,
       RuleClass ruleClass,
       BuildLangTypedAttributeValuesMap attributeValues,
@@ -210,7 +210,7 @@ public class RuleFactory {
    * not be constructed. It contains an error message.
    */
   public static class InvalidRuleException extends Exception {
-    private InvalidRuleException(String message) {
+    public InvalidRuleException(String message) {
       super(message);
     }
   }
