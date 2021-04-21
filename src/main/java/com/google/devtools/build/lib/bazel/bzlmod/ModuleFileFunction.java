@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.devtools.build.lib.actions.FileValue;
 import com.google.devtools.build.lib.events.Event;
+import com.google.devtools.build.lib.events.ExtendedEventHandler;
 import com.google.devtools.build.lib.packages.NoSuchThingException;
 import com.google.devtools.build.lib.skyframe.PrecomputedValue;
 import com.google.devtools.build.lib.skyframe.PrecomputedValue.Precomputed;
@@ -19,6 +20,8 @@ import com.google.devtools.build.skyframe.SkyFunctionException;
 import com.google.devtools.build.skyframe.SkyKey;
 import com.google.devtools.build.skyframe.SkyValue;
 import java.io.IOException;
+import java.net.URISyntaxException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -186,9 +189,19 @@ public class ModuleFileFunction implements SkyFunction {
     } else if (override != null) {
       throw errorf("unrecognized override type %s", override.getClass().getName());
     }
-    return getModuleFileFromRegistries(key,
-        registries.stream().map(registryFactory::getRegistryWithUrl)
-            .collect(ImmutableList.toImmutableList()));
+    ImmutableList.Builder<Registry> registryObjects = new ImmutableList.Builder<>();
+    for (String registryUrl : registries) {
+      try {
+        registryObjects.add(registryFactory.getRegistryWithUrl(registryUrl));
+      } catch (URISyntaxException e) {
+        throw new ModuleFileFunctionException(e);
+      }
+    }
+    try {
+      return getModuleFileFromRegistries(key, registryObjects.build(), env.getListener());
+    } catch (IOException e) {
+      throw new ModuleFileFunctionException(e);
+    }
   }
 
   private static byte[] readFile(Path path) throws ModuleFileFunctionException {
@@ -200,12 +213,12 @@ public class ModuleFileFunction implements SkyFunction {
     }
   }
 
-  @VisibleForTesting
-  static Optional<GetModuleFileResult> getModuleFileFromRegistries(ModuleKey key,
-      List<Registry> registries) {
+  private static Optional<GetModuleFileResult> getModuleFileFromRegistries(ModuleKey key,
+      List<Registry> registries, ExtendedEventHandler eventHandler)
+      throws IOException, InterruptedException {
     GetModuleFileResult result = new GetModuleFileResult();
     for (Registry registry : registries) {
-      Optional<byte[]> moduleFile = registry.getModuleFile(key);
+      Optional<byte[]> moduleFile = registry.getModuleFile(key, eventHandler);
       if (!moduleFile.isPresent()) {
         continue;
       }
@@ -232,7 +245,7 @@ public class ModuleFileFunction implements SkyFunction {
     return new ModuleFileFunctionException(new NoSuchThingException(String.format(format, args)));
   }
 
-  private static final class ModuleFileFunctionException extends SkyFunctionException {
+  static final class ModuleFileFunctionException extends SkyFunctionException {
 
     ModuleFileFunctionException(Exception cause) {
       super(cause, Transience.TRANSIENT);

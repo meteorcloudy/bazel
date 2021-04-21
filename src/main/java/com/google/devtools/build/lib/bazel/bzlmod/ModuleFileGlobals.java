@@ -1,8 +1,12 @@
 package com.google.devtools.build.lib.bazel.bzlmod;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.devtools.build.lib.bazel.bzlmod.ModuleFileFunction.ModuleFileFunctionException;
 import com.google.devtools.build.lib.starlarkbuildapi.repository.ModuleFileGlobalsApi;
 import com.google.devtools.build.lib.starlarkbuildapi.repository.StarlarkOverrideApi;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -55,8 +59,21 @@ public class ModuleFileGlobals implements ModuleFileGlobalsApi {
   }
 
   @Override
-  public StarlarkOverrideApi archiveOverride(String url, String integrity) {
-    return ArchiveOverride.create(url, integrity);
+  public StarlarkOverrideApi archiveOverride(Object urls, String integrity,
+      String stripPrefix) throws ModuleFileFunctionException {
+    ImmutableList.Builder<URL> urlList = new ImmutableList.Builder<>();
+    try {
+      if (urls instanceof String) {
+        urlList.add(new URL((String) urls));
+      } else {
+        for (String urlString : (Iterable<String>) urls) {
+          urlList.add(new URL(urlString));
+        }
+      }
+    } catch (MalformedURLException e) {
+      throw new ModuleFileFunctionException(e);
+    }
+    return ArchiveOverride.create(urlList.build(), integrity, stripPrefix);
   }
 
   @Override
