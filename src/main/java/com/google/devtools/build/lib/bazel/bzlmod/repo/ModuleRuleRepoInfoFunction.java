@@ -2,6 +2,7 @@ package com.google.devtools.build.lib.bazel.bzlmod.repo;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.devtools.build.lib.actions.FileValue;
 import com.google.devtools.build.lib.pkgcache.PathPackageLocator;
 import com.google.devtools.build.lib.skyframe.PrecomputedValue;
@@ -41,9 +42,10 @@ public class ModuleRuleRepoInfoFunction implements SkyFunction {
     }
 
     if (!fileValue.exists() || !fileValue.isFile()) {
-      throw new ResolvedModuleRuleRepositoriesFunctionException(
-          new IOException("Expect lock file module_rule_repos.json to exist at workspace root."),
-          Transience.TRANSIENT);
+//      throw new ResolvedModuleRuleRepositoriesFunctionException(
+//          new IOException("Expect lock file module_rule_repos.json to exist at workspace root."),
+//          Transience.TRANSIENT);
+      return new ModuleRuleRepoInfoValue(ImmutableMap.of());
     }
 
     Path lockFilePath = lockFile.asPath();
@@ -51,7 +53,7 @@ public class ModuleRuleRepoInfoFunction implements SkyFunction {
     try {
       bytes = FileSystemUtils.readWithKnownFileSize(lockFilePath, lockFilePath.getFileSize());
     } catch (IOException ex) {
-      throw new ResolvedModuleRuleRepositoriesFunctionException(ex, Transience.TRANSIENT);
+      throw new ModuleRuleRepoInfoFunctionException(ex, Transience.TRANSIENT);
     }
 
     return new ModuleRuleRepoInfoValue(
@@ -64,8 +66,8 @@ public class ModuleRuleRepoInfoFunction implements SkyFunction {
     return null;
   }
 
-  private static final class ResolvedModuleRuleRepositoriesFunctionException extends SkyFunctionException {
-    ResolvedModuleRuleRepositoriesFunctionException(IOException e, Transience transience) {
+  private static final class ModuleRuleRepoInfoFunctionException extends SkyFunctionException {
+    ModuleRuleRepoInfoFunctionException(IOException e, Transience transience) {
       super(e, transience);
     }
   }

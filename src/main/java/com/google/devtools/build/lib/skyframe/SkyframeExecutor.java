@@ -103,9 +103,9 @@ import com.google.devtools.build.lib.analysis.configuredtargets.MergedConfigured
 import com.google.devtools.build.lib.analysis.configuredtargets.OutputFileConfiguredTarget;
 import com.google.devtools.build.lib.analysis.starlark.StarlarkTransition;
 import com.google.devtools.build.lib.analysis.starlark.StarlarkTransition.TransitionException;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.BazelModuleRepoInfoFunction;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.BazelModuleRepoInfoValue;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.ModuleRuleRepoInfoFunction;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.ModuleRuleRepoInfoValue;
 import com.google.devtools.build.lib.bugreport.BugReport;
@@ -217,6 +217,9 @@ import com.google.devtools.build.skyframe.WalkableGraph.WalkableGraphFactory;
 import com.google.devtools.common.options.OptionsParsingException;
 import com.google.devtools.common.options.OptionsProvider;
 import com.google.errorprone.annotations.ForOverride;
+
+import net.starlark.java.eval.StarlarkSemantics;
+
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
@@ -239,8 +242,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+
 import javax.annotation.Nullable;
-import net.starlark.java.eval.StarlarkSemantics;
 
 /**
  * A helper object to support Skyframe-driven execution.

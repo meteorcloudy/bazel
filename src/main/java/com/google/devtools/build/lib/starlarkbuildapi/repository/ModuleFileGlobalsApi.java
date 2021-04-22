@@ -19,6 +19,7 @@ import com.google.devtools.build.docgen.annot.DocumentMethods;
 import net.starlark.java.annot.Param;
 import net.starlark.java.annot.ParamType;
 import net.starlark.java.annot.StarlarkMethod;
+import net.starlark.java.eval.Dict;
 import net.starlark.java.eval.EvalException;
 
 /**
@@ -45,8 +46,9 @@ public interface ModuleFileGlobalsApi<ModuleFileFunctionExceptionT extends Excep
               defaultValue = "''"),
           // TODO(wyv): compatibility_level, bazel_compatibility, module_rule_exports, toolchains
           //   & platforms
-      })
-  void module(String name, String version) throws EvalException, InterruptedException;
+      },
+      extraKeywords = @Param(name = "kwargs"))
+  void module(String name, String version, Dict<String, Object> kwargs) throws EvalException, InterruptedException;
 
   @StarlarkMethod(
       name = "bazel_dep",

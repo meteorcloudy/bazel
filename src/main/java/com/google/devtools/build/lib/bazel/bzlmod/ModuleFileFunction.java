@@ -38,7 +38,7 @@ import net.starlark.java.syntax.SyntaxError;
 public class ModuleFileFunction implements SkyFunction {
 
   // TODO: populate this with the value of a flag.
-  public static final Precomputed<List<String>> REGISTRIES = new Precomputed<>("registries");
+//  public static final Precomputed<List<String>> REGISTRIES = new Precomputed<>("registries");
 
   private final FetcherFactory fetcherFactory;
   private final RegistryFactory registryFactory;
@@ -89,7 +89,8 @@ public class ModuleFileFunction implements SkyFunction {
         moduleKey, starlarkSemantics, env);
 
     // Perform some sanity checks.
-    Module module = moduleFileGlobals.buildModule();
+    Module module = moduleFileGlobals.buildModule(getModuleFileResult.earlyFetcher,
+        getModuleFileResult.registry);
     if (!module.getName().equals(moduleKey.getName())) {
       throw errorf("the MODULE.bazel file of %s declares a different name (%s)", moduleKey,
           module.getName());
@@ -114,7 +115,8 @@ public class ModuleFileFunction implements SkyFunction {
     byte[] moduleFile = readFile(moduleFilePath.asPath());
     ModuleFileGlobals moduleFileGlobals = execModuleFile(moduleFile,
         ModuleFileValue.ROOT_MODULE_KEY, starlarkSemantics, env);
-    Module module = moduleFileGlobals.buildModule();
+    // TODO: should we add a fetcher for root module?
+    Module module = moduleFileGlobals.buildModule(null,null);
 
     // Check that overrides don't contain the root itself (we need to set the override for the root
     // module to "local path" of the workspace root).
@@ -180,7 +182,8 @@ public class ModuleFileFunction implements SkyFunction {
       return Optional.of(result);
     }
 
-    List<String> registries = Objects.requireNonNull(REGISTRIES.get(env));
+//    List<String> registries = Objects.requireNonNull(REGISTRIES.get(env));
+    List<String> registries = ImmutableList.of("https://storage.googleapis.com/bcr.bazel.build");
     if (override instanceof RegistryOverride) {
       String overrideRegistry = ((RegistryOverride) override).getRegistry();
       if (!overrideRegistry.isEmpty()) {

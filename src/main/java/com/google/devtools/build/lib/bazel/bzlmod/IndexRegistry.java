@@ -3,7 +3,6 @@ package com.google.devtools.build.lib.bazel.bzlmod;
 import com.google.common.collect.ImmutableList;
 import com.google.devtools.build.lib.bazel.repository.downloader.HttpDownloader;
 import com.google.devtools.build.lib.events.ExtendedEventHandler;
-import com.google.devtools.build.lib.vfs.Path;
 import com.google.gson.FieldNamingPolicy;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -70,7 +69,7 @@ public class IndexRegistry implements Registry {
     URL url;
     String integrity;
     String stripPrefix;
-    String[] patchFiles;
+    String[] patches;
     int patchStrip;
   }
 
@@ -100,6 +99,7 @@ public class IndexRegistry implements Registry {
     URL sourceUrl = sourceJson.get().url;
     ImmutableList.Builder<URL> urls = new ImmutableList.Builder<>();
     if (bazelRegistryJson.isPresent()) {
+      // TODO: check if mirrors is null
       for (String mirror : bazelRegistryJson.get().mirrors) {
         StringBuilder url = new StringBuilder(mirror);
         if (url.charAt(url.length() - 1) != '/') {
@@ -114,8 +114,18 @@ public class IndexRegistry implements Registry {
       }
     }
     urls.add(sourceUrl);
+
+    ImmutableList.Builder<URL> patchUrls = new ImmutableList.Builder<>();
+    if (sourceJson.get().patches != null) {
+      for (String name : sourceJson.get().patches) {
+        patchUrls.add(new URL(getUrl() + String
+            .format("/modules/%s/%s/patches/%s", key.getName(), key.getVersion(), name)));
+      }
+    }
+
     return fetcherFactory.createArchiveFetcher(
         urls.build(),
+        patchUrls.build(),
         sourceJson.get().integrity,
         sourceJson.get().stripPrefix);
   }

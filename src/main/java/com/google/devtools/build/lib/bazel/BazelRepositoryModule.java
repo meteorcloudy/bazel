@@ -25,6 +25,12 @@ import com.google.devtools.build.lib.analysis.BlazeDirectories;
 import com.google.devtools.build.lib.analysis.ConfiguredRuleClassProvider;
 import com.google.devtools.build.lib.analysis.RuleDefinition;
 import com.google.devtools.build.lib.analysis.config.BuildConfiguration;
+import com.google.devtools.build.lib.bazel.bzlmod.DiscoveryFunction;
+import com.google.devtools.build.lib.bazel.bzlmod.FetcherFactory;
+import com.google.devtools.build.lib.bazel.bzlmod.ModuleFileFunction;
+import com.google.devtools.build.lib.bazel.bzlmod.RegistryFactory;
+import com.google.devtools.build.lib.bazel.bzlmod.RegistryFactoryImpl;
+import com.google.devtools.build.lib.bazel.bzlmod.SelectionFunction;
 import com.google.devtools.build.lib.bazel.commands.FetchCommand;
 import com.google.devtools.build.lib.bazel.commands.SyncCommand;
 import com.google.devtools.build.lib.bazel.repository.LocalConfigPlatformFunction;
@@ -202,6 +208,13 @@ public class BazelRepositoryModule extends BlazeModule {
             managedDirectoriesKnowledge,
             BazelSkyframeExecutorConstants.EXTERNAL_PACKAGE_HELPER);
     builder.addSkyFunction(SkyFunctions.REPOSITORY_DIRECTORY, repositoryDelegatorFunction);
+    FetcherFactory fetcherFactory = new FetcherFactory(directories.getWorkspace());
+    RegistryFactory registryFactory = new RegistryFactoryImpl(
+        new HttpDownloader(), clientEnvironmentSupplier, fetcherFactory);
+    builder.addSkyFunction(SkyFunctions.MODULE_FILE, new ModuleFileFunction(
+        fetcherFactory, registryFactory, directories.getWorkspace()));
+    builder.addSkyFunction(SkyFunctions.DISCOVERY, new DiscoveryFunction());
+    builder.addSkyFunction(SkyFunctions.SELECTION, new SelectionFunction());
     filesystem = runtime.getFileSystem();
   }
 

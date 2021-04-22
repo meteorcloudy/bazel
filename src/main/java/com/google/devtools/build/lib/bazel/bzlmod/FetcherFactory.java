@@ -12,10 +12,10 @@ public class FetcherFactory {
     this.workspaceRoot = workspaceRoot;
   }
 
-  public EarlyFetcher createArchiveFetcher(ImmutableList<URL> urls, String integrity,
-      String stripPrefix) {
+  public EarlyFetcher createArchiveFetcher(ImmutableList<URL> urls, ImmutableList<URL> patches,
+      String integrity, String stripPrefix) {
     // TODO: add patches
-    return new ArchiveFetcher(urls, integrity, stripPrefix);
+    return new ArchiveFetcher(urls, patches, integrity, stripPrefix);
   }
 
   public LocalPathFetcher createLocalPathFetcher(String path) {

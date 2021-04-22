@@ -3,6 +3,8 @@ package com.google.devtools.build.lib.bazel.bzlmod;
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableMap;
 
+import jdk.internal.jline.internal.Nullable;
+
 @AutoValue
 public abstract class Module {
 
@@ -11,6 +13,12 @@ public abstract class Module {
   public abstract String getVersion();
 
   public abstract ImmutableMap<String, ModuleKey> getDeps();
+
+  @Nullable
+  public abstract Fetcher getFetcher();
+
+  @Nullable
+  public abstract Registry getRegistry();
 
   public abstract Builder toBuilder();
 
@@ -26,6 +34,10 @@ public abstract class Module {
     public abstract Builder setVersion(String value);
 
     public abstract Builder setDeps(ImmutableMap<String, ModuleKey> value);
+
+    public abstract Builder setFetcher(Fetcher value);
+
+    public abstract Builder setRegistry(Registry value);
 
     abstract ImmutableMap.Builder<String, ModuleKey> depsBuilder();
 
