@@ -8,8 +8,8 @@ import java.net.URL;
 public abstract class ArchiveOverride implements NonRegistryOverride {
 
   public static ArchiveOverride create(ImmutableList<URL> urls, ImmutableList<URL> patches,
-      String integrity, String stripPrefix) {
-    return new AutoValue_ArchiveOverride(urls, patches, integrity, stripPrefix);
+      String integrity, String stripPrefix, int patchStrip) {
+    return new AutoValue_ArchiveOverride(urls, patches, integrity, stripPrefix, patchStrip);
   }
 
   public abstract ImmutableList<URL> getUrls();
@@ -20,8 +20,11 @@ public abstract class ArchiveOverride implements NonRegistryOverride {
 
   public abstract String getStripPrefix();
 
+  public abstract int getPatchStrip();
+
   @Override
   public EarlyFetcher toEarlyFetcher(FetcherFactory fetcherFactory) {
-    return fetcherFactory.createArchiveFetcher(getUrls(), getPatches(), getIntegrity(), getStripPrefix());
+    return fetcherFactory.createArchiveFetcher(getUrls(), getPatches(), getIntegrity(),
+        getStripPrefix(), getPatchStrip());
   }
 }

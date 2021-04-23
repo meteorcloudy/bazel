@@ -37,8 +37,7 @@ import net.starlark.java.syntax.SyntaxError;
 
 public class ModuleFileFunction implements SkyFunction {
 
-  // TODO: populate this with the value of a flag.
-//  public static final Precomputed<List<String>> REGISTRIES = new Precomputed<>("registries");
+  public static final Precomputed<List<String>> REGISTRIES = new Precomputed<>("registries");
 
   private final FetcherFactory fetcherFactory;
   private final RegistryFactory registryFactory;
@@ -182,8 +181,7 @@ public class ModuleFileFunction implements SkyFunction {
       return Optional.of(result);
     }
 
-//    List<String> registries = Objects.requireNonNull(REGISTRIES.get(env));
-    List<String> registries = ImmutableList.of("https://storage.googleapis.com/bcr.bazel.build");
+    List<String> registries = Objects.requireNonNull(REGISTRIES.get(env));
     if (override instanceof RegistryOverride) {
       String overrideRegistry = ((RegistryOverride) override).getRegistry();
       if (!overrideRegistry.isEmpty()) {

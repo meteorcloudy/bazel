@@ -13,9 +13,8 @@ public class FetcherFactory {
   }
 
   public EarlyFetcher createArchiveFetcher(ImmutableList<URL> urls, ImmutableList<URL> patches,
-      String integrity, String stripPrefix) {
-    // TODO: add patches
-    return new ArchiveFetcher(urls, patches, integrity, stripPrefix);
+      String integrity, String stripPrefix, int patchStrip) {
+    return new ArchiveFetcher(urls, patches, integrity, stripPrefix, patchStrip);
   }
 
   public LocalPathFetcher createLocalPathFetcher(String path) {

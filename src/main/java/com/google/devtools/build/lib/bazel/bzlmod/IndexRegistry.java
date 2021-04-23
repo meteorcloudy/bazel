@@ -98,8 +98,7 @@ public class IndexRegistry implements Registry {
     }
     URL sourceUrl = sourceJson.get().url;
     ImmutableList.Builder<URL> urls = new ImmutableList.Builder<>();
-    if (bazelRegistryJson.isPresent()) {
-      // TODO: check if mirrors is null
+    if (bazelRegistryJson.isPresent() && bazelRegistryJson.get().mirrors != null) {
       for (String mirror : bazelRegistryJson.get().mirrors) {
         StringBuilder url = new StringBuilder(mirror);
         if (url.charAt(url.length() - 1) != '/') {
@@ -117,9 +116,13 @@ public class IndexRegistry implements Registry {
 
     ImmutableList.Builder<URL> patchUrls = new ImmutableList.Builder<>();
     if (sourceJson.get().patches != null) {
+      String plainBaseUrl = getUrl();
+      if (!plainBaseUrl.endsWith("/")) {
+        plainBaseUrl += "/";
+      }
       for (String name : sourceJson.get().patches) {
-        patchUrls.add(new URL(getUrl() + String
-            .format("/modules/%s/%s/patches/%s", key.getName(), key.getVersion(), name)));
+        patchUrls.add(new URL(plainBaseUrl +
+            String.format("modules/%s/%s/patches/%s", key.getName(), key.getVersion(), name)));
       }
     }
 
@@ -127,6 +130,7 @@ public class IndexRegistry implements Registry {
         urls.build(),
         patchUrls.build(),
         sourceJson.get().integrity,
-        sourceJson.get().stripPrefix);
+        sourceJson.get().stripPrefix,
+        sourceJson.get().patchStrip);
   }
 }

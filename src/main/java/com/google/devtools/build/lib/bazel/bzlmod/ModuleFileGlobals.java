@@ -76,7 +76,7 @@ public class ModuleFileGlobals implements ModuleFileGlobalsApi<ModuleFileFunctio
       throw new ModuleFileFunctionException(e);
     }
     // TODO: add patch file support here as well
-    return ArchiveOverride.create(urlList.build(), ImmutableList.of(), integrity, stripPrefix);
+    return ArchiveOverride.create(urlList.build(), ImmutableList.of(), integrity, stripPrefix, 0);
   }
 
   @Override

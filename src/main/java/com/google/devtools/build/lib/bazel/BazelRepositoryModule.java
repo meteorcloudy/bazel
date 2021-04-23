@@ -93,6 +93,7 @@ import com.google.devtools.common.options.OptionsParsingResult;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -103,6 +104,10 @@ import java.util.stream.Collectors;
 public class BazelRepositoryModule extends BlazeModule {
   // Default location (relative to output user root) of the repository cache.
   public static final String DEFAULT_CACHE_LOCATION = "cache/repos/v1";
+
+  // Default list of registries.
+  public static final List<String> DEFAULT_REGISTRIES =
+      ImmutableList.of("https://bcr.bazel.build/");
 
   // A map of repository handlers that can be looked up by rule class name.
   private final ImmutableMap<String, RepositoryFunction> repositoryHandlers;
@@ -121,6 +126,7 @@ public class BazelRepositoryModule extends BlazeModule {
   private Optional<RootedPath> resolvedFileReplacingWorkspace = Optional.empty();
   private Set<String> outputVerificationRules = ImmutableSet.of();
   private FileSystem filesystem;
+  private List<String> registries;
   // We hold the precomputed value of the managed directories here, so that the dependency
   // on WorkspaceFileValue is not registered for each FileStateValue.
   private final ManagedDirectoriesKnowledgeImpl managedDirectoriesKnowledge;
@@ -348,6 +354,12 @@ public class BazelRepositoryModule extends BlazeModule {
         overrides = ImmutableMap.of();
       }
 
+      if (repoOptions.registries != null && !repoOptions.registries.isEmpty()) {
+        registries = repoOptions.registries;
+      } else {
+        registries = DEFAULT_REGISTRIES;
+      }
+
       if (!Strings.isNullOrEmpty(repoOptions.repositoryHashFile)) {
         Path hashFile;
         if (env.getWorkspace() != null) {
@@ -407,7 +419,9 @@ public class BazelRepositoryModule extends BlazeModule {
             RepositoryDelegatorFunction.DONT_FETCH_UNCONDITIONALLY),
         PrecomputedValue.injected(
             RepositoryDelegatorFunction.DEPENDENCY_FOR_UNCONDITIONAL_CONFIGURING,
-            RepositoryDelegatorFunction.DONT_FETCH_UNCONDITIONALLY));
+            RepositoryDelegatorFunction.DONT_FETCH_UNCONDITIONALLY),
+        PrecomputedValue.injected(
+            ModuleFileFunction.REGISTRIES, registries));
   }
 
   @Override
