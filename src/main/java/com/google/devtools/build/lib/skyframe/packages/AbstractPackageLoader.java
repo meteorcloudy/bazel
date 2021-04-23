@@ -30,11 +30,18 @@ import com.google.devtools.build.lib.actions.FileValue;
 import com.google.devtools.build.lib.analysis.BlazeDirectories;
 import com.google.devtools.build.lib.analysis.ConfiguredRuleClassProvider;
 import com.google.devtools.build.lib.analysis.ServerDirectories;
+import com.google.devtools.build.lib.bazel.bzlmod.DiscoveryFunction;
+import com.google.devtools.build.lib.bazel.bzlmod.FetcherFactory;
+import com.google.devtools.build.lib.bazel.bzlmod.ModuleFileFunction;
+import com.google.devtools.build.lib.bazel.bzlmod.RegistryFactory;
+import com.google.devtools.build.lib.bazel.bzlmod.RegistryFactoryImpl;
+import com.google.devtools.build.lib.bazel.bzlmod.SelectionFunction;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.BazelModuleRepoInfoFunction;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.BazelModuleRepoInfoValue;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.ModuleRuleRepoInfoFunction;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.ModuleRuleRepoInfoValue;
+import com.google.devtools.build.lib.bazel.repository.downloader.HttpDownloader;
 import com.google.devtools.build.lib.clock.BlazeClock;
 import com.google.devtools.build.lib.cmdline.PackageIdentifier;
 import com.google.devtools.build.lib.concurrent.AbstractQueueVisitor;
@@ -466,6 +473,10 @@ public abstract class AbstractPackageLoader implements PackageLoader {
           }
         };
     ImmutableMap.Builder<SkyFunctionName, SkyFunction> builder = ImmutableMap.builder();
+    FetcherFactory fetcherFactory = new FetcherFactory(directories.getWorkspace());
+    // TODO: clientEnv is still empty here
+    RegistryFactory registryFactory = new RegistryFactoryImpl(
+        new HttpDownloader(), ImmutableMap.of(), fetcherFactory);
     builder
         .put(SkyFunctions.PRECOMPUTED, new PrecomputedFunction())
         .put(

@@ -88,6 +88,7 @@ public class IndexRegistryTest extends FoundationTestCase {
                 new URL("https://mirror.bazel.build/mysite.com/thing.zip"),
                 new URL("file:///home/bazel/mymirror/mysite.com/thing.zip"),
                 new URL("http://mysite.com/thing.zip")),
+            ImmutableList.of(),
             "sha256-blah",
             "pref"));
     assertThat(registry.getFetcher(ModuleKey.create("bar", "2.0"), reporter))
@@ -96,6 +97,7 @@ public class IndexRegistryTest extends FoundationTestCase {
                 new URL("https://mirror.bazel.build/example.com/archive.jar?with=query"),
                 new URL("file:///home/bazel/mymirror/example.com/archive.jar?with=query"),
                 new URL("https://example.com/archive.jar?with=query")),
+            ImmutableList.of(),
             "sha256-bleh",
             null));
   }

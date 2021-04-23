@@ -10,10 +10,12 @@ import java.net.URL;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+
+import net.starlark.java.eval.Dict;
 import net.starlark.java.eval.EvalException;
 import net.starlark.java.eval.Starlark;
 
-public class ModuleFileGlobals implements ModuleFileGlobalsApi {
+public class ModuleFileGlobals implements ModuleFileGlobalsApi<ModuleFileFunctionException> {
 
   private boolean moduleCalled = false;
   private final Module.Builder module = Module.builder();
@@ -24,7 +26,7 @@ public class ModuleFileGlobals implements ModuleFileGlobalsApi {
   }
 
   @Override
-  public void module(String name, String version)
+  public void module(String name, String version, Dict<String, Object> kwargs)
       throws EvalException {
     if (moduleCalled) {
       throw Starlark.errorf("the module() directive can only be called once");
@@ -73,7 +75,8 @@ public class ModuleFileGlobals implements ModuleFileGlobalsApi {
     } catch (MalformedURLException e) {
       throw new ModuleFileFunctionException(e);
     }
-    return ArchiveOverride.create(urlList.build(), integrity, stripPrefix);
+    // TODO: add patch file support here as well
+    return ArchiveOverride.create(urlList.build(), ImmutableList.of(), integrity, stripPrefix);
   }
 
   @Override
@@ -81,8 +84,11 @@ public class ModuleFileGlobals implements ModuleFileGlobalsApi {
     return LocalPathOverride.create(path);
   }
 
-  public Module buildModule() {
-    return module.setDeps(ImmutableMap.copyOf(deps)).build();
+  public Module buildModule(Fetcher fetcher, Registry registry) {
+    return module.setDeps(ImmutableMap.copyOf(deps))
+        .setFetcher(fetcher)
+        .setRegistry(registry)
+        .build();
   }
 
   public ImmutableMap<String, StarlarkOverrideApi> buildOverrides() {

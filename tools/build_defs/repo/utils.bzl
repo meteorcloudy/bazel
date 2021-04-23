@@ -69,7 +69,18 @@ def _use_native_patch(patch_args):
             return False
     return True
 
-def patch(ctx, patches = None, patch_cmds = None, patch_cmds_win = None, patch_tool = None, patch_args = None):
+def _download_patch(ctx, patch_url, auth):
+    name = patch_url.split("/")[-1]
+    patch_path = ctx.path(".tmp_remote_patches").get_child(name)
+    ctx.download(
+        patch_url,
+        patch_path,
+        canonical_id = ctx.attr.canonical_id,
+        auth = auth,
+    )
+    return patch_path
+
+def patch(ctx, patches = None, patch_cmds = None, patch_cmds_win = None, patch_tool = None, patch_args = None, auth = None):
     """Implementation of patching an already extracted repository.
 
     This rule is intended to be used in the implementation function of
@@ -95,10 +106,15 @@ def patch(ctx, patches = None, patch_cmds = None, patch_cmds_win = None, patch_t
     bash_exe = ctx.os.environ["BAZEL_SH"] if "BAZEL_SH" in ctx.os.environ else "bash"
     powershell_exe = ctx.os.environ["BAZEL_POWERSHELL"] if "BAZEL_POWERSHELL" in ctx.os.environ else "powershell.exe"
 
-    if patches == None and hasattr(ctx.attr, "patches"):
-        patches = ctx.attr.patches
     if patches == None:
         patches = []
+    if hasattr(ctx.attr, "patches") and ctx.attr.patches:
+        patches += ctx.attr.patches
+
+    if hasattr(ctx.attr, "remote_patches") and ctx.attr.remote_patches:
+        for patch_url in ctx.attr.remote_patches:
+            patch_path = _download_patch(ctx, patch_url, auth)
+            patches.append(patch_path)
 
     if patch_cmds == None and hasattr(ctx.attr, "patch_cmds"):
         patch_cmds = ctx.attr.patch_cmds

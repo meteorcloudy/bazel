@@ -36,12 +36,17 @@ java_library(
     name = "repo_info_functions",
     srcs = [
         "BazelModuleRepoInfoFunction.java",
-        "ModuleRuleRepoInfoFunction.java",
         "LockFileParser.java",
+        "ModuleRuleRepoInfoFunction.java",
     ],
     deps = [
         ":repo_info_values",
         "//src/main/java/com/google/devtools/build/lib/actions:file_metadata",
+        "//src/main/java/com/google/devtools/build/lib/bazel/bzlmod:common",
+        "//src/main/java/com/google/devtools/build/lib/bazel/bzlmod:fetch",
+        "//src/main/java/com/google/devtools/build/lib/bazel/bzlmod:registry",
+        "//src/main/java/com/google/devtools/build/lib/bazel/bzlmod:resolution",
+        "//src/main/java/com/google/devtools/build/lib/bazel/repository/downloader",
         "//src/main/java/com/google/devtools/build/lib/pkgcache",
         "//src/main/java/com/google/devtools/build/lib/skyframe:precomputed_value",
         "//src/main/java/com/google/devtools/build/lib/vfs",
