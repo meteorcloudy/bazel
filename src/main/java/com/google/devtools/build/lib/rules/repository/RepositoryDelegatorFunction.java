@@ -35,7 +35,7 @@ import com.google.devtools.build.lib.repository.ExternalPackageException;
 import com.google.devtools.build.lib.repository.ExternalPackageHelper;
 import com.google.devtools.build.lib.repository.ExternalRuleNotFoundException;
 import com.google.devtools.build.lib.repository.RepositoryFailedEvent;
-import com.google.devtools.build.lib.rules.repository.RepositoryDirectoryValue.KeyForModuleRule;
+import com.google.devtools.build.lib.rules.repository.RepositoryDirectoryValue.KeyForBazelModule;
 import com.google.devtools.build.lib.rules.repository.RepositoryFunction.AlreadyReportedRepositoryAccessException;
 import com.google.devtools.build.lib.rules.repository.RepositoryFunction.RepositoryFunctionException;
 import com.google.devtools.build.lib.skyframe.ManagedDirectoriesKnowledge;
@@ -394,7 +394,7 @@ public final class RepositoryDelegatorFunction implements SkyFunction {
   public static Optional<Rule> getRepositoryForBzlmod(SkyKey skyKey, Environment env)
       throws InterruptedException {
     RepositoryName repositoryName = (RepositoryName) skyKey.argument();
-    boolean forModuleRuleResolve = skyKey instanceof KeyForModuleRule;
+    boolean forModuleRuleResolve = skyKey instanceof KeyForBazelModule;
 
     SkyKey repoInfoKey = BzlmodRepoRuleValue.key(repositoryName.getName(), forModuleRuleResolve);
     BzlmodRepoRuleValue value = (BzlmodRepoRuleValue) env.getValue(repoInfoKey);
