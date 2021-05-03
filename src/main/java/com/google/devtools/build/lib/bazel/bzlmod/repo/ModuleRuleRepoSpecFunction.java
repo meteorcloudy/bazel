@@ -21,13 +21,13 @@ import java.io.IOException;
 
 import javax.annotation.Nullable;
 
-public class ModuleRuleRepoInfoFunction implements SkyFunction {
+public class ModuleRuleRepoSpecFunction implements SkyFunction {
 
   @Nullable
   @Override
   public SkyValue compute(SkyKey skyKey, Environment env)
       throws SkyFunctionException, InterruptedException {
-    Preconditions.checkArgument(skyKey == ModuleRuleRepoInfoValue.key());
+    Preconditions.checkArgument(skyKey == ModuleRuleRepoSpecValue.KEY);
     PathPackageLocator packageLocator = PrecomputedValue.PATH_PACKAGE_LOCATOR.get(env);
     ImmutableList<Root> packagePath = packageLocator.getPathEntries();
 
@@ -45,7 +45,7 @@ public class ModuleRuleRepoInfoFunction implements SkyFunction {
 //      throw new ResolvedModuleRuleRepositoriesFunctionException(
 //          new IOException("Expect lock file module_rule_repos.json to exist at workspace root."),
 //          Transience.TRANSIENT);
-      return new ModuleRuleRepoInfoValue(ImmutableMap.of());
+      return new ModuleRuleRepoSpecValue(ImmutableMap.of());
     }
 
     Path lockFilePath = lockFile.asPath();
@@ -56,7 +56,7 @@ public class ModuleRuleRepoInfoFunction implements SkyFunction {
       throw new ModuleRuleRepoInfoFunctionException(ex, Transience.TRANSIENT);
     }
 
-    return new ModuleRuleRepoInfoValue(
+    return new ModuleRuleRepoSpecValue(
         LockFileParser.loadRepositoryInfos(new String(bytes)));
   }
 

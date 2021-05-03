@@ -30,17 +30,16 @@ import com.google.devtools.build.lib.actions.FileValue;
 import com.google.devtools.build.lib.analysis.BlazeDirectories;
 import com.google.devtools.build.lib.analysis.ConfiguredRuleClassProvider;
 import com.google.devtools.build.lib.analysis.ServerDirectories;
-import com.google.devtools.build.lib.bazel.bzlmod.DiscoveryFunction;
 import com.google.devtools.build.lib.bazel.bzlmod.FetcherFactory;
-import com.google.devtools.build.lib.bazel.bzlmod.ModuleFileFunction;
 import com.google.devtools.build.lib.bazel.bzlmod.RegistryFactory;
 import com.google.devtools.build.lib.bazel.bzlmod.RegistryFactoryImpl;
-import com.google.devtools.build.lib.bazel.bzlmod.SelectionFunction;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.BazelModuleRepoInfoFunction;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.BazelModuleRepoInfoValue;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.ModuleRuleRepoInfoFunction;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.ModuleRuleRepoInfoValue;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.BazelModuleRepoSpecFunction;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.BazelModuleRepoSpecValue;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.ModuleRuleRepoSpecFunction;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.ModuleRuleRepoSpecValue;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.OverrideDepRepoSpecFunction;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.OverrideDepRepoSpecValue;
 import com.google.devtools.build.lib.bazel.repository.downloader.HttpDownloader;
 import com.google.devtools.build.lib.clock.BlazeClock;
 import com.google.devtools.build.lib.cmdline.PackageIdentifier;
@@ -513,10 +512,12 @@ public abstract class AbstractPackageLoader implements PackageLoader {
         .put(
             BzlmodRepoRuleValue.BZLMOD_REPO_RULE,
             new BzlmodRepoRuleFunction(pkgFactory, ruleClassProvider, directories))
-        .put(BazelModuleRepoInfoValue.BAZEL_MODULE_REPO_INFO,
-            new BazelModuleRepoInfoFunction())
-        .put(ModuleRuleRepoInfoValue.MODULE_RULE_REPO_INFO,
-            new ModuleRuleRepoInfoFunction())
+        .put(BazelModuleRepoSpecValue.BAZEL_MODULE_REPO_SPEC,
+            new BazelModuleRepoSpecFunction())
+        .put(ModuleRuleRepoSpecValue.MODULE_RULE_REPO_SPEC,
+            new ModuleRuleRepoSpecFunction())
+        .put(OverrideDepRepoSpecValue.OVERRIDE_DEP_REPO_SPEC,
+            new OverrideDepRepoSpecFunction())
         .put(SkyFunctions.EXTERNAL_PACKAGE, new ExternalPackageFunction(getExternalPackageHelper()))
         .put(SkyFunctions.REPOSITORY_MAPPING, new RepositoryMappingFunction())
         .put(

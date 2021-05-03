@@ -19,28 +19,30 @@ java_library(
 )
 
 java_library(
-    name = "repo_info_values",
+    name = "repo_spec_values",
     srcs = [
-        "BazelModuleRepoInfoValue.java",
-        "ModuleRuleRepoInfoValue.java",
-        "RepositoryInfo.java",
+        "BazelModuleRepoSpecValue.java",
+        "ModuleRuleRepoSpecValue.java",
+        "OverrideDepRepoSpecValue.java",
+        "RepoSpec.java",
     ],
     deps = [
-        "//src/main/java/com/google/devtools/build/lib/concurrent",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/autocodec:autocodec-annotation",
         "//src/main/java/com/google/devtools/build/skyframe:skyframe-objects",
         "//third_party:guava",
     ],
 )
 
 java_library(
-    name = "repo_info_functions",
+    name = "repo_spec_functions",
     srcs = [
-        "BazelModuleRepoInfoFunction.java",
+        "BazelModuleRepoSpecFunction.java",
         "LockFileParser.java",
-        "ModuleRuleRepoInfoFunction.java",
+        "ModuleRuleRepoSpecFunction.java",
+        "OverrideDepRepoSpecFunction.java",
     ],
     deps = [
-        ":repo_info_values",
+        ":repo_spec_values",
         "//src/main/java/com/google/devtools/build/lib/actions:file_metadata",
         "//src/main/java/com/google/devtools/build/lib/bazel/bzlmod:common",
         "//src/main/java/com/google/devtools/build/lib/bazel/bzlmod:fetch",
@@ -49,6 +51,7 @@ java_library(
         "//src/main/java/com/google/devtools/build/lib/bazel/repository/downloader",
         "//src/main/java/com/google/devtools/build/lib/pkgcache",
         "//src/main/java/com/google/devtools/build/lib/skyframe:precomputed_value",
+        "//src/main/java/com/google/devtools/build/lib/starlarkbuildapi/repository",
         "//src/main/java/com/google/devtools/build/lib/vfs",
         "//src/main/java/com/google/devtools/build/lib/vfs:pathfragment",
         "//src/main/java/com/google/devtools/build/skyframe",

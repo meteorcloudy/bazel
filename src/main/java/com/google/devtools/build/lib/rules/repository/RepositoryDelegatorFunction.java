@@ -396,7 +396,7 @@ public final class RepositoryDelegatorFunction implements SkyFunction {
     RepositoryName repositoryName = (RepositoryName) skyKey.argument();
     boolean forModuleRuleResolve = skyKey instanceof KeyForBazelModule;
 
-    SkyKey repoInfoKey = BzlmodRepoRuleValue.key(repositoryName.getName(), forModuleRuleResolve);
+    SkyKey repoInfoKey = BzlmodRepoRuleValue.key(repositoryName.strippedName(), forModuleRuleResolve);
     BzlmodRepoRuleValue value = (BzlmodRepoRuleValue) env.getValue(repoInfoKey);
 
     if (value == null) {
