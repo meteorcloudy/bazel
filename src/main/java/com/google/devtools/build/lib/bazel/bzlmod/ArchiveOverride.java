@@ -2,6 +2,8 @@ package com.google.devtools.build.lib.bazel.bzlmod;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.RepoSpec;
+
 import java.net.URL;
 
 @AutoValue
@@ -26,5 +28,10 @@ public abstract class ArchiveOverride implements NonRegistryOverride {
   public EarlyFetcher toEarlyFetcher(FetcherFactory fetcherFactory) {
     return fetcherFactory.createArchiveFetcher(getUrls(), getPatches(), getIntegrity(),
         getStripPrefix(), getPatchStrip());
+  }
+
+  @Override
+  public RepoSpec getRepoSpec(String repoName) {
+    return null;
   }
 }
