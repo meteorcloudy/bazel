@@ -1,5 +1,6 @@
 package com.google.devtools.build.lib.bazel.bzlmod;
 
+import com.google.devtools.build.lib.bazel.bzlmod.repo.RepoSpec;
 import com.google.devtools.build.lib.events.ExtendedEventHandler;
 import java.io.IOException;
 import java.util.Optional;
@@ -14,6 +15,6 @@ public interface Registry {
   Optional<byte[]> getModuleFile(ModuleKey key, ExtendedEventHandler eventHandler)
       throws IOException, InterruptedException;
 
-  Fetcher getFetcher(ModuleKey key, ExtendedEventHandler eventHandler)
+  RepoSpec getRepoSpec(ModuleKey key, String repoName, ExtendedEventHandler eventHandler)
       throws IOException, InterruptedException;
 }

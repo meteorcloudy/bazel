@@ -2,6 +2,7 @@ package com.google.devtools.build.lib.bazel.bzlmod;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.base.Suppliers;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.truth.Truth8;
@@ -26,14 +27,12 @@ public class IndexRegistryTest extends FoundationTestCase {
   @Rule
   public final TemporaryFolder tempFolder = new TemporaryFolder();
 
-  private FetcherFactory fetcherFactory;
   private RegistryFactory registryFactory;
 
   @Before
   public void setUp() throws Exception {
-    fetcherFactory = new FetcherFactory(scratch.dir("/ws"));
-    registryFactory = new RegistryFactoryImpl(new HttpDownloader(), ImmutableMap.of(),
-        fetcherFactory);
+    registryFactory = new RegistryFactoryImpl(new HttpDownloader(),
+        Suppliers.ofInstance(ImmutableMap.of()));
   }
 
   @Test
@@ -80,25 +79,30 @@ public class IndexRegistryTest extends FoundationTestCase {
         + "  \"integrity\": \"sha256-bleh\"\n"
         + "}");
     server.start();
+    // TODO: test patches
 
     Registry registry = registryFactory.getRegistryWithUrl(server.getUrl());
-    assertThat(registry.getFetcher(ModuleKey.create("foo", "1.0"), reporter))
-        .isEqualTo(fetcherFactory.createArchiveFetcher(
+    assertThat(registry.getRepoSpec(ModuleKey.create("foo", "1.0"), "foorepo", reporter))
+        .isEqualTo(IndexRegistry.getRepoSpecForArchive(
+            "foorepo",
             ImmutableList.of(
                 new URL("https://mirror.bazel.build/mysite.com/thing.zip"),
                 new URL("file:///home/bazel/mymirror/mysite.com/thing.zip"),
                 new URL("http://mysite.com/thing.zip")),
             ImmutableList.of(),
             "sha256-blah",
-            "pref"));
-    assertThat(registry.getFetcher(ModuleKey.create("bar", "2.0"), reporter))
-        .isEqualTo(fetcherFactory.createArchiveFetcher(
+            "pref",
+            0));
+    assertThat(registry.getRepoSpec(ModuleKey.create("bar", "2.0"), "barrepo", reporter))
+        .isEqualTo(IndexRegistry.getRepoSpecForArchive(
+            "barrepo",
             ImmutableList.of(
                 new URL("https://mirror.bazel.build/example.com/archive.jar?with=query"),
                 new URL("file:///home/bazel/mymirror/example.com/archive.jar?with=query"),
                 new URL("https://example.com/archive.jar?with=query")),
             ImmutableList.of(),
             "sha256-bleh",
-            null));
+            "",
+            0));
   }
 }

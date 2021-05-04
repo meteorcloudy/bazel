@@ -1,12 +1,14 @@
 package com.google.devtools.build.lib.bazel.bzlmod;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.devtools.build.lib.actions.FileValue;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.RepoSpec;
+import com.google.devtools.build.lib.cmdline.RepositoryName;
 import com.google.devtools.build.lib.events.Event;
 import com.google.devtools.build.lib.events.ExtendedEventHandler;
 import com.google.devtools.build.lib.packages.NoSuchThingException;
+import com.google.devtools.build.lib.rules.repository.RepositoryDirectoryValue;
 import com.google.devtools.build.lib.skyframe.PrecomputedValue;
 import com.google.devtools.build.lib.skyframe.PrecomputedValue.Precomputed;
 import com.google.devtools.build.lib.starlarkbuildapi.repository.StarlarkOverrideApi;
@@ -21,10 +23,10 @@ import com.google.devtools.build.skyframe.SkyKey;
 import com.google.devtools.build.skyframe.SkyValue;
 import java.io.IOException;
 import java.net.URISyntaxException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import javax.annotation.Nullable;
 import net.starlark.java.eval.EvalException;
 import net.starlark.java.eval.Mutability;
 import net.starlark.java.eval.Starlark;
@@ -39,13 +41,10 @@ public class ModuleFileFunction implements SkyFunction {
 
   public static final Precomputed<List<String>> REGISTRIES = new Precomputed<>("registries");
 
-  private final FetcherFactory fetcherFactory;
   private final RegistryFactory registryFactory;
   private final Path workspaceRoot;
 
-  public ModuleFileFunction(FetcherFactory fetcherFactory, RegistryFactory registryFactory,
-      Path workspaceRoot) {
-    this.fetcherFactory = fetcherFactory;
+  public ModuleFileFunction(RegistryFactory registryFactory, Path workspaceRoot) {
     this.registryFactory = registryFactory;
     this.workspaceRoot = workspaceRoot;
   }
@@ -88,7 +87,7 @@ public class ModuleFileFunction implements SkyFunction {
         moduleKey, starlarkSemantics, env);
 
     // Perform some sanity checks.
-    Module module = moduleFileGlobals.buildModule(getModuleFileResult.earlyFetcher,
+    Module module = moduleFileGlobals.buildModule(getModuleFileResult.repoSpec,
         getModuleFileResult.registry);
     if (!module.getName().equals(moduleKey.getName())) {
       throw errorf("the MODULE.bazel file of %s declares a different name (%s)", moduleKey,
@@ -115,7 +114,7 @@ public class ModuleFileFunction implements SkyFunction {
     ModuleFileGlobals moduleFileGlobals = execModuleFile(moduleFile,
         ModuleFileValue.ROOT_MODULE_KEY, starlarkSemantics, env);
     // TODO: should we add a fetcher for root module?
-    Module module = moduleFileGlobals.buildModule(null,null);
+    Module module = moduleFileGlobals.buildModule(null, null);
 
     // Check that overrides don't contain the root itself (we need to set the override for the root
     // module to "local path" of the workspace root).
@@ -161,23 +160,31 @@ public class ModuleFileFunction implements SkyFunction {
   private static class GetModuleFileResult {
 
     byte[] moduleFileContents;
-    // Exactly one of `earlyFetcher` and `registry` is null.
-    EarlyFetcher earlyFetcher;
+    // Exactly one of `repoSpec` and `registry` is null.
+    RepoSpec repoSpec;
     Registry registry;
   }
 
+  @Nullable
   private Optional<GetModuleFileResult> getModuleFile(ModuleKey key, StarlarkOverrideApi override,
       Environment env) throws ModuleFileFunctionException, InterruptedException {
     if (override instanceof NonRegistryOverride) {
-      GetModuleFileResult result = new GetModuleFileResult();
-      result.earlyFetcher = ((NonRegistryOverride) override).toEarlyFetcher(fetcherFactory);
-      Path fetchPath = result.earlyFetcher.earlyFetch();
-      RootedPath moduleFilePath =
-          RootedPath.toRootedPath(Root.fromPath(fetchPath), PathFragment.create("MODULE.bazel"));
+      // TODO: The repo name is not necessarily the same as the module name here. Fix later.
+      String repoName = key.getName();
+      RepositoryDirectoryValue repoDir = (RepositoryDirectoryValue) env.getValue(
+          RepositoryDirectoryValue.keyForOverrideDep(
+              RepositoryName.createFromValidStrippedName(repoName)));
+      if (repoDir == null) {
+        return null;
+      }
+      RootedPath moduleFilePath = RootedPath.toRootedPath(
+          Root.fromPath(repoDir.getPath()), PathFragment.create("MODULE.bazel"));
       if (env.getValue(FileValue.key(moduleFilePath)) == null) {
         return Optional.empty();
       }
+      GetModuleFileResult result = new GetModuleFileResult();
       result.moduleFileContents = readFile(moduleFilePath.asPath());
+      result.repoSpec = ((NonRegistryOverride) override).getRepoSpec(repoName);
       return Optional.of(result);
     }
 

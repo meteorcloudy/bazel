@@ -20,22 +20,6 @@ java_library(
 )
 
 java_library(
-    name = "fetch",
-    srcs = [
-        "ArchiveFetcher.java",
-        "EarlyFetcher.java",
-        "Fetcher.java",
-        "FetcherFactory.java",
-        "LocalPathFetcher.java",
-    ],
-    deps = [
-        ":common",
-        "//src/main/java/com/google/devtools/build/lib/vfs",
-        "//third_party:guava",
-    ]
-)
-
-java_library(
     name = "registry",
     srcs = [
         "Registry.java",
@@ -45,7 +29,7 @@ java_library(
     ],
     deps = [
         ":common",
-        ":fetch",
+        "//src/main/java/com/google/devtools/build/lib/bazel/bzlmod/repo:repo_spec_values",
         "//src/main/java/com/google/devtools/build/lib/bazel/repository/downloader",
         "//src/main/java/com/google/devtools/build/lib/events",
         "//src/main/java/com/google/devtools/build/lib/vfs",
@@ -74,13 +58,14 @@ java_library(
     ],
     deps = [
         ":common",
-        ":fetch",
         ":registry",
         "//src/main/java/com/google/devtools/build/lib/actions:file_metadata",
         "//src/main/java/com/google/devtools/build/lib/bazel/bzlmod/repo:repo_spec_values",
+        "//src/main/java/com/google/devtools/build/lib/cmdline:cmdline-primitives",
         "//src/main/java/com/google/devtools/build/lib/concurrent",
         "//src/main/java/com/google/devtools/build/lib/events",
         "//src/main/java/com/google/devtools/build/lib/packages",
+        "//src/main/java/com/google/devtools/build/lib/rules:repository/repository_directory_value",
         "//src/main/java/com/google/devtools/build/lib/skyframe:precomputed_value",
         "//src/main/java/com/google/devtools/build/lib/skyframe:sky_functions",
         "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/autocodec:autocodec-annotation",

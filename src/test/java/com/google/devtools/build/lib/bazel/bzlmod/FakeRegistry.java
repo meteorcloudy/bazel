@@ -1,5 +1,6 @@
 package com.google.devtools.build.lib.bazel.bzlmod;
 
+import com.google.devtools.build.lib.bazel.bzlmod.repo.RepoSpec;
 import com.google.devtools.build.lib.events.ExtendedEventHandler;
 import com.google.devtools.build.lib.util.Pair;
 import java.util.HashMap;
@@ -9,14 +10,14 @@ import java.util.Optional;
 public class FakeRegistry implements Registry {
 
   private final String url;
-  private final Map<ModuleKey, Pair<byte[], Fetcher>> modules = new HashMap<>();
+  private final Map<ModuleKey, Pair<byte[], RepoSpec>> modules = new HashMap<>();
 
   public FakeRegistry(String url) {
     this.url = url;
   }
 
-  public FakeRegistry addModule(ModuleKey key, String moduleFile, Fetcher fetcher) {
-    modules.put(key, Pair.of(moduleFile.getBytes(), fetcher));
+  public FakeRegistry addModule(ModuleKey key, String moduleFile, RepoSpec repoSpec) {
+    modules.put(key, Pair.of(moduleFile.getBytes(), repoSpec));
     return this;
   }
 
@@ -31,7 +32,7 @@ public class FakeRegistry implements Registry {
   }
 
   @Override
-  public Fetcher getFetcher(ModuleKey key, ExtendedEventHandler eventHandler) {
+  public RepoSpec getRepoSpec(ModuleKey key, String repoName, ExtendedEventHandler eventHandler) {
     return modules.get(key).getSecond();
   }
 

@@ -1,6 +1,9 @@
 package com.google.devtools.build.lib.bazel.bzlmod;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.RepoSpec;
 import com.google.devtools.build.lib.bazel.repository.downloader.HttpDownloader;
 import com.google.devtools.build.lib.events.ExtendedEventHandler;
 import com.google.gson.FieldNamingPolicy;
@@ -13,21 +16,22 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class IndexRegistry implements Registry {
+
+  private static final String HTTP_ARCHIVE_RULE_CLASS =
+      "@bazel_tools//tools/build_defs/repo:http.bzl%http_archive";
 
   private final URI uri;
   private final HttpDownloader httpDownloader;
   private final Map<String, String> clientEnv;
-  private final FetcherFactory fetcherFactory;
   private final Gson gson;
 
-  IndexRegistry(URI uri, HttpDownloader httpDownloader, Map<String, String> clientEnv,
-      FetcherFactory fetcherFactory) {
+  IndexRegistry(URI uri, HttpDownloader httpDownloader, Map<String, String> clientEnv) {
     this.uri = uri;
     this.httpDownloader = httpDownloader;
     this.clientEnv = clientEnv;
-    this.fetcherFactory = fetcherFactory;
     this.gson = new GsonBuilder()
         .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
         .create();
@@ -85,7 +89,7 @@ public class IndexRegistry implements Registry {
   }
 
   @Override
-  public Fetcher getFetcher(ModuleKey key, ExtendedEventHandler eventHandler)
+  public RepoSpec getRepoSpec(ModuleKey key, String repoName, ExtendedEventHandler eventHandler)
       throws IOException, InterruptedException {
     Optional<BazelRegistryJson> bazelRegistryJson =
         grabJson("bazel_registry.json", BazelRegistryJson.class, eventHandler);
@@ -95,6 +99,9 @@ public class IndexRegistry implements Registry {
     if (!sourceJson.isPresent()) {
       throw new FileNotFoundException(
           String.format("Module %s's source information not found in registry %s", key, getUrl()));
+    }
+    if (sourceJson.get().integrity == null) {
+      throw new IOException(String.format("Missing integrity for module %s", key));
     }
     URL sourceUrl = sourceJson.get().url;
     ImmutableList.Builder<URL> urls = new ImmutableList.Builder<>();
@@ -125,12 +132,27 @@ public class IndexRegistry implements Registry {
             String.format("modules/%s/%s/patches/%s", key.getName(), key.getVersion(), name)));
       }
     }
-
-    return fetcherFactory.createArchiveFetcher(
+    return getRepoSpecForArchive(
+        repoName,
         urls.build(),
         patchUrls.build(),
         sourceJson.get().integrity,
-        sourceJson.get().stripPrefix,
+        Strings.nullToEmpty(sourceJson.get().stripPrefix),
         sourceJson.get().patchStrip);
+  }
+
+  public static RepoSpec getRepoSpecForArchive(String repoName, ImmutableList<URL> urls,
+      ImmutableList<URL> patches, String integrity, String stripPrefix, int patchStrip) {
+    ImmutableMap.Builder<String, Object> attrBuilder = ImmutableMap.builder();
+    attrBuilder.put("name", repoName)
+        .put("urls", urls.stream().map(URL::toString).collect(Collectors.toList()))
+        // TODO: implement integrity attribute in http_archive
+        .put("sha256", integrity.substring(7))
+        .put(
+            "remote_patches",
+            patches.stream().map(URL::toString).collect(Collectors.toList()))
+        .put("patch_args", ImmutableList.of("-p" + patchStrip))
+        .put("strip_prefix", stripPrefix);
+    return new RepoSpec(HTTP_ARCHIVE_RULE_CLASS, attrBuilder.build());
   }
 }

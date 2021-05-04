@@ -11,13 +11,11 @@ public class RegistryFactoryImpl implements RegistryFactory {
 
   private final HttpDownloader httpDownloader;
   private final Supplier<Map<String, String>> clientEnvironmentSupplier;
-  private final FetcherFactory fetcherFactory;
 
-  public RegistryFactoryImpl(HttpDownloader httpDownloader, Supplier<Map<String, String>> clientEnvironmentSupplier,
-      FetcherFactory fetcherFactory) {
+  public RegistryFactoryImpl(HttpDownloader httpDownloader,
+      Supplier<Map<String, String>> clientEnvironmentSupplier) {
     this.httpDownloader = httpDownloader;
     this.clientEnvironmentSupplier = clientEnvironmentSupplier;
-    this.fetcherFactory = fetcherFactory;
   }
 
   @Override
@@ -27,7 +25,7 @@ public class RegistryFactoryImpl implements RegistryFactory {
       case "http":
       case "https":
       case "file":
-        return new IndexRegistry(uri, httpDownloader, clientEnvironmentSupplier.get(), fetcherFactory);
+        return new IndexRegistry(uri, httpDownloader, clientEnvironmentSupplier.get());
     }
     return null;
   }

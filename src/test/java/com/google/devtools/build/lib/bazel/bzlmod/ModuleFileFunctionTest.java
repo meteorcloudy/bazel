@@ -74,7 +74,6 @@ public class ModuleFileFunctionTest extends FoundationTestCase {
             ExternalFileAction.DEPEND_ON_EXTERNAL_PKG_FOR_EXTERNAL_REPO_PATHS,
             directories);
 
-    FetcherFactory fetcherFactory = new FetcherFactory(rootDirectory);
     MemoizingEvaluator evaluator = new InMemoryMemoizingEvaluator(
         ImmutableMap.<SkyFunctionName, SkyFunction>builder()
             .put(FileValue.FILE, new FileFunction(packageLocator))
@@ -83,7 +82,7 @@ public class ModuleFileFunctionTest extends FoundationTestCase {
                 new AtomicReference<>(UnixGlob.DEFAULT_SYSCALLS),
                 externalFilesHelper))
             .put(SkyFunctions.MODULE_FILE,
-                new ModuleFileFunction(fetcherFactory, registryFactory, rootDirectory))
+                new ModuleFileFunction(registryFactory, rootDirectory))
             .put(SkyFunctions.PRECOMPUTED, new PrecomputedFunction())
             .build(),
         differencer);
@@ -146,11 +145,11 @@ public class ModuleFileFunctionTest extends FoundationTestCase {
     FakeRegistry registry2 = registryFactory.newFakeRegistry()
         .addModule(ModuleKey.create("B", "1.0"),
             "module(name='B',version='1.0');bazel_dep(name='C',version='2.0')",
-            new LocalPathFetcher(rootDirectory.getRelative("B")));
+            LocalPathOverride.create("B").getRepoSpec("B"));
     FakeRegistry registry3 = registryFactory.newFakeRegistry()
         .addModule(ModuleKey.create("B", "1.0"),
             "module(name='B',version='1.0');bazel_dep(name='D',version='3.0')",
-            new LocalPathFetcher(rootDirectory.getRelative("B")));
+            LocalPathOverride.create("B").getRepoSpec("B"));
     ModuleFileFunction.REGISTRIES.set(differencer,
         ImmutableList.of(registry1.getUrl(), registry2.getUrl(), registry3.getUrl()));
 
@@ -182,7 +181,7 @@ public class ModuleFileFunctionTest extends FoundationTestCase {
     FakeRegistry registry = registryFactory.newFakeRegistry()
         .addModule(ModuleKey.create("B", "1.0"),
             "module(name='B',version='1.0');bazel_dep(name='C',version='3.0')",
-            new LocalPathFetcher(rootDirectory.getRelative("B")));
+            LocalPathOverride.create("B").getRepoSpec("B"));
     ModuleFileFunction.REGISTRIES.set(differencer, ImmutableList.of(registry.getUrl()));
 
     // The version is "" (empty) here due to the override.
@@ -206,11 +205,11 @@ public class ModuleFileFunctionTest extends FoundationTestCase {
     FakeRegistry registry1 = registryFactory.newFakeRegistry()
         .addModule(ModuleKey.create("B", "1.0"),
             "module(name='B',version='1.0');bazel_dep(name='C',version='2.0')",
-            new LocalPathFetcher(rootDirectory.getRelative("B")));
+            LocalPathOverride.create("B").getRepoSpec("B"));
     FakeRegistry registry2 = registryFactory.newFakeRegistry()
         .addModule(ModuleKey.create("B", "1.0"),
             "module(name='B',version='1.0');bazel_dep(name='C',version='3.0')",
-            new LocalPathFetcher(rootDirectory.getRelative("B")));
+            LocalPathOverride.create("B").getRepoSpec("B"));
     // Override the registry for B to be registry2 (instead of the default registry1).
     scratch.file(rootDirectory.getRelative("MODULE.bazel").getPathString(),
         "module(name='A',version='0.1')",

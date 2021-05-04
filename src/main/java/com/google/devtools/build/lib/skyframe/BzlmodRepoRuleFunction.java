@@ -7,6 +7,8 @@ import com.google.devtools.build.lib.analysis.BlazeDirectories;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleCreator;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue.BzlmodRepoRuleKey;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue.Stage;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.OverrideDepRepoSpecValue;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.RepoSpec;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.BazelModuleRepoSpecValue;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.ModuleRuleRepoSpecValue;
@@ -66,8 +68,18 @@ public class BzlmodRepoRuleFunction implements SkyFunction {
     }
 
     String repositoryName = ((BzlmodRepoRuleKey) skyKey).getRepositoryName();
-    boolean forModuleRuleResolution = ((BzlmodRepoRuleKey) skyKey).isForModuleRuleResolution();
+    Stage stage = ((BzlmodRepoRuleKey) skyKey).getStage();
     RepoSpec repoSpec;
+
+    OverrideDepRepoSpecValue overrideDepRepos =
+        (OverrideDepRepoSpecValue) env.getValue(OverrideDepRepoSpecValue.KEY);
+    if (overrideDepRepos == null) {
+      return null;
+    }
+    repoSpec = overrideDepRepos.getRepository(repositoryName);
+    if (repoSpec != null || stage == Stage.OVERRIDE_DEP) {
+      return getRuleFromSpec(repoSpec, starlarkSemantics, env);
+    }
 
     // Look for repositories derived from native Bazel Modules
     BazelModuleRepoSpecValue bazelModuleRepos = (BazelModuleRepoSpecValue) env.getValue(
@@ -76,22 +88,27 @@ public class BzlmodRepoRuleFunction implements SkyFunction {
       return null;
     }
     repoSpec = bazelModuleRepos.getRepository(repositoryName);
+    if (repoSpec != null || stage == Stage.BAZEL_MODULE) {
+      return getRuleFromSpec(repoSpec, starlarkSemantics, env);
+    }
 
     // Look for repositories derived from module rules if the repo is not requested for module rule
     // resolution.
-    if (repoSpec == null && !forModuleRuleResolution) {
-      ModuleRuleRepoSpecValue moduleRuleRepos = (ModuleRuleRepoSpecValue) env.getValue(
-          ModuleRuleRepoSpecValue.KEY);
-      if (moduleRuleRepos == null) {
-        return null;
-      }
-      repoSpec = moduleRuleRepos.getRepository(repositoryName);
+    ModuleRuleRepoSpecValue moduleRuleRepos = (ModuleRuleRepoSpecValue) env.getValue(
+        ModuleRuleRepoSpecValue.KEY);
+    if (moduleRuleRepos == null) {
+      return null;
     }
-
+    repoSpec = moduleRuleRepos.getRepository(repositoryName);
     if (repoSpec == null) {
       return BzlmodRepoRuleValue.REPO_RULE_NOT_FOUND_VALUE;
     }
+    return getRuleFromSpec(repoSpec, starlarkSemantics, env);
+  }
 
+  private BzlmodRepoRuleValue getRuleFromSpec(RepoSpec repoSpec,
+      StarlarkSemantics starlarkSemantics, Environment env)
+      throws BzlmodRepoRuleFunctionException, InterruptedException {
     if (isNativeRepoRule(repoSpec)) {
       return getNativeRepoRule(repoSpec, starlarkSemantics, env);
     } else {
@@ -217,6 +234,7 @@ public class BzlmodRepoRuleFunction implements SkyFunction {
   }
 
   private static final class BzlmodRepoRuleFunctionException extends SkyFunctionException {
+
     BzlmodRepoRuleFunctionException(InvalidRuleException e, Transience transience) {
       super(e, transience);
     }

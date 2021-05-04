@@ -25,13 +25,8 @@ public abstract class ArchiveOverride implements NonRegistryOverride {
   public abstract int getPatchStrip();
 
   @Override
-  public EarlyFetcher toEarlyFetcher(FetcherFactory fetcherFactory) {
-    return fetcherFactory.createArchiveFetcher(getUrls(), getPatches(), getIntegrity(),
-        getStripPrefix(), getPatchStrip());
-  }
-
-  @Override
   public RepoSpec getRepoSpec(String repoName) {
-    return null;
+    return IndexRegistry.getRepoSpecForArchive(
+        repoName, getUrls(), getPatches(), getIntegrity(), getStripPrefix(), getPatchStrip());
   }
 }

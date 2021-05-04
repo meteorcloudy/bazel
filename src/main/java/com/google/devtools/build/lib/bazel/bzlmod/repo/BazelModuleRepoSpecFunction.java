@@ -2,7 +2,6 @@ package com.google.devtools.build.lib.bazel.bzlmod.repo;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
-import com.google.devtools.build.lib.bazel.bzlmod.Fetcher;
 import com.google.devtools.build.lib.bazel.bzlmod.Module;
 import com.google.devtools.build.lib.bazel.bzlmod.ModuleKey;
 import com.google.devtools.build.lib.bazel.bzlmod.SelectionValue;
@@ -38,15 +37,14 @@ public class BazelModuleRepoSpecFunction implements SkyFunction {
       }
       try {
         Module module = selectionValue.getDepGraph().get(moduleKey);
-        Fetcher fetcher;
-        if (module.getFetcher() != null) {
-          fetcher = module.getFetcher();
-        } else {
-          fetcher = module.getRegistry().getFetcher(moduleKey, env.getListener());
-        }
         // TODO: calculate the real repo name
         String repoName = moduleKey.getName();
-        RepoSpec repoSpec = new RepoSpec(fetcher.getRuleClass(), fetcher.getRuleAttrs(repoName));
+        RepoSpec repoSpec;
+        if (module.getRepoSpec() != null) {
+          repoSpec = module.getRepoSpec();
+        } else {
+          repoSpec = module.getRegistry().getRepoSpec(moduleKey, repoName, env.getListener());
+        }
         repositories.put(repoName, repoSpec);
       } catch (IOException e) {
         throw new BazelModuleRepoInfoFunctionException(e, Transience.PERSISTENT);

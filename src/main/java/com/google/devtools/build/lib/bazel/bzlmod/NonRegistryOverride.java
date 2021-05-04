@@ -5,7 +5,5 @@ import com.google.devtools.build.lib.starlarkbuildapi.repository.StarlarkOverrid
 
 public interface NonRegistryOverride extends StarlarkOverrideApi {
 
-  EarlyFetcher toEarlyFetcher(FetcherFactory fetcherFactory);
-
   RepoSpec getRepoSpec(String repoName);
 }
