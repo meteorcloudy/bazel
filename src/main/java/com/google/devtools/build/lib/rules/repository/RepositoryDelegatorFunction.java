@@ -19,6 +19,7 @@ import static com.google.devtools.build.lib.rules.repository.RepositoryDirectory
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
@@ -97,6 +98,8 @@ public final class RepositoryDelegatorFunction implements SkyFunction {
   // The marker file version is inject in the rule key digest so the rule key is always different
   // when we decide to update the format.
   private static final int MARKER_FILE_VERSION = 3;
+
+  private static final String TOOLS_REPO = "@bazel_tools";
 
   // Mapping of rule class name to RepositoryFunction.
   private final ImmutableMap<String, RepositoryFunction> handlers;
@@ -396,6 +399,12 @@ public final class RepositoryDelegatorFunction implements SkyFunction {
   public static Optional<Rule> getRepositoryForBzlmod(SkyKey skyKey, Environment env)
       throws InterruptedException {
     RepositoryName repositoryName = (RepositoryName) skyKey.argument();
+
+    // Do NOT try to fetch @bazel_tools from bzlmod resolved repos, this avoid cycle dependency
+    // during bzlmod dependency resolution.
+    if (repositoryName.getName().equals(TOOLS_REPO)) {
+      return Optional.empty();
+    }
 
     SkyKey repoInfoKey = BzlmodRepoRuleValue.key(repositoryName.strippedName(),
         skyKey instanceof KeyForOverrideDep ? Stage.OVERRIDE_DEP :
