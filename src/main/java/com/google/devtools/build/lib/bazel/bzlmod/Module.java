@@ -3,6 +3,7 @@ package com.google.devtools.build.lib.bazel.bzlmod;
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableMap;
 
+import com.google.devtools.build.lib.bazel.bzlmod.repo.RepoSpec;
 import jdk.internal.jline.internal.Nullable;
 
 @AutoValue
@@ -15,7 +16,7 @@ public abstract class Module {
   public abstract ImmutableMap<String, ModuleKey> getDeps();
 
   @Nullable
-  public abstract Fetcher getFetcher();
+  public abstract RepoSpec getRepoSpec();
 
   @Nullable
   public abstract Registry getRegistry();
@@ -35,7 +36,7 @@ public abstract class Module {
 
     public abstract Builder setDeps(ImmutableMap<String, ModuleKey> value);
 
-    public abstract Builder setFetcher(Fetcher value);
+    public abstract Builder setRepoSpec(RepoSpec value);
 
     public abstract Builder setRegistry(Registry value);
 

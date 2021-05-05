@@ -3,6 +3,7 @@ package com.google.devtools.build.lib.bazel.bzlmod;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.devtools.build.lib.bazel.bzlmod.ModuleFileFunction.ModuleFileFunctionException;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.RepoSpec;
 import com.google.devtools.build.lib.starlarkbuildapi.repository.ModuleFileGlobalsApi;
 import com.google.devtools.build.lib.starlarkbuildapi.repository.StarlarkOverrideApi;
 import java.net.MalformedURLException;
@@ -84,9 +85,9 @@ public class ModuleFileGlobals implements ModuleFileGlobalsApi<ModuleFileFunctio
     return LocalPathOverride.create(path);
   }
 
-  public Module buildModule(Fetcher fetcher, Registry registry) {
+  public Module buildModule(RepoSpec repoSpec, Registry registry) {
     return module.setDeps(ImmutableMap.copyOf(deps))
-        .setFetcher(fetcher)
+        .setRepoSpec(repoSpec)
         .setRegistry(registry)
         .build();
   }

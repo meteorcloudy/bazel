@@ -23,11 +23,11 @@ public class ModuleFileValue implements SkyValue {
     this.overrides = overrides;
   }
 
-  ImmutableMap<String, StarlarkOverrideApi> getOverrides() {
+  public ImmutableMap<String, StarlarkOverrideApi> getOverrides() {
     return overrides;
   }
 
-  Module getModule() {
+  public Module getModule() {
     return module;
   }
 

@@ -75,7 +75,6 @@ public class DiscoveryFunctionTest extends FoundationTestCase {
             ExternalFileAction.DEPEND_ON_EXTERNAL_PKG_FOR_EXTERNAL_REPO_PATHS,
             directories);
 
-    FetcherFactory fetcherFactory = new FetcherFactory(workspaceRoot);
     MemoizingEvaluator evaluator = new InMemoryMemoizingEvaluator(
         ImmutableMap.<SkyFunctionName, SkyFunction>builder()
             .put(FileValue.FILE, new FileFunction(packageLocator))
@@ -85,7 +84,7 @@ public class DiscoveryFunctionTest extends FoundationTestCase {
                 externalFilesHelper))
             .put(SkyFunctions.DISCOVERY, new DiscoveryFunction())
             .put(SkyFunctions.MODULE_FILE,
-                new ModuleFileFunction(fetcherFactory, registryFactory, workspaceRoot))
+                new ModuleFileFunction(registryFactory, workspaceRoot))
             .put(SkyFunctions.PRECOMPUTED, new PrecomputedFunction())
             .build(),
         differencer);
@@ -103,13 +102,13 @@ public class DiscoveryFunctionTest extends FoundationTestCase {
     FakeRegistry registry = registryFactory.newFakeRegistry()
         .addModule(ModuleKey.create("B", "1.0"),
             "module(name='B', version='1.0');bazel_dep(name='D',version='3.0')",
-            new LocalPathFetcher(workspaceRoot.getRelative("B")))
+            LocalPathOverride.create("B").getRepoSpec("B"))
         .addModule(ModuleKey.create("C", "2.0"),
             "module(name='C', version='2.0');bazel_dep(name='D',version='3.0')",
-            new LocalPathFetcher(workspaceRoot.getRelative("C")))
+            LocalPathOverride.create("C").getRepoSpec("C"))
         .addModule(ModuleKey.create("D", "3.0"),
             "module(name='D', version='3.0')",
-            new LocalPathFetcher(workspaceRoot.getRelative("D")));
+            LocalPathOverride.create("D").getRepoSpec("D"));
     ModuleFileFunction.REGISTRIES.set(differencer, ImmutableList.of(registry.getUrl()));
 
     EvaluationResult<DiscoveryValue> result =
@@ -157,13 +156,13 @@ public class DiscoveryFunctionTest extends FoundationTestCase {
     FakeRegistry registry = registryFactory.newFakeRegistry()
         .addModule(ModuleKey.create("B", "0.1"),
             "module(name='B', version='0.1');bazel_dep(name='C',version='1.0')",
-            new LocalPathFetcher(workspaceRoot.getRelative("B")))
+            LocalPathOverride.create("B").getRepoSpec("B"))
         .addModule(ModuleKey.create("C", "1.0"),
             "module(name='C', version='1.0');",
-            new LocalPathFetcher(workspaceRoot.getRelative("C")))
+            LocalPathOverride.create("C").getRepoSpec("C"))
         .addModule(ModuleKey.create("C", "2.0"),
             "module(name='C', version='2.0');",
-            new LocalPathFetcher(workspaceRoot.getRelative("C")));
+            LocalPathOverride.create("C").getRepoSpec("C"));
     ModuleFileFunction.REGISTRIES.set(differencer, ImmutableList.of(registry.getUrl()));
 
     EvaluationResult<DiscoveryValue> result =
@@ -201,14 +200,14 @@ public class DiscoveryFunctionTest extends FoundationTestCase {
     FakeRegistry registry1 = registryFactory.newFakeRegistry()
         .addModule(ModuleKey.create("B", "0.1"),
             "module(name='B', version='0.1');bazel_dep(name='C',version='1.0')",
-            new LocalPathFetcher(workspaceRoot.getRelative("B")))
+            LocalPathOverride.create("B").getRepoSpec("B"))
         .addModule(ModuleKey.create("C", "1.0"),
             "module(name='C', version='1.0');",
-            new LocalPathFetcher(workspaceRoot.getRelative("C")));
+            LocalPathOverride.create("C").getRepoSpec("C"));
     FakeRegistry registry2 = registryFactory.newFakeRegistry()
         .addModule(ModuleKey.create("C", "1.0"),
             "module(name='C', version='1.0');bazel_dep(name='B',version='0.1')",
-            new LocalPathFetcher(workspaceRoot.getRelative("C")));
+            LocalPathOverride.create("C").getRepoSpec("C"));
     scratch.file(workspaceRoot.getRelative("MODULE.bazel").getPathString(),
         "module(name='A',version='0.1')",
         "bazel_dep(name='B',version='0.1')",
@@ -260,10 +259,10 @@ public class DiscoveryFunctionTest extends FoundationTestCase {
     FakeRegistry registry = registryFactory.newFakeRegistry()
         .addModule(ModuleKey.create("B", "0.1"),
             "module(name='B', version='0.1');bazel_dep(name='C',version='1.0')",
-            new LocalPathFetcher(workspaceRoot.getRelative("B")))
+            LocalPathOverride.create("B").getRepoSpec("B"))
         .addModule(ModuleKey.create("C", "1.0"),
             "module(name='C', version='1.0');",
-            new LocalPathFetcher(workspaceRoot.getRelative("C")));
+            LocalPathOverride.create("C").getRepoSpec("C"));
     ModuleFileFunction.REGISTRIES.set(differencer, ImmutableList.of(registry.getUrl()));
 
     EvaluationResult<DiscoveryValue> result =

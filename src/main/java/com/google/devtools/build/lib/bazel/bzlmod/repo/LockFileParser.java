@@ -2,7 +2,6 @@ package com.google.devtools.build.lib.bazel.bzlmod.repo;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.RepositoryInfo.Builder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -40,11 +39,11 @@ public abstract class LockFileParser {
     throw new IllegalArgumentException("Wrong element type");
   }
 
-  static ImmutableMap<String, RepositoryInfo> loadRepositoryInfos(String content) {
+  static ImmutableMap<String, RepoSpec> loadRepositoryInfos(String content) {
     JsonParser parser = new JsonParser();
     JsonElement json = parser.parse(content);
 
-    ImmutableMap.Builder<String, RepositoryInfo> repositoryInfos = ImmutableMap.builder();
+    ImmutableMap.Builder<String, RepoSpec> repositoryInfos = ImmutableMap.builder();
 
     for (JsonElement repoElement: json.getAsJsonObject().get("repositories").getAsJsonArray()) {
       JsonObject repo = repoElement.getAsJsonObject();
@@ -57,17 +56,9 @@ public abstract class LockFileParser {
         attributesBuilder.put(entry.getKey(), convertToJavaObject(entry.getValue()));
       }
 
-      RepositoryInfo.Builder builder = new Builder();
       String name = "@" + repo.get("name").getAsString();
-      RepositoryInfo repositoryInfo = builder.setName(name)
-          .setRuleClass(repo.get("rule_class").getAsString())
-          .setAttributes(attributesBuilder.build())
-          .setRepoDeps((ImmutableList) convertToJavaObject(repo.get("repo_deps")))
-          .setRepoMappings((ImmutableMap<String, String>) convertToJavaObject(repo.get("repo_mappings")))
-          .setVendorDir(repo.get("vendor_dir").getAsString())
-          .build();
-
-      repositoryInfos.put(name, repositoryInfo);
+      RepoSpec repoSpec = new RepoSpec(repo.get("rule_class").getAsString(), attributesBuilder.build());
+      repositoryInfos.put(name, repoSpec);
     }
 
     return repositoryInfos.build();
