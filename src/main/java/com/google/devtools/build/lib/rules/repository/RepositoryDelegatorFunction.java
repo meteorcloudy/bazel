@@ -19,7 +19,6 @@ import static com.google.devtools.build.lib.rules.repository.RepositoryDirectory
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
@@ -27,7 +26,6 @@ import com.google.common.collect.Ordering;
 import com.google.devtools.build.lib.actions.FileValue;
 import com.google.devtools.build.lib.analysis.BlazeDirectories;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue.Stage;
 import com.google.devtools.build.lib.cmdline.RepositoryName;
 import com.google.devtools.build.lib.events.Event;
 import com.google.devtools.build.lib.events.ExtendedEventHandler.FetchProgress;
@@ -37,8 +35,6 @@ import com.google.devtools.build.lib.repository.ExternalPackageException;
 import com.google.devtools.build.lib.repository.ExternalPackageHelper;
 import com.google.devtools.build.lib.repository.ExternalRuleNotFoundException;
 import com.google.devtools.build.lib.repository.RepositoryFailedEvent;
-import com.google.devtools.build.lib.rules.repository.RepositoryDirectoryValue.KeyForBazelModule;
-import com.google.devtools.build.lib.rules.repository.RepositoryDirectoryValue.KeyForOverrideDep;
 import com.google.devtools.build.lib.rules.repository.RepositoryFunction.AlreadyReportedRepositoryAccessException;
 import com.google.devtools.build.lib.rules.repository.RepositoryFunction.RepositoryFunctionException;
 import com.google.devtools.build.lib.skyframe.ManagedDirectoriesKnowledge;
@@ -406,9 +402,7 @@ public final class RepositoryDelegatorFunction implements SkyFunction {
       return Optional.empty();
     }
 
-    SkyKey repoInfoKey = BzlmodRepoRuleValue.key(repositoryName.strippedName(),
-        skyKey instanceof KeyForOverrideDep ? Stage.OVERRIDE_DEP :
-        skyKey instanceof KeyForBazelModule ? Stage.BAZEL_MODULE : Stage.FINAL);
+    SkyKey repoInfoKey = BzlmodRepoRuleValue.key(repositoryName.strippedName());
     BzlmodRepoRuleValue value = (BzlmodRepoRuleValue) env.getValue(repoInfoKey);
 
     if (value == null) {

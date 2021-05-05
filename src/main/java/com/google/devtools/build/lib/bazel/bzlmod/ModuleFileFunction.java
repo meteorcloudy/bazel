@@ -172,8 +172,7 @@ public class ModuleFileFunction implements SkyFunction {
       // TODO: The repo name is not necessarily the same as the module name here. Fix later.
       String repoName = key.getName();
       RepositoryDirectoryValue repoDir = (RepositoryDirectoryValue) env.getValue(
-          RepositoryDirectoryValue.keyForOverrideDep(
-              RepositoryName.createFromValidStrippedName(repoName)));
+          RepositoryDirectoryValue.key(RepositoryName.createFromValidStrippedName(repoName)));
       if (repoDir == null) {
         return null;
       }
