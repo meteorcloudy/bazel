@@ -6,8 +6,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.devtools.build.lib.analysis.BlazeDirectories;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleCreator;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue.BzlmodRepoRuleKey;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue.Stage;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue.Key;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.OverrideDepRepoSpecValue;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.RepoSpec;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.BazelModuleRepoSpecValue;
@@ -67,8 +66,7 @@ public class BzlmodRepoRuleFunction implements SkyFunction {
       return null;
     }
 
-    String repositoryName = ((BzlmodRepoRuleKey) skyKey).getRepositoryName();
-    Stage stage = ((BzlmodRepoRuleKey) skyKey).getStage();
+    String repositoryName = ((Key) skyKey).argument();
     RepoSpec repoSpec;
 
     OverrideDepRepoSpecValue overrideDepRepos =
@@ -77,7 +75,7 @@ public class BzlmodRepoRuleFunction implements SkyFunction {
       return null;
     }
     repoSpec = overrideDepRepos.getRepository(repositoryName);
-    if (repoSpec != null || stage == Stage.OVERRIDE_DEP) {
+    if (repoSpec != null) {
       return getRuleFromSpec(repoSpec, starlarkSemantics, env);
     }
 
@@ -88,7 +86,7 @@ public class BzlmodRepoRuleFunction implements SkyFunction {
       return null;
     }
     repoSpec = bazelModuleRepos.getRepository(repositoryName);
-    if (repoSpec != null || stage == Stage.BAZEL_MODULE) {
+    if (repoSpec != null) {
       return getRuleFromSpec(repoSpec, starlarkSemantics, env);
     }
 

@@ -26,7 +26,6 @@ import com.google.common.collect.Ordering;
 import com.google.devtools.build.lib.actions.FileValue;
 import com.google.devtools.build.lib.analysis.BlazeDirectories;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue.Stage;
 import com.google.devtools.build.lib.cmdline.RepositoryName;
 import com.google.devtools.build.lib.events.Event;
 import com.google.devtools.build.lib.events.ExtendedEventHandler.FetchProgress;
@@ -36,8 +35,6 @@ import com.google.devtools.build.lib.repository.ExternalPackageException;
 import com.google.devtools.build.lib.repository.ExternalPackageHelper;
 import com.google.devtools.build.lib.repository.ExternalRuleNotFoundException;
 import com.google.devtools.build.lib.repository.RepositoryFailedEvent;
-import com.google.devtools.build.lib.rules.repository.RepositoryDirectoryValue.KeyForBazelModule;
-import com.google.devtools.build.lib.rules.repository.RepositoryDirectoryValue.KeyForOverrideDep;
 import com.google.devtools.build.lib.rules.repository.RepositoryFunction.AlreadyReportedRepositoryAccessException;
 import com.google.devtools.build.lib.rules.repository.RepositoryFunction.RepositoryFunctionException;
 import com.google.devtools.build.lib.skyframe.ManagedDirectoriesKnowledge;
@@ -97,6 +94,8 @@ public final class RepositoryDelegatorFunction implements SkyFunction {
   // The marker file version is inject in the rule key digest so the rule key is always different
   // when we decide to update the format.
   private static final int MARKER_FILE_VERSION = 3;
+
+  private static final String TOOLS_REPO = "@bazel_tools";
 
   // Mapping of rule class name to RepositoryFunction.
   private final ImmutableMap<String, RepositoryFunction> handlers;
@@ -397,9 +396,13 @@ public final class RepositoryDelegatorFunction implements SkyFunction {
       throws InterruptedException {
     RepositoryName repositoryName = (RepositoryName) skyKey.argument();
 
-    SkyKey repoInfoKey = BzlmodRepoRuleValue.key(repositoryName.strippedName(),
-        skyKey instanceof KeyForOverrideDep ? Stage.OVERRIDE_DEP :
-        skyKey instanceof KeyForBazelModule ? Stage.BAZEL_MODULE : Stage.FINAL);
+    // Do NOT try to fetch @bazel_tools from bzlmod resolved repos, this avoid cycle dependency
+    // during bzlmod dependency resolution.
+    if (repositoryName.getName().equals(TOOLS_REPO)) {
+      return Optional.empty();
+    }
+
+    SkyKey repoInfoKey = BzlmodRepoRuleValue.key(repositoryName.strippedName());
     BzlmodRepoRuleValue value = (BzlmodRepoRuleValue) env.getValue(repoInfoKey);
 
     if (value == null) {

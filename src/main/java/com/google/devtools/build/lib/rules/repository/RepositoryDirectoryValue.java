@@ -166,21 +166,6 @@ public abstract class RepositoryDirectoryValue implements SkyValue {
     return Key.create(repository);
   }
 
-  /** Creates a key from the given repository name.
-   * Use this key to only fetch repositories generated from Bazel modules, this is used in module
-   * rule resolution because at that time module rule generated repositories are not available.
-   * */
-  public static Key keyForBazelModule(RepositoryName repository) {
-    return KeyForBazelModule.create(repository);
-  }
-
-  /** Creates a key from the given repository name.
-   * Use this key to only fetch repositories generated from override_dep functions in MODULE.bazel
-   * */
-  public static Key keyForOverrideDep(RepositoryName repository) {
-    return KeyForOverrideDep.create(repository);
-  }
-
   /** The SkyKey for retrieving the local directory of an external repository. */
   @AutoCodec.VisibleForSerialization
   @AutoCodec
@@ -200,30 +185,6 @@ public abstract class RepositoryDirectoryValue implements SkyValue {
     @Override
     public SkyFunctionName functionName() {
       return SkyFunctions.REPOSITORY_DIRECTORY;
-    }
-  }
-
-  public static class KeyForBazelModule extends RepositoryDirectoryValue.Key {
-    private KeyForBazelModule(RepositoryName arg) {
-      super(arg);
-    }
-
-    @AutoCodec.VisibleForSerialization
-    @AutoCodec.Instantiator
-    static Key create(RepositoryName arg) {
-      return new KeyForBazelModule(arg);
-    }
-  }
-
-  public static class KeyForOverrideDep extends RepositoryDirectoryValue.Key {
-    private KeyForOverrideDep(RepositoryName arg) {
-      super(arg);
-    }
-
-    @AutoCodec.VisibleForSerialization
-    @AutoCodec.Instantiator
-    static Key create(RepositoryName arg) {
-      return new KeyForOverrideDep(arg);
     }
   }
 
