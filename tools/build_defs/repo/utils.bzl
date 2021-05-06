@@ -69,7 +69,7 @@ def _use_native_patch(patch_args):
             return False
     return True
 
-def _download_patch(ctx, patch_url, auth):
+def _download_patch(ctx, patch_url, integrity, auth):
     name = patch_url.split("/")[-1]
     patch_path = ctx.path(".tmp_remote_patches").get_child(name)
     ctx.download(
@@ -77,6 +77,7 @@ def _download_patch(ctx, patch_url, auth):
         patch_path,
         canonical_id = ctx.attr.canonical_id,
         auth = auth,
+        integrity = integrity,
     )
     return patch_path
 
@@ -113,7 +114,8 @@ def patch(ctx, patches = None, patch_cmds = None, patch_cmds_win = None, patch_t
 
     if hasattr(ctx.attr, "remote_patches") and ctx.attr.remote_patches:
         for patch_url in ctx.attr.remote_patches:
-            patch_path = _download_patch(ctx, patch_url, auth)
+            integrity = ctx.attr.remote_patches[patch_url]
+            patch_path = _download_patch(ctx, patch_url, integrity, auth)
             patches.append(patch_path)
 
     if patch_cmds == None and hasattr(ctx.attr, "patch_cmds"):
