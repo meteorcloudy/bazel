@@ -73,7 +73,7 @@ public class IndexRegistry implements Registry {
     URL url;
     String integrity;
     String stripPrefix;
-    String[] patches;
+    Map<String, String> patches;
     int patchStrip;
   }
 
@@ -104,7 +104,7 @@ public class IndexRegistry implements Registry {
       throw new IOException(String.format("Missing integrity for module %s", key));
     }
     URL sourceUrl = sourceJson.get().url;
-    ImmutableList.Builder<URL> urls = new ImmutableList.Builder<>();
+    ImmutableList.Builder<String> urls = new ImmutableList.Builder<>();
     if (bazelRegistryJson.isPresent() && bazelRegistryJson.get().mirrors != null) {
       for (String mirror : bazelRegistryJson.get().mirrors) {
         StringBuilder url = new StringBuilder(mirror);
@@ -116,41 +116,44 @@ public class IndexRegistry implements Registry {
           url.append('/');
         }
         url.append(sourceUrl.getFile());
-        urls.add(new URL(url.toString()));
+        urls.add(url.toString());
       }
     }
-    urls.add(sourceUrl);
+    urls.add(sourceUrl.toString());
 
-    ImmutableList.Builder<URL> patchUrls = new ImmutableList.Builder<>();
+    // Build remote patches as key value pair as "url" => "integrity"
+    ImmutableMap.Builder<String, String> remotePatches = new ImmutableMap.Builder<>();
     if (sourceJson.get().patches != null) {
       String plainBaseUrl = getUrl();
       if (!plainBaseUrl.endsWith("/")) {
         plainBaseUrl += "/";
       }
-      for (String name : sourceJson.get().patches) {
-        patchUrls.add(new URL(plainBaseUrl +
-            String.format("modules/%s/%s/patches/%s", key.getName(), key.getVersion(), name)));
+      for (Map.Entry<String, String> entry : sourceJson.get().patches.entrySet()) {
+        remotePatches.put(
+            plainBaseUrl + String.format(
+                "modules/%s/%s/patches/%s", key.getName(), key.getVersion(), entry.getKey()),
+            entry.getValue());
       }
     }
     return getRepoSpecForArchive(
         repoName,
         urls.build(),
-        patchUrls.build(),
+        ImmutableList.of(),
+        remotePatches.build(),
         sourceJson.get().integrity,
         Strings.nullToEmpty(sourceJson.get().stripPrefix),
         sourceJson.get().patchStrip);
   }
 
-  public static RepoSpec getRepoSpecForArchive(String repoName, ImmutableList<URL> urls,
-      ImmutableList<URL> patches, String integrity, String stripPrefix, int patchStrip) {
+  public static RepoSpec getRepoSpecForArchive(String repoName, ImmutableList<String> urls,
+      ImmutableList<String> patches, ImmutableMap<String, String> remotePatches, String integrity,
+      String stripPrefix, int patchStrip) {
     ImmutableMap.Builder<String, Object> attrBuilder = ImmutableMap.builder();
     attrBuilder.put("name", repoName)
-        .put("urls", urls.stream().map(URL::toString).collect(Collectors.toList()))
-        // TODO: implement integrity attribute in http_archive
-        .put("sha256", integrity.substring(7))
-        .put(
-            "remote_patches",
-            patches.stream().map(URL::toString).collect(Collectors.toList()))
+        .put("urls", urls)
+        .put("integrity", integrity)
+        .put("patches", patches)
+        .put("remote_patches", remotePatches)
         .put("patch_args", ImmutableList.of("-p" + patchStrip))
         .put("strip_prefix", stripPrefix);
     return new RepoSpec(HTTP_ARCHIVE_RULE_CLASS, attrBuilder.build());

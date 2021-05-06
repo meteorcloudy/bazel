@@ -6,15 +6,14 @@ import com.google.devtools.build.lib.bazel.bzlmod.ModuleFileFunction.ModuleFileF
 import com.google.devtools.build.lib.bazel.bzlmod.repo.RepoSpec;
 import com.google.devtools.build.lib.starlarkbuildapi.repository.ModuleFileGlobalsApi;
 import com.google.devtools.build.lib.starlarkbuildapi.repository.StarlarkOverrideApi;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 import net.starlark.java.eval.Dict;
 import net.starlark.java.eval.EvalException;
 import net.starlark.java.eval.Starlark;
+
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class ModuleFileGlobals implements ModuleFileGlobalsApi<ModuleFileFunctionException> {
 
@@ -63,18 +62,14 @@ public class ModuleFileGlobals implements ModuleFileGlobalsApi<ModuleFileFunctio
 
   @Override
   public StarlarkOverrideApi archiveOverride(Object urls, String integrity,
-      String stripPrefix) throws ModuleFileFunctionException {
-    ImmutableList.Builder<URL> urlList = new ImmutableList.Builder<>();
-    try {
-      if (urls instanceof String) {
-        urlList.add(new URL((String) urls));
-      } else {
-        for (String urlString : (Iterable<String>) urls) {
-          urlList.add(new URL(urlString));
-        }
+      String stripPrefix) {
+    ImmutableList.Builder<String> urlList = new ImmutableList.Builder<>();
+    if (urls instanceof String) {
+      urlList.add((String) urls);
+    } else {
+      for (String urlString : (Iterable<String>) urls) {
+        urlList.add(urlString);
       }
-    } catch (MalformedURLException e) {
-      throw new ModuleFileFunctionException(e);
     }
     // TODO: add patch file support here as well
     return ArchiveOverride.create(urlList.build(), ImmutableList.of(), integrity, stripPrefix, 0);
