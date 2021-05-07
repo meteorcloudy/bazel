@@ -14,8 +14,21 @@ override_dep(
   name = "io_bazel_skydoc",
   override = archive_override(
     urls = ["https://github.com/meteorcloudy/stardoc/archive/558342bfb9fa9fe3f7c82549606a0b9433cde47f.tar.gz"],
-    integrity = "sha256-34252d3e6bf635a196c19af73f5f609ed11c9f8d478f69cadf0c6c28954ce046",
+    integrity = "sha256-WnJbd3l2t3qhIrcH0bbw85tgIPZs1Ce7ERpYVZnIV7E=",
     strip_prefix = "stardoc-558342bfb9fa9fe3f7c82549606a0b9433cde47f",
   )
 )
 
+#override_dep(
+#  name = "io_bazel_skydoc",
+#  override = local_path_override(
+#    path = "",
+#  )
+#)
+#
+#override_dep(
+#  name = "bazel_skylib",
+#  override = single_version_override(
+#    version = "1.0.2",
+#  )
+#)
