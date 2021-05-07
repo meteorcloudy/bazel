@@ -31,12 +31,8 @@ import com.google.devtools.build.lib.analysis.BlazeDirectories;
 import com.google.devtools.build.lib.analysis.ConfiguredRuleClassProvider;
 import com.google.devtools.build.lib.analysis.ServerDirectories;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.BazelModuleRepoSpecFunction;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.BazelModuleRepoSpecValue;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.ModuleRuleRepoSpecFunction;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.ModuleRuleRepoSpecValue;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.OverrideDepRepoSpecFunction;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.OverrideDepRepoSpecValue;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.RepoSpecsFunction;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.RepoSpecsValue;
 import com.google.devtools.build.lib.clock.BlazeClock;
 import com.google.devtools.build.lib.cmdline.PackageIdentifier;
 import com.google.devtools.build.lib.concurrent.AbstractQueueVisitor;
@@ -505,12 +501,7 @@ public abstract class AbstractPackageLoader implements PackageLoader {
         .put(
             BzlmodRepoRuleValue.BZLMOD_REPO_RULE,
             new BzlmodRepoRuleFunction(pkgFactory, ruleClassProvider, directories))
-        .put(BazelModuleRepoSpecValue.BAZEL_MODULE_REPO_SPEC,
-            new BazelModuleRepoSpecFunction())
-        .put(ModuleRuleRepoSpecValue.MODULE_RULE_REPO_SPEC,
-            new ModuleRuleRepoSpecFunction())
-        .put(OverrideDepRepoSpecValue.OVERRIDE_DEP_REPO_SPEC,
-            new OverrideDepRepoSpecFunction())
+        .put(RepoSpecsValue.REPO_SPECS, new RepoSpecsFunction())
         .put(SkyFunctions.EXTERNAL_PACKAGE, new ExternalPackageFunction(getExternalPackageHelper()))
         .put(SkyFunctions.REPOSITORY_MAPPING, new RepositoryMappingFunction())
         .put(
