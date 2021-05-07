@@ -116,6 +116,7 @@ def _http_archive_impl(ctx):
         ctx.attr.strip_prefix,
         canonical_id = ctx.attr.canonical_id,
         auth = auth,
+        integrity = ctx.attr.integrity,
     )
     workspace_and_buildfile(ctx)
     patch(ctx, auth = auth)
@@ -229,6 +230,14 @@ to omit the SHA-256 as remote files can change._ At best omitting this
 field will make your build non-hermetic. It is optional to make development
 easier but should be set before shipping.""",
     ),
+    "integrity": attr.string(
+        doc = """Expected checksum of the file downloaded, in Subresource Integrity format.
+
+This must match the checksum of the file downloaded. It is a security risk
+to omit the checksum as remote files can change. At best omitting this
+field will make your build non-hermetic. It is optional to make development
+easier but should be set before shipping.""",
+    ),
     "netrc": attr.string(
         doc = "Location of the .netrc file to use for authentication",
     ),
@@ -279,10 +288,10 @@ following: `"zip"`, `"jar"`, `"war"`, `"tar"`, `"tar.gz"`, `"tgz"`,
             "patch command line tool if `patch_tool` attribute is specified or there are " +
             "arguments other than `-p` in `patch_args` attribute.",
     ),
-    "remote_patches": attr.string_list(
-        default = [],
+    "remote_patches": attr.string_dict(
+        default = {},
         doc =
-            "A list of URLs of patch files that are to be applied as patches after " +
+            "A list of URLs of patch files and the corresponding integrity values that are to be applied as patches after " +
             "extracting the archive and applied patch files from the `patches` attribute. " +
             "By default, it uses the Bazel-native patch implementation " +
             "which doesn't support fuzz match and binary patch, but Bazel will fall back to use " +

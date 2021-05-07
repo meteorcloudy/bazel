@@ -2,21 +2,20 @@ package com.google.devtools.build.lib.bazel.bzlmod;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.RepoSpec;
-
-import java.net.URL;
 
 @AutoValue
 public abstract class ArchiveOverride implements NonRegistryOverride {
 
-  public static ArchiveOverride create(ImmutableList<URL> urls, ImmutableList<URL> patches,
+  public static ArchiveOverride create(ImmutableList<String> urls, ImmutableList<String> patches,
       String integrity, String stripPrefix, int patchStrip) {
     return new AutoValue_ArchiveOverride(urls, patches, integrity, stripPrefix, patchStrip);
   }
 
-  public abstract ImmutableList<URL> getUrls();
+  public abstract ImmutableList<String> getUrls();
 
-  public abstract ImmutableList<URL> getPatches();
+  public abstract ImmutableList<String> getPatches();
 
   public abstract String getIntegrity();
 
@@ -27,6 +26,6 @@ public abstract class ArchiveOverride implements NonRegistryOverride {
   @Override
   public RepoSpec getRepoSpec(String repoName) {
     return IndexRegistry.getRepoSpecForArchive(
-        repoName, getUrls(), getPatches(), getIntegrity(), getStripPrefix(), getPatchStrip());
+        repoName, getUrls(), getPatches(), ImmutableMap.of(), getIntegrity(), getStripPrefix(), getPatchStrip());
   }
 }
