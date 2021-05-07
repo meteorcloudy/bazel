@@ -95,8 +95,6 @@ public final class RepositoryDelegatorFunction implements SkyFunction {
   // when we decide to update the format.
   private static final int MARKER_FILE_VERSION = 3;
 
-  private static final String TOOLS_REPO = "@bazel_tools";
-
   // Mapping of rule class name to RepositoryFunction.
   private final ImmutableMap<String, RepositoryFunction> handlers;
 
@@ -395,12 +393,6 @@ public final class RepositoryDelegatorFunction implements SkyFunction {
   public static Optional<Rule> getRepositoryForBzlmod(SkyKey skyKey, Environment env)
       throws InterruptedException {
     RepositoryName repositoryName = (RepositoryName) skyKey.argument();
-
-    // Do NOT try to fetch @bazel_tools from bzlmod resolved repos, this avoid cycle dependency
-    // during bzlmod dependency resolution.
-    if (repositoryName.getName().equals(TOOLS_REPO)) {
-      return Optional.empty();
-    }
 
     SkyKey repoInfoKey = BzlmodRepoRuleValue.key(repositoryName.strippedName());
     BzlmodRepoRuleValue value = (BzlmodRepoRuleValue) env.getValue(repoInfoKey);

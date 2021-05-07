@@ -103,13 +103,9 @@ import com.google.devtools.build.lib.analysis.configuredtargets.MergedConfigured
 import com.google.devtools.build.lib.analysis.configuredtargets.OutputFileConfiguredTarget;
 import com.google.devtools.build.lib.analysis.starlark.StarlarkTransition;
 import com.google.devtools.build.lib.analysis.starlark.StarlarkTransition.TransitionException;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.BazelModuleRepoSpecFunction;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.BazelModuleRepoSpecValue;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.RepoSpecsFunction;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.RepoSpecsValue;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.ModuleRuleRepoSpecFunction;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.ModuleRuleRepoSpecValue;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.OverrideDepRepoSpecFunction;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.OverrideDepRepoSpecValue;
 import com.google.devtools.build.lib.bugreport.BugReport;
 import com.google.devtools.build.lib.bugreport.BugReporter;
 import com.google.devtools.build.lib.buildeventstream.BuildEventStreamProtos;
@@ -620,12 +616,7 @@ public abstract class SkyframeExecutor implements WalkableGraphFactory, Configur
             bzlLoadFunctionForInliningPackageAndWorkspaceNodes));
     map.put(BzlmodRepoRuleValue.BZLMOD_REPO_RULE,
         new BzlmodRepoRuleFunction(pkgFactory, ruleClassProvider, directories));
-    map.put(BazelModuleRepoSpecValue.BAZEL_MODULE_REPO_SPEC,
-        new BazelModuleRepoSpecFunction());
-    map.put(ModuleRuleRepoSpecValue.MODULE_RULE_REPO_SPEC,
-        new ModuleRuleRepoSpecFunction());
-    map.put(OverrideDepRepoSpecValue.OVERRIDE_DEP_REPO_SPEC,
-        new OverrideDepRepoSpecFunction());
+    map.put(RepoSpecsValue.REPO_SPECS, new RepoSpecsFunction());
     map.put(SkyFunctions.EXTERNAL_PACKAGE, new ExternalPackageFunction(externalPackageHelper));
     map.put(
         SkyFunctions.TARGET_COMPLETION,

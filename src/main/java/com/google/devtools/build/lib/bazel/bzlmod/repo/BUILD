@@ -21,10 +21,8 @@ java_library(
 java_library(
     name = "repo_spec_values",
     srcs = [
-        "BazelModuleRepoSpecValue.java",
-        "ModuleRuleRepoSpecValue.java",
-        "OverrideDepRepoSpecValue.java",
         "RepoSpec.java",
+        "RepoSpecsValue.java",
     ],
     deps = [
         "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/autocodec:autocodec-annotation",
@@ -36,10 +34,8 @@ java_library(
 java_library(
     name = "repo_spec_functions",
     srcs = [
-        "BazelModuleRepoSpecFunction.java",
         "LockFileParser.java",
-        "ModuleRuleRepoSpecFunction.java",
-        "OverrideDepRepoSpecFunction.java",
+        "RepoSpecsFunction.java",
     ],
     deps = [
         ":repo_spec_values",

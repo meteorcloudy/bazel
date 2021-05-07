@@ -3,8 +3,8 @@ package com.google.devtools.build.lib.bazel.bzlmod.repo;
 import com.google.common.collect.ImmutableMap;
 
 public class RepoSpec {
-  private String ruleClass;
-  private ImmutableMap<String, Object> attributes;
+  private final String ruleClass;
+  private final ImmutableMap<String, Object> attributes;
 
   public RepoSpec(String ruleClass, ImmutableMap<String, Object> attributes) {
     this.ruleClass = ruleClass;

@@ -39,7 +39,7 @@ public abstract class LockFileParser {
     throw new IllegalArgumentException("Wrong element type");
   }
 
-  static ImmutableMap<String, RepoSpec> loadRepositoryInfos(String content) {
+  static ImmutableMap<String, RepoSpec> loadRepoSpecs(String content) {
     JsonParser parser = new JsonParser();
     JsonElement json = parser.parse(content);
 

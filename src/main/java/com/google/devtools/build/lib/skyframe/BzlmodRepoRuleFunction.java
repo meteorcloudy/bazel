@@ -7,10 +7,8 @@ import com.google.devtools.build.lib.analysis.BlazeDirectories;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleCreator;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.BzlmodRepoRuleValue.Key;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.OverrideDepRepoSpecValue;
 import com.google.devtools.build.lib.bazel.bzlmod.repo.RepoSpec;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.BazelModuleRepoSpecValue;
-import com.google.devtools.build.lib.bazel.bzlmod.repo.ModuleRuleRepoSpecValue;
+import com.google.devtools.build.lib.bazel.bzlmod.repo.RepoSpecsValue;
 import com.google.devtools.build.lib.cmdline.Label;
 import com.google.devtools.build.lib.cmdline.LabelConstants;
 import com.google.devtools.build.lib.cmdline.PackageIdentifier;
@@ -43,6 +41,8 @@ import javax.annotation.Nullable;
 
 public class BzlmodRepoRuleFunction implements SkyFunction {
 
+  private static final String TOOLS_REPO = "bazel_tools";
+
   private final PackageFactory packageFactory;
   private final RuleClassProvider ruleClassProvider;
   private final BlazeDirectories directories;
@@ -69,8 +69,19 @@ public class BzlmodRepoRuleFunction implements SkyFunction {
     String repositoryName = ((Key) skyKey).argument();
     RepoSpec repoSpec;
 
-    OverrideDepRepoSpecValue overrideDepRepos =
-        (OverrideDepRepoSpecValue) env.getValue(OverrideDepRepoSpecValue.KEY);
+    // @bazel_tools is a special repo that we pull from the extracted install dir.
+    if (repositoryName.equals(TOOLS_REPO)) {
+      repoSpec = new RepoSpec(
+          "local_repository",
+          ImmutableMap.of(
+              "name", "bazel_tools", "path",
+              directories.getEmbeddedBinariesRoot().getChild("embedded_tools").getPathString()));
+      return getRuleFromSpec(repoSpec, starlarkSemantics, env);
+    }
+
+    // Look for repositories defined by non-registry overrides.
+    RepoSpecsValue overrideDepRepos =
+        (RepoSpecsValue) env.getValue(RepoSpecsValue.KEY_FOR_OVERRIDE_DEP);
     if (overrideDepRepos == null) {
       return null;
     }
@@ -80,8 +91,8 @@ public class BzlmodRepoRuleFunction implements SkyFunction {
     }
 
     // Look for repositories derived from native Bazel Modules
-    BazelModuleRepoSpecValue bazelModuleRepos = (BazelModuleRepoSpecValue) env.getValue(
-        BazelModuleRepoSpecValue.KEY);
+    RepoSpecsValue bazelModuleRepos =
+        (RepoSpecsValue) env.getValue(RepoSpecsValue.KEY_FOR_BAZEL_MODULE);
     if (bazelModuleRepos == null) {
       return null;
     }
@@ -92,16 +103,17 @@ public class BzlmodRepoRuleFunction implements SkyFunction {
 
     // Look for repositories derived from module rules if the repo is not requested for module rule
     // resolution.
-    ModuleRuleRepoSpecValue moduleRuleRepos = (ModuleRuleRepoSpecValue) env.getValue(
-        ModuleRuleRepoSpecValue.KEY);
+    RepoSpecsValue moduleRuleRepos =
+        (RepoSpecsValue) env.getValue(RepoSpecsValue.KEY_FOR_MODULE_RULE);
     if (moduleRuleRepos == null) {
       return null;
     }
     repoSpec = moduleRuleRepos.getRepository(repositoryName);
-    if (repoSpec == null) {
-      return BzlmodRepoRuleValue.REPO_RULE_NOT_FOUND_VALUE;
+    if (repoSpec != null) {
+      return getRuleFromSpec(repoSpec, starlarkSemantics, env);
     }
-    return getRuleFromSpec(repoSpec, starlarkSemantics, env);
+
+    return BzlmodRepoRuleValue.REPO_RULE_NOT_FOUND_VALUE;
   }
 
   private BzlmodRepoRuleValue getRuleFromSpec(RepoSpec repoSpec,
