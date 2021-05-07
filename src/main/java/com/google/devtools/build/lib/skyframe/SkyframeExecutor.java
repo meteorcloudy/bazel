@@ -291,7 +291,7 @@ public abstract class SkyframeExecutor implements WalkableGraphFactory, Configur
       // Reduce thread count while running tests of Bazel. Test cases are typically small, and large
       // thread pools vying for a relatively small number of CPU cores may induce non-optimal
       // performance.
-      TestType.isInTest() ? 1 : 200;
+      TestType.isInTest() ? 5 : 200;
 
   // The limit of how many times we will traverse through an exception chain when catching a
   // target parsing exception.
