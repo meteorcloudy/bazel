@@ -44,6 +44,7 @@ java_library(
         "ArchiveOverride.java",
         "DiscoveryFunction.java",
         "DiscoveryValue.java",
+        "GitOverride.java",
         "LocalPathOverride.java",
         "Module.java",
         "ModuleFileFunction.java",
