@@ -14,6 +14,7 @@ import net.starlark.java.eval.Starlark;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import net.starlark.java.eval.StarlarkInt;
 
 public class ModuleFileGlobals implements ModuleFileGlobalsApi<ModuleFileFunctionException> {
 
@@ -56,13 +57,16 @@ public class ModuleFileGlobals implements ModuleFileGlobalsApi<ModuleFileFunctio
   }
 
   @Override
-  public StarlarkOverrideApi singleVersionOverride(String version, String registry) {
-    return SingleVersionOverride.create(version, registry);
+  public StarlarkOverrideApi singleVersionOverride(String version, String registry,
+      Iterable<?> patches, StarlarkInt patchStrip) throws EvalException {
+    return SingleVersionOverride.create(version, registry,
+        ImmutableList.copyOf((Iterable<String>) patches),
+        patchStrip.toInt("single_version_override.patch_strip"));
   }
 
   @Override
   public StarlarkOverrideApi archiveOverride(Object urls, String integrity,
-      String stripPrefix) {
+      String stripPrefix, Iterable<?> patches, StarlarkInt patchStrip) throws EvalException {
     ImmutableList.Builder<String> urlList = new ImmutableList.Builder<>();
     if (urls instanceof String) {
       urlList.add((String) urls);
@@ -71,8 +75,17 @@ public class ModuleFileGlobals implements ModuleFileGlobalsApi<ModuleFileFunctio
         urlList.add(urlString);
       }
     }
-    // TODO: add patch file support here as well
-    return ArchiveOverride.create(urlList.build(), ImmutableList.of(), integrity, stripPrefix, 0);
+    return ArchiveOverride.create(
+        urlList.build(), ImmutableList.copyOf((Iterable<String>) patches), integrity, stripPrefix,
+        patchStrip.toInt("archive_override.patch_strip"));
+  }
+
+  @Override
+  public StarlarkOverrideApi gitOverride(String remote, String commit, Iterable<?> patches,
+      StarlarkInt patchStrip) throws EvalException {
+    return GitOverride.create(
+        remote, commit, ImmutableList.copyOf((Iterable<String>) patches),
+        patchStrip.toInt("git_override.patch_strip"));
   }
 
   @Override

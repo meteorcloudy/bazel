@@ -2,6 +2,7 @@ package com.google.devtools.build.lib.bazel.bzlmod.repo;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
 import com.google.devtools.build.lib.actions.FileValue;
 import com.google.devtools.build.lib.bazel.bzlmod.Module;
 import com.google.devtools.build.lib.bazel.bzlmod.ModuleFileValue;
@@ -9,6 +10,7 @@ import com.google.devtools.build.lib.bazel.bzlmod.ModuleKey;
 import com.google.devtools.build.lib.bazel.bzlmod.NonRegistryOverride;
 import com.google.devtools.build.lib.bazel.bzlmod.RegistryOverride;
 import com.google.devtools.build.lib.bazel.bzlmod.SelectionValue;
+import com.google.devtools.build.lib.bazel.bzlmod.SingleVersionOverride;
 import com.google.devtools.build.lib.pkgcache.PathPackageLocator;
 import com.google.devtools.build.lib.skyframe.PrecomputedValue;
 import com.google.devtools.build.lib.starlarkbuildapi.repository.StarlarkOverrideApi;
@@ -30,6 +32,7 @@ import java.util.Map;
 import javax.annotation.Nullable;
 
 public class RepoSpecsFunction implements SkyFunction {
+
   @Nullable
   @Override
   public SkyValue compute(SkyKey skyKey, Environment env)
@@ -95,12 +98,46 @@ public class RepoSpecsFunction implements SkyFunction {
         } else {
           repoSpec = module.getRegistry().getRepoSpec(moduleKey, repoName, env.getListener());
         }
+        // We may need to apply an extra set of patches here when the module has a single version
+        // override with patches.
+        repoSpec = maybeAppendAdditionalPatches(repoSpec, moduleKey,
+            selectionValue.getOverrides().get(moduleKey.getName()));
         repositories.put(repoName, repoSpec);
       } catch (IOException e) {
         throw new RepoSpecsFunctionException(e, Transience.PERSISTENT);
       }
     }
     return new RepoSpecsValue(repositories.build());
+  }
+
+  private RepoSpec maybeAppendAdditionalPatches(RepoSpec repoSpec, ModuleKey moduleKey,
+      StarlarkOverrideApi override)
+      throws RepoSpecsFunctionException {
+    if (!(override instanceof SingleVersionOverride)) {
+      return repoSpec;
+    }
+    SingleVersionOverride singleVersion = (SingleVersionOverride) override;
+    if (singleVersion.getPatches().isEmpty()) {
+      return repoSpec;
+    }
+    if (!ImmutableList.of("-p" + singleVersion.getPatchStrip())
+        .equals(repoSpec.getAttributes().get("patch_args"))) {
+      // The registry specifies a different patch_strip than the single version override. We
+      // can only throw an exception here.
+      throw new RepoSpecsFunctionException(new IOException(String.format(
+          "Module %s has a single_version_override which specifies a different patch_strip"
+              + " (%d) than the registry (%s)",
+          moduleKey.toString(), singleVersion.getPatchStrip(),
+          repoSpec.getAttributes().get("patch_args"))), Transience.PERSISTENT);
+    }
+    // Append the patches from the override.
+    ImmutableList<String> newPatches = ImmutableList.copyOf(Iterables.concat(
+        (ImmutableList<String>) repoSpec.getAttributes().get("patches"),
+        singleVersion.getPatches()));
+    HashMap<String, Object> newAttrs = new HashMap<>(repoSpec.getAttributes().size());
+    newAttrs.putAll(repoSpec.getAttributes());
+    newAttrs.put("patches", newPatches);
+    return new RepoSpec(repoSpec.getRuleClass(), ImmutableMap.copyOf(newAttrs));
   }
 
   @Nullable

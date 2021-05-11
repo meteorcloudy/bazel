@@ -21,6 +21,7 @@ import net.starlark.java.annot.ParamType;
 import net.starlark.java.annot.StarlarkMethod;
 import net.starlark.java.eval.Dict;
 import net.starlark.java.eval.EvalException;
+import net.starlark.java.eval.StarlarkInt;
 
 /**
  * A collection of global Starlark build API functions that apply to WORKSPACE files.
@@ -48,7 +49,8 @@ public interface ModuleFileGlobalsApi<ModuleFileFunctionExceptionT extends Excep
           //   & platforms
       },
       extraKeywords = @Param(name = "kwargs"))
-  void module(String name, String version, Dict<String, Object> kwargs) throws EvalException, InterruptedException;
+  void module(String name, String version, Dict<String, Object> kwargs)
+      throws EvalException, InterruptedException;
 
   @StarlarkMethod(
       name = "bazel_dep",
@@ -108,9 +110,21 @@ public interface ModuleFileGlobalsApi<ModuleFileFunctionExceptionT extends Excep
               named = true,
               positional = false,
               defaultValue = "''"),
-          // TODO: patch_files, patch_strip
+          @Param(
+              name = "patches",
+              doc = "TODO",
+              named = true,
+              positional = false,
+              defaultValue = "[]"),
+          @Param(
+              name = "patch_strip",
+              doc = "TODO",
+              named = true,
+              positional = false,
+              defaultValue = "0"),
       })
-  StarlarkOverrideApi singleVersionOverride(String version, String registry);
+  StarlarkOverrideApi singleVersionOverride(String version, String registry, Iterable<?> patches,
+      StarlarkInt patchStrip) throws EvalException;
 
   @StarlarkMethod(
       name = "archive_override",
@@ -137,10 +151,53 @@ public interface ModuleFileGlobalsApi<ModuleFileFunctionExceptionT extends Excep
               named = true,
               positional = false,
               defaultValue = "''"),
-          // TODO: patch_files, patch_strip
+          @Param(
+              name = "patches",
+              doc = "TODO",
+              named = true,
+              positional = false,
+              defaultValue = "[]"),
+          @Param(
+              name = "patch_strip",
+              doc = "TODO",
+              named = true,
+              positional = false,
+              defaultValue = "0"),
       })
-  StarlarkOverrideApi archiveOverride(Object urls, String integrity, String stripPrefix)
-      throws ModuleFileFunctionExceptionT;
+  StarlarkOverrideApi archiveOverride(Object urls, String integrity, String stripPrefix,
+      Iterable<?> patches, StarlarkInt patchStrip)
+      throws EvalException, ModuleFileFunctionExceptionT;
+
+  @StarlarkMethod(
+      name = "git_override",
+      doc = "TODO",
+      parameters = {
+          @Param(
+              name = "remote",
+              doc = "TODO",
+              named = true,
+              positional = false),
+          @Param(
+              name = "commit",
+              doc = "TODO",
+              named = true,
+              positional = false,
+              defaultValue = "''"),
+          @Param(
+              name = "patches",
+              doc = "TODO",
+              named = true,
+              positional = false,
+              defaultValue = "[]"),
+          @Param(
+              name = "patch_strip",
+              doc = "TODO",
+              named = true,
+              positional = false,
+              defaultValue = "0"),
+      })
+  StarlarkOverrideApi gitOverride(String remote, String commit, Iterable<?> patches,
+      StarlarkInt patchStrip) throws EvalException, ModuleFileFunctionExceptionT;
 
   @StarlarkMethod(
       name = "local_path_override",
