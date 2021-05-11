@@ -59,7 +59,8 @@ public class SelectionFunction implements SkyFunction {
     collectDeps(ModuleKey.create(discovery.getRootModuleName(), ""), newDepGraph, referenced);
     ImmutableMap<ModuleKey, Module> finalDepGraph =
         ImmutableMap.copyOf(Maps.filterKeys(newDepGraph, referenced::contains));
-    return SelectionValue.create(discovery.getRootModuleName(), finalDepGraph);
+    return SelectionValue.create(
+        discovery.getRootModuleName(), finalDepGraph, discovery.getOverrides());
   }
 
   private void collectDeps(

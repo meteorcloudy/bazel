@@ -110,9 +110,21 @@ public interface ModuleFileGlobalsApi<ModuleFileFunctionExceptionT extends Excep
               named = true,
               positional = false,
               defaultValue = "''"),
-          // TODO: patch_files, patch_strip
+          @Param(
+              name = "patches",
+              doc = "TODO",
+              named = true,
+              positional = false,
+              defaultValue = "[]"),
+          @Param(
+              name = "patch_strip",
+              doc = "TODO",
+              named = true,
+              positional = false,
+              defaultValue = "0"),
       })
-  StarlarkOverrideApi singleVersionOverride(String version, String registry);
+  StarlarkOverrideApi singleVersionOverride(String version, String registry, Iterable<?> patches,
+      StarlarkInt patchStrip) throws EvalException;
 
   @StarlarkMethod(
       name = "archive_override",

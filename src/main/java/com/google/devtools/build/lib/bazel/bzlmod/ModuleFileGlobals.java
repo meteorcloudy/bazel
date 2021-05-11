@@ -57,8 +57,11 @@ public class ModuleFileGlobals implements ModuleFileGlobalsApi<ModuleFileFunctio
   }
 
   @Override
-  public StarlarkOverrideApi singleVersionOverride(String version, String registry) {
-    return SingleVersionOverride.create(version, registry);
+  public StarlarkOverrideApi singleVersionOverride(String version, String registry,
+      Iterable<?> patches, StarlarkInt patchStrip) throws EvalException {
+    return SingleVersionOverride.create(version, registry,
+        ImmutableList.copyOf((Iterable<String>) patches),
+        patchStrip.toInt("single_version_override.patch_strip"));
   }
 
   @Override
