@@ -121,7 +121,7 @@ def _http_archive_impl(ctx):
     workspace_and_buildfile(ctx)
     patch(ctx, auth = auth)
 
-    return update_attrs(ctx.attr, _http_archive_attrs.keys(), {"sha256": download_info.sha256})
+    return update_attrs(ctx.attr, _http_archive_attrs.keys(), {} if ctx.attr.integrity else {"sha256": download_info.sha256})
 
 _HTTP_FILE_BUILD = """
 package(default_visibility = ["//visibility:public"])
