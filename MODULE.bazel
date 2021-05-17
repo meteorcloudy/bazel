@@ -17,27 +17,3 @@ override_dep(
     patch_strip = 1,
   )
 )
-
-#override_dep(
-#  name = "io_bazel_skydoc",
-#  override = archive_override(
-#    urls = ["https://github.com/meteorcloudy/stardoc/archive/558342bfb9fa9fe3f7c82549606a0b9433cde47f.tar.gz"],
-#    integrity = "sha256-NCUtPmv2NaGWwZr3P19gntEcn41Hj2nK3wxsKJVM4EY=",
-#    strip_prefix = "stardoc-558342bfb9fa9fe3f7c82549606a0b9433cde47f",
-#    patches = ["my_patch.patch"],
-#  )
-#)
-
-#override_dep(
-#  name = "io_bazel_skydoc",
-#  override = local_path_override(
-#    path = "",
-#  )
-#)
-#
-#override_dep(
-#  name = "bazel_skylib",
-#  override = single_version_override(
-#    version = "1.0.2",
-#  )
-#)
