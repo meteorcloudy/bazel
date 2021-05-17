@@ -11,13 +11,22 @@ bazel_dep(name = "rules_pkg", version = "0.4.0")
 bazel_dep(name = "io_bazel_skydoc", version = "0.5.0-pre")
 
 override_dep(
-  name = "io_bazel_skydoc",
-  override = archive_override(
-    urls = ["https://github.com/meteorcloudy/stardoc/archive/558342bfb9fa9fe3f7c82549606a0b9433cde47f.tar.gz"],
-    integrity = "sha256-WnJbd3l2t3qhIrcH0bbw85tgIPZs1Ce7ERpYVZnIV7E=",
-    strip_prefix = "stardoc-558342bfb9fa9fe3f7c82549606a0b9433cde47f",
+  name = "com_google_protobuf",
+  override = single_version_override(
+    patches = ["//third_party/protobuf:3.13.0.patch"],
+    patch_strip = 1,
   )
 )
+
+#override_dep(
+#  name = "io_bazel_skydoc",
+#  override = archive_override(
+#    urls = ["https://github.com/meteorcloudy/stardoc/archive/558342bfb9fa9fe3f7c82549606a0b9433cde47f.tar.gz"],
+#    integrity = "sha256-NCUtPmv2NaGWwZr3P19gntEcn41Hj2nK3wxsKJVM4EY=",
+#    strip_prefix = "stardoc-558342bfb9fa9fe3f7c82549606a0b9433cde47f",
+#    patches = ["my_patch.patch"],
+#  )
+#)
 
 #override_dep(
 #  name = "io_bazel_skydoc",
