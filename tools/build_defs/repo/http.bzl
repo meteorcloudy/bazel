@@ -292,11 +292,12 @@ following: `"zip"`, `"jar"`, `"war"`, `"tar"`, `"tar.gz"`, `"tgz"`,
         default = {},
         doc =
             "A list of URLs of patch files and the corresponding integrity values that are to be applied as patches after " +
-            "extracting the archive and applied patch files from the `patches` attribute. " +
-            "By default, it uses the Bazel-native patch implementation " +
-            "which doesn't support fuzz match and binary patch, but Bazel will fall back to use " +
-            "patch command line tool if `patch_tool` attribute is specified or there are " +
-            "arguments other than `-p` in `patch_args` attribute.",
+            "extracting the archive and before applying patch files from the `patches` attribute. " +
+            "It uses the Bazel-native patch implementation, you can specify the patch strip number with `remote_patch_strip`",
+    ),
+    "remote_patch_strip": attr.int(
+        default = 0,
+        doc = "The number of leading slashes to be stripped from the file name in the remote patches."
     ),
     "patch_tool": attr.string(
         default = "",
@@ -312,7 +313,7 @@ following: `"zip"`, `"jar"`, `"war"`, `"tar"`, `"tar.gz"`, `"tgz"`,
             "If arguments other than -p are specified, Bazel will fall back to use patch " +
             "command line tool instead of the Bazel-native patch implementation. When falling " +
             "back to patch command line tool and patch_tool attribute is not specified, " +
-            "`patch` will be used.",
+            "`patch` will be used. This only affects patch files in the `patches` attribute.",
     ),
     "patch_cmds": attr.string_list(
         default = [],
