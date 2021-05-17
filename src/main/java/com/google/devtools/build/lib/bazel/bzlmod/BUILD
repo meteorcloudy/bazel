@@ -22,8 +22,8 @@ java_library(
 java_library(
     name = "registry",
     srcs = [
-        "Registry.java",
         "IndexRegistry.java",
+        "Registry.java",
         "RegistryFactory.java",
         "RegistryFactoryImpl.java",
     ],
@@ -33,6 +33,7 @@ java_library(
         "//src/main/java/com/google/devtools/build/lib/bazel/repository/downloader",
         "//src/main/java/com/google/devtools/build/lib/events",
         "//src/main/java/com/google/devtools/build/lib/vfs",
+        "//src/main/java/net/starlark/java/eval",
         "//third_party:gson",
         "//third_party:guava",
     ],

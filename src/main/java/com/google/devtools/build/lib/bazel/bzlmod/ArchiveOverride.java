@@ -26,7 +26,13 @@ public abstract class ArchiveOverride implements NonRegistryOverride {
   @Override
   public RepoSpec getRepoSpec(String repoName) {
     return IndexRegistry.getRepoSpecForArchive(
-        repoName, getUrls(), getPatches(), ImmutableMap.of(), getIntegrity(), getStripPrefix(),
-        getPatchStrip());
+        /* repoName= */ repoName,
+        /* urls= */ getUrls(),
+        /* integrity= */ getIntegrity(),
+        /* stripPrefix= */ getStripPrefix(),
+        /* patches= */ getPatches(),
+        /* patchStrip= */ getPatchStrip(),
+        /* remotePatches= */ ImmutableMap.of(),
+        /* remotePatchStrip= */ 0);
   }
 }

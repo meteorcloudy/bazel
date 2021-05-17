@@ -112,11 +112,15 @@ def patch(ctx, patches = None, patch_cmds = None, patch_cmds_win = None, patch_t
     if hasattr(ctx.attr, "patches") and ctx.attr.patches:
         patches += ctx.attr.patches
 
+    remote_patches = []
+    remote_patch_strip = 0
     if hasattr(ctx.attr, "remote_patches") and ctx.attr.remote_patches:
+        if hasattr(ctx.attr, "remote_patch_strip"):
+            remote_patch_strip = ctx.attr.remote_patch_strip
         for patch_url in ctx.attr.remote_patches:
             integrity = ctx.attr.remote_patches[patch_url]
             patch_path = _download_patch(ctx, patch_url, integrity, auth)
-            patches.append(patch_path)
+            remote_patches.append(patch_path)
 
     if patch_cmds == None and hasattr(ctx.attr, "patch_cmds"):
         patch_cmds = ctx.attr.patch_cmds
@@ -141,9 +145,14 @@ def patch(ctx, patches = None, patch_cmds = None, patch_cmds_win = None, patch_t
     if patch_args == None:
         patch_args = []
 
-    if len(patches) > 0 or len(patch_cmds) > 0:
+    if len(remote_patches) > 0 or len(patches) > 0 or len(patch_cmds) > 0:
         ctx.report_progress("Patching repository")
 
+    # Apply remote patches
+    for patchfile in remote_patches:
+        ctx.patch(patchfile, remote_patch_strip)
+
+    # Apply local patches
     if native_patch and _use_native_patch(patch_args):
         if patch_args:
             strip = int(patch_args[-1][2:])

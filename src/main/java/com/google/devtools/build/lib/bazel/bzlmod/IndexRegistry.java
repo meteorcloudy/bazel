@@ -9,6 +9,9 @@ import com.google.devtools.build.lib.events.ExtendedEventHandler;
 import com.google.gson.FieldNamingPolicy;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+
+import net.starlark.java.eval.StarlarkInt;
+
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
@@ -136,26 +139,29 @@ public class IndexRegistry implements Registry {
       }
     }
     return getRepoSpecForArchive(
-        repoName,
-        urls.build(),
-        ImmutableList.of(),
-        remotePatches.build(),
-        sourceJson.get().integrity,
-        Strings.nullToEmpty(sourceJson.get().stripPrefix),
-        sourceJson.get().patchStrip);
+        /* repoName= */ repoName,
+        /* urls= */ urls.build(),
+        /* integrity= */ sourceJson.get().integrity,
+        /* stripPrefix= */ Strings.nullToEmpty(sourceJson.get().stripPrefix),
+        /* patches= */ ImmutableList.of(),
+        /* patchStrip= */ 0,
+        /* remotePatches= */ remotePatches.build(),
+        /* remotePatchStrip= */ sourceJson.get().patchStrip);
   }
 
   public static RepoSpec getRepoSpecForArchive(String repoName, ImmutableList<String> urls,
-      ImmutableList<String> patches, ImmutableMap<String, String> remotePatches, String integrity,
-      String stripPrefix, int patchStrip) {
+      String integrity, String stripPrefix,
+      ImmutableList<String> patches, int patchStrip,
+      ImmutableMap<String, String> remotePatches, int remotePatchStrip) {
     ImmutableMap.Builder<String, Object> attrBuilder = ImmutableMap.builder();
     attrBuilder.put("name", repoName)
         .put("urls", urls)
         .put("integrity", integrity)
+        .put("strip_prefix", stripPrefix)
         .put("patches", patches)
-        .put("remote_patches", remotePatches)
         .put("patch_args", ImmutableList.of("-p" + patchStrip))
-        .put("strip_prefix", stripPrefix);
+        .put("remote_patches", remotePatches)
+        .put("remote_patch_strip", StarlarkInt.of(remotePatchStrip));
     return new RepoSpec(HTTP_ARCHIVE_RULE_CLASS, attrBuilder.build());
   }
 }
