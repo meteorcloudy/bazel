@@ -199,7 +199,8 @@ public class ModuleFileFunction implements SkyFunction {
     ImmutableList.Builder<Registry> registryObjects = new ImmutableList.Builder<>();
     for (String registryUrl : registries) {
       try {
-        registryObjects.add(registryFactory.getRegistryWithUrl(registryUrl));
+        registryObjects.add(registryFactory.getRegistryWithUrl(
+            registryUrl.replace("%workspace%", workspaceRoot.getPathString())));
       } catch (URISyntaxException e) {
         throw new ModuleFileFunctionException(e);
       }
