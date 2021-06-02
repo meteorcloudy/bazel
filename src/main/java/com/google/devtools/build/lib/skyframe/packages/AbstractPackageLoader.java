@@ -30,6 +30,9 @@ import com.google.devtools.build.lib.actions.FileValue;
 import com.google.devtools.build.lib.analysis.BlazeDirectories;
 import com.google.devtools.build.lib.analysis.ConfiguredRuleClassProvider;
 import com.google.devtools.build.lib.analysis.ServerDirectories;
+import com.google.devtools.build.lib.bazel.bzlmod.BzlmodRepoRuleValue;
+import com.google.devtools.build.lib.bazel.bzlmod.RepoSpecsFunction;
+import com.google.devtools.build.lib.bazel.bzlmod.RepoSpecsValue;
 import com.google.devtools.build.lib.clock.BlazeClock;
 import com.google.devtools.build.lib.cmdline.PackageIdentifier;
 import com.google.devtools.build.lib.concurrent.AbstractQueueVisitor;
@@ -57,6 +60,7 @@ import com.google.devtools.build.lib.pkgcache.PathPackageLocator;
 import com.google.devtools.build.lib.repository.ExternalPackageHelper;
 import com.google.devtools.build.lib.skyframe.BzlCompileFunction;
 import com.google.devtools.build.lib.skyframe.BzlLoadFunction;
+import com.google.devtools.build.lib.skyframe.BzlmodRepoRuleFunction;
 import com.google.devtools.build.lib.skyframe.ContainingPackageLookupFunction;
 import com.google.devtools.build.lib.skyframe.ExternalFilesHelper;
 import com.google.devtools.build.lib.skyframe.ExternalFilesHelper.ExternalFileAction;
@@ -490,6 +494,9 @@ public abstract class AbstractPackageLoader implements PackageLoader {
             new WorkspaceFileFunction(
                 ruleClassProvider, pkgFactory, directories, /*bzlLoadFunctionForInlining=*/ null))
         .put(SkyFunctions.EXTERNAL_PACKAGE, new ExternalPackageFunction(getExternalPackageHelper()))
+        .put(BzlmodRepoRuleValue.BZLMOD_REPO_RULE,
+             new BzlmodRepoRuleFunction(pkgFactory, ruleClassProvider, directories))
+        .put(RepoSpecsValue.REPO_SPECS, new RepoSpecsFunction())
         .put(SkyFunctions.REPOSITORY_MAPPING, new RepositoryMappingFunction())
         .put(
             SkyFunctions.PACKAGE,

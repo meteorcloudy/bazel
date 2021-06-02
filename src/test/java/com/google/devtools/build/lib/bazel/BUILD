@@ -46,6 +46,7 @@ test_suite(
     name = "all_windows_tests",
     tests = [
         ":windows_tests",
+        "//src/test/java/com/google/devtools/build/lib/bazel/bzlmod:all_windows_tests",
         "//src/test/java/com/google/devtools/build/lib/bazel/debug:all_windows_tests",
         "//src/test/java/com/google/devtools/build/lib/bazel/execlog:all_windows_tests",
         "//src/test/java/com/google/devtools/build/lib/bazel/repository:all_windows_tests",

@@ -101,6 +101,9 @@ import com.google.devtools.build.lib.analysis.configuredtargets.MergedConfigured
 import com.google.devtools.build.lib.analysis.configuredtargets.OutputFileConfiguredTarget;
 import com.google.devtools.build.lib.analysis.starlark.StarlarkTransition;
 import com.google.devtools.build.lib.analysis.starlark.StarlarkTransition.TransitionException;
+import com.google.devtools.build.lib.bazel.bzlmod.BzlmodRepoRuleValue;
+import com.google.devtools.build.lib.bazel.bzlmod.RepoSpecsFunction;
+import com.google.devtools.build.lib.bazel.bzlmod.RepoSpecsValue;
 import com.google.devtools.build.lib.bugreport.BugReport;
 import com.google.devtools.build.lib.bugreport.BugReporter;
 import com.google.devtools.build.lib.buildeventstream.BuildEventStreamProtos;
@@ -587,6 +590,9 @@ public abstract class SkyframeExecutor implements WalkableGraphFactory, Configur
             directories,
             bzlLoadFunctionForInliningPackageAndWorkspaceNodes));
     map.put(SkyFunctions.EXTERNAL_PACKAGE, new ExternalPackageFunction(externalPackageHelper));
+    map.put(BzlmodRepoRuleValue.BZLMOD_REPO_RULE,
+            new BzlmodRepoRuleFunction(pkgFactory, ruleClassProvider, directories));
+    map.put(RepoSpecsValue.REPO_SPECS, new RepoSpecsFunction());
     map.put(
         SkyFunctions.TARGET_COMPLETION,
         TargetCompletor.targetCompletionFunction(
