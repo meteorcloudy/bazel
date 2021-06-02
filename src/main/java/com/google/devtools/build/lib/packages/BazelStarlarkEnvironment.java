@@ -17,12 +17,14 @@ package com.google.devtools.build.lib.packages;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
+
+import net.starlark.java.eval.FlagGuardedValue;
+import net.starlark.java.eval.Starlark;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import net.starlark.java.eval.FlagGuardedValue;
-import net.starlark.java.eval.Starlark;
 
 // TODO(adonovan): move skyframe.PackageFunction into lib.packages so we needn't expose this and
 // the other env-building functions.
@@ -57,6 +59,8 @@ public final class BazelStarlarkEnvironment {
   private final ImmutableMap<String, Object> workspaceBzlEnv;
   /** The top-level predeclared symbols for a bzl module in the {@code @_builtins} pseudo-repo. */
   private final ImmutableMap<String, Object> builtinsBzlEnv;
+  /** The top-level predeclared symbols for a bzl module in the Bzlmod system. */
+  private final ImmutableMap<String, Object> bzlmodBzlEnv;
 
   BazelStarlarkEnvironment(
       RuleClassProvider ruleClassProvider,
@@ -73,6 +77,7 @@ public final class BazelStarlarkEnvironment {
     this.uninjectedBuildBzlEnv =
         createUninjectedBuildBzlEnv(ruleClassProvider, uninjectedBuildBzlNativeBindings);
     this.workspaceBzlEnv = createWorkspaceBzlEnv(ruleClassProvider, workspaceBzlNativeBindings);
+    this.bzlmodBzlEnv = createWorkspaceBzlEnv(ruleClassProvider, workspaceBzlNativeBindings);
     this.builtinsBzlEnv =
         createBuiltinsBzlEnv(
             ruleClassProvider, uninjectedBuildBzlNativeBindings, uninjectedBuildBzlEnv);
@@ -124,6 +129,11 @@ public final class BazelStarlarkEnvironment {
   /** Returns the environment for bzl files in the {@code @_builtins} pseudo-repository. */
   public ImmutableMap<String, Object> getBuiltinsBzlEnv() {
     return builtinsBzlEnv;
+  }
+
+  /** Returns the environment for Bzlmod-loaded bzl files. */
+  public ImmutableMap<String, Object> getBzlmodBzlEnv() {
+    return bzlmodBzlEnv;
   }
 
   /**
