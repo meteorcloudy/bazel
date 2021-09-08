@@ -40,25 +40,25 @@ local_repository(
 
 bind(
     name = "cares",
-    actual = "@com_github_cares_cares//:ares",
+    actual = "//third_party:cares",
 )
 
 bind(
     name = "protobuf_headers",
-    actual = "@com_google_protobuf//:protobuf_headers",
+    actual = "//third_party:protobuf_headers",
 )
 
 bind(
     name = "upb_lib",
-    actual = "@upb//:upb",
+    actual = "//third_party:upb_lib",
 )
 
 bind(
     name = "protobuf_clib",
-    actual = "@com_google_protobuf//:protoc_lib",
+    actual = "//third_party:protobuf_clib",
 )
 
 bind(
     name = "madler_zlib",
-    actual = "@zlib//:zlib",
+    actual = "//third_party:madler_zlib",
 )

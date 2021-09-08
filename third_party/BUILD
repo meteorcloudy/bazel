@@ -781,3 +781,28 @@ test_suite(
     ],
     visibility = ["//src:__pkg__"],
 )
+
+alias(
+    name = "cares",
+    actual = "@com_github_cares_cares//:ares",
+)
+
+alias(
+    name = "protobuf_headers",
+    actual = "@com_google_protobuf//:protobuf_headers",
+)
+
+alias(
+    name = "upb_lib",
+    actual = "@upb//:upb",
+)
+
+alias(
+    name = "protobuf_clib",
+    actual = "@com_google_protobuf//:protoc_lib",
+)
+
+alias(
+    name = "madler_zlib",
+    actual = "@zlib//:zlib",
+)

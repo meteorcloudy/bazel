@@ -1,7 +1,7 @@
 module(
   name = "io_bazel",
   version = "5.0.0-pre",
-  compatibility_level = "1",
+  compatibility_level = 1,
 )
 
 bazel_dep(name = "com_github_grpc_grpc", version = "1.33.1")
@@ -9,11 +9,16 @@ bazel_dep(name = "com_google_protobuf", version = "3.13.0")
 bazel_dep(name = "platforms", version = "0.0.4")
 bazel_dep(name = "rules_pkg", version = "0.4.0")
 bazel_dep(name = "io_bazel_skydoc", version = "0.5.0-pre")
+bazel_dep(name = "bazel_skylib", version = "1.0.3")
+bazel_dep(name = "rules_java", version = "0.1.0-pre")
+bazel_dep(name = "rules_proto", version = "0.0.1-pre")
+bazel_dep(name = "rules_cc", version = "0.0.1-pre")
+bazel_dep(name = "upb", version = "0.0.1-pre")
+bazel_dep(name = "com_github_cares_cares", version = "1.15.0-pre")
+bazel_dep(name = "zlib", version = "1.2.11")
 
-override_dep(
-  name = "com_google_protobuf",
-  override = single_version_override(
-    patches = ["//third_party/protobuf:3.13.0.patch"],
-    patch_strip = 1,
-  )
+single_version_override(
+  module_name = "com_google_protobuf",
+  patches = ["//third_party/protobuf:3.13.0.patch"],
+  patch_strip = 1,
 )

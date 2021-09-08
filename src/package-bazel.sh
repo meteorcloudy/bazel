@@ -78,14 +78,14 @@ fi
   cd platforms
   # Platform files may be located under external/platform or platform depending
   # on the external repository source layout. Take them out if it's the case.
-  if [ -d "external/platforms" ]; then
+  if [ -d "external/platforms.0.0.4" ]; then
     # --experimental_sibling_repository_layout=false
-    mv external/platforms/* .
-    rmdir -p external/platforms
+    mv external/platforms.0.0.4/* .
+    rmdir -p external/platforms.0.0.4
   else
     # --experimental_sibling_repository_layout=true
-    mv platforms/* .
-    rmdir -p platforms
+    mv platforms.0.0.4/* .
+    rmdir -p platforms.0.0.4
   fi
   >> WORKSPACE
 )
