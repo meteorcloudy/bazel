@@ -33,6 +33,8 @@ import com.google.devtools.build.lib.events.Reporter;
 import com.google.devtools.build.lib.util.OS;
 import com.google.devtools.build.lib.vfs.FileSystem;
 import com.google.devtools.build.lib.vfs.Path;
+import com.google.devtools.build.lib.vfs.PathFragment;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.Reader;
@@ -286,7 +288,7 @@ public class UrlRewriter {
   // TODO : consider re-using RemoteModule.newCredentialsFromNetrc
   @Nullable
   public static Credentials newCredentialsFromNetrc(
-      Map<String, String> clientEnv, FileSystem fileSystem) throws UrlRewriterParseException {
+      Map<String, String> clientEnv, Path workingDirectory) throws UrlRewriterParseException {
     final Optional<String> homeDir;
     if (OS.getCurrent() == OS.WINDOWS) {
       homeDir = Optional.ofNullable(clientEnv.get("USERPROFILE"));
@@ -300,8 +302,11 @@ public class UrlRewriter {
       return null;
     }
     Location location = Location.fromFileLineColumn(netrcFileString, 0, 0);
-
-    Path netrcFile = fileSystem.getPath(netrcFileString);
+    // Using the getRelative() method ensures:
+    //  - If netrcFileString is an absolute path, use as it is.
+    //  - If netrcFileString is a relative path, it's resolved to an absolute path with the current
+    //    working directory.
+    Path netrcFile = workingDirectory.getRelative(netrcFileString);
     if (netrcFile.exists()) {
       try {
         Netrc netrc = NetrcParser.parseAndClose(netrcFile.getInputStream());
