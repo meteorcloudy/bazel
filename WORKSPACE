@@ -609,6 +609,9 @@ rules_jvm_external_setup()
 
 load("@rules_jvm_external//:defs.bzl", "maven_install")
 
+GRPC_VERSION = "1.47.0"
+NETTY_VERSION = "4.1.87.Final"
+
 maven_install(
     artifacts = [
        "com.google.guava:guava:31.1-jre",
@@ -620,9 +623,24 @@ maven_install(
        "com.google.j2objc:j2objc-annotations:1.3",
        "com.github.stephenc.jcip:jcip-annotations:1.0-1",
        "org.checkerframework:checker-qual:3.12.0",
-    ],
+       "io.netty:netty-tcnative-classes:2.0.56.Final",
+       "io.netty:netty-tcnative-boringssl-static:2.0.56.Final",
+    ] + [coord + ":" + NETTY_VERSION for coord in [
+       "io.netty:netty-all",
+       "io.netty:netty-transport-native-unix-common:jar:osx-aarch_64",
+       "io.netty:netty-transport-native-unix-common:jar:osx-x86_64",
+       "io.netty:netty-transport-native-unix-common:jar:linux-x86_64",
+       "io.netty:netty-transport-native-unix-common:jar:linux-x86_64",
+    ]] + [coord + ":" + GRPC_VERSION for coord in [
+       "io.grpc:grpc-api",
+       "io.grpc:grpc-auth",
+       "io.grpc:grpc-context",
+       "io.grpc:grpc-netty",
+       "io.grpc:grpc-protobuf",
+       "io.grpc:grpc-protobuf-lite",
+       "io.grpc:grpc-stub",
+    ]],
     repositories = [
-        "https://dl.google.com/android/maven2",
         "https://repo1.maven.org/maven2",
     ],
     maven_install_json = "//:maven_install.json",
