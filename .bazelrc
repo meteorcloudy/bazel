@@ -30,6 +30,7 @@ build:macos --macos_minimum_os=10.10
 # Enable Bzlmod
 build:bzlmod --enable_bzlmod
 build:bzlmod --check_direct_dependencies=error
+build --config=bzlmod
 
 # Enable Java 11 language features (https://github.com/bazelbuild/bazel/issues/14592)
 build --java_language_version=11
