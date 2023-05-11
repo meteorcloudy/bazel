@@ -9,18 +9,19 @@ This page provides information on how to handle backward compatibility,
 including migrating from one release to another and how to communicate
 incompatible changes.
 
-Bazel is evolving. Minor versions released as part of an
-[LTS major version](/release/versioning#lts-releases) are fully backward-compatible.
-Changes between major LTS releases may contain incompatible changes that require
-some migration effort. For more information on how the Bazel release cadence
-works, see
-[Announcing Bazel Long Term Support (LTS) releases](https://blog.bazel.build/2020/11/10/long-term-support-release.html).
+Bazel is evolving. Minor versions released as part of an [LTS major
+version](/release#bazel-versioning) are fully backward-compatible. Changes
+between major LTS releases may contain incompatible changes that require some
+migration effort. For more information on Bazel's release model, please check
+out the [Release Model](/release) page.
 
 ## Summary {:#summary}
 
 1. It is recommended to use `--incompatible_*` flags for breaking changes.
 1. For every `--incompatible_*` flag, a GitHub issue explains
    the change in behavior and aims to provide a migration recipe.
+1. Incompatible flags are recommended to be back-ported to the latest LTS
+   release without enabling the flag by default.
 1. APIs and behavior guarded by an `--experimental_*` flag can change at any time.
 1. Never run production builds with `--experimental_*`  or `--incompatible_*` flags.
 
@@ -51,6 +52,11 @@ usage of Bazel API, and so on).
 
 Incompatible changes should have an associated `--incompatible_*` flag and a
 corresponding GitHub issue.
+
+The incompatible flag and relevant changes are recommended to be back-ported to
+the latest LTS release without enabling the flag by default. This allows users
+to migrate for the incompatible changes before the next LTS release is
+available.
 
 ## Communicating incompatible changes {:#communicating-incompatible-changes}
 

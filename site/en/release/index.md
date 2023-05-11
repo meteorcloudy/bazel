@@ -19,7 +19,7 @@ scheme.
 
 * A _major release_ contains features that are not backward compatible with the
   previous release. Each major Bazel version is a LTS release.
-* A _minor release_ contains bug fixes and backward-compatible features
+* A _minor release_ contains backward-compatible bug fixes and features
   back-ported from the main branch.
 * A _patch release_ contains critical bug fixes.
 
@@ -144,11 +144,14 @@ For LTS releases, we follow the steps and policies below:
 
 ## Report regressions {:#report-regressions}
 
+[Bazelisk](/install/bazelisk) is recommended to conveniently fetch Bazel binaries at your desired
+version.
+
 If a user finds a regression in a new Bazel release, release candidate or even
 Bazel at HEAD, please file a bug on
-[GitHub](https://github.com/bazelbuild/bazel/issues). It is recommended to use
-Bazelisk's [bisect feature](https://github.com/bazelbuild/bazelisk#--bisect) to
-find out the culprit commit and include this information in the bug report.
+[GitHub](https://github.com/bazelbuild/bazel/issues). You can use Bazelisk's
+[bisect feature](https://github.com/bazelbuild/bazelisk#--bisect) to find out
+the culprit commit and include this information in the bug report.
 
 For example, if your build succeeded with Bazel 6.1.0 but failed with the second
 release candidate of 6.2.0, you can do bisect via
@@ -167,5 +170,5 @@ feature.
 ## Rule compatibility {:#rule-compatibility}
 
 If you are a rule authors and want to maintain compatibility with different
-Bazel versions, please check out the [rule
-compatibility](/release/rule-compatibility) page.
+Bazel versions, please check out the [Rule
+Compatibility](/release/rule-compatibility) page.
