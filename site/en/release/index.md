@@ -14,7 +14,7 @@ information on Bazel's release model.
 
 ## Release versioning {:#bazel-versioning}
 
-Bazel uses a _major.minor.patch_ [semantic versioning](https://semver.org/)
+Bazel uses a _major.minor.patch_ [semantic versioning](https://semver.org/){: .external}
 scheme.
 
 * A _major release_ contains features that are not backward compatible with the
@@ -73,7 +73,7 @@ For each major Bazel version, there are four support stages:
   Maintenance stage for 2 years.
 
 For currently planned releases, please check our [release
-issues](https://github.com/bazelbuild/bazel/issues?q=is%3Aopen+is%3Aissue+label%3Arelease)
+issues](https://github.com/bazelbuild/bazel/issues?q=is%3Aopen+is%3Aissue+label%3Arelease){: .external}
 on Github.
 
 ## Support matrix {:#support-matrix}
