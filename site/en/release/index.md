@@ -14,7 +14,7 @@ information on Bazel's release model.
 
 ## Release versioning {:#bazel-versioning}
 
-Bazel uses a _major.minor.patch_ [semantic versioning](https://semver.org/){: .external}
+Bazel uses a _major.minor.patch_ [Semantic Versioning](https://semver.org/){: .external}
 scheme.
 
 * A _major release_ contains features that are not backward compatible with the

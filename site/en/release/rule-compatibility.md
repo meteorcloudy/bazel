@@ -15,9 +15,11 @@ following two scenarios:
 
 Meanwhile, the rule itself can ship incompatible changes for their users as
 well. When combined with breaking changes in Bazel, upgrading the rule version
-and Bazel version can often be a source of frustration for Bazel users.
+and Bazel version can often be a source of frustration for Bazel users. This
+page covers how rules authors should maintain rule compatibility with Bazel to
+make it easier for users to upgrade Bazel and rules.
 
-## Manageable migration process
+## Manageable migration process {:#manageable-migration-process}
 
 While it's obviously not feasible to guarantee compatibility between every
 version of Bazel and every version of the rule, our aim is to ensure that the
@@ -49,38 +51,41 @@ release.
 ✅: At least one version of the rule is compatible with the latest version of the
 Bazel LTS release.
 
-## Best practices
+## Best practices {:#best-practices}
 
-As Bazel rules authors, you can ensure a manageable migration process is
-possible for users by following these best practices:
+As Bazel rules authors, you can ensure a manageable migration process for users
+by following these best practices:
 
-1. The rule should follow Semantic Versioning, all versions of the same major
-   version are backwards compatible.
+1. The rule should follow [Semantic Versioning](https://semver.org/){:
+   .external}, minor versions of the same major version are backwards compatible.
 1. The rule at HEAD should be compatible with the latest Bazel LTS release.
-1. The rule at HEAD should be compatible with Bazel at HEAD. Add your project to
-   [Bazel downstream
-   pipeline](https://buildkite.com/bazel/bazel-at-head-plus-downstream), the
-   Bazel team will file issues to your project if upcoming incompatible flag
-   flips will break your project.
+1. The rule at HEAD should be compatible with Bazel at HEAD. To achieve this,
+   you can
+   * Set up your own CI testing with Bazel at HEAD
+   * Add your project to [Bazel downstream
+   testing](https://github.com/bazelbuild/continuous-integration/blob/master/docs/downstream-testing.md){:
+   .external}, the Bazel team will file issues to your project if breaking
+   changes in Bazel affect your project, and you must follow our [downstream
+   project
+   policies](https://github.com/bazelbuild/continuous-integration/blob/master/docs/downstream-testing.md#downstream-project-policies)
+   to address issues timely.
 1. The latest major version of the rule must be compatible with the latest Bazel
    LTS release.
-1. The initial release of a major rule version N should be compatible with the
-   most recent Bazel LTS release M that is supported by the previous major rule
-   version N-1. But a later minor release of the major rule version N can drop
-   the compatibility with Bazel LTS release M.
+1. A new major version of the rule should be compatible with the last Bazel LTS
+   release supported by the previous major version of the rule.
 
 Achieving 2. and 3. is the most important task since it allows achieving 4. and
-5. much easier.
+5. naturally.
 
-The Bazel team can do the following to make it easier for rule authors to keep
-compatibility with both Bazel at HEAD and the latest Bazel LTS release:
+To make it easier to keep compatibility with both Bazel at HEAD
+and the latest Bazel LTS release, rules authors can:
 
-* Backport features, especially new build API features, from HEAD to the current
-  Active LTS release.
-* Allow rule authors to detect build API changes so that the rule can branch out
-  for different Bazel versions
-* Use Bazel feature repo
+* Request backward-compatible features to be back-ported to the latest LTS
+  release, check out [release process](/release#release-procedure-policies) for
+  more details.
+* Use [bazel_feature](https://github.com/bazel-contrib/bazel_features){:
+  .external} to do Bazel feature detection.
 
-In general, we want to make it possible for rules to migrate for Bazel
-incompatible changes and depend on new Bazel features at HEAD without dropping
+In general, with the above approaches, rules should be able to migrate for Bazel
+incompatible changes and make use of new Bazel features at HEAD without dropping
 compatibility with the latest Bazel LTS release.
