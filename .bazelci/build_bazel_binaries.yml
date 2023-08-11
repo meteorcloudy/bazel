@@ -32,7 +32,7 @@ platforms:
   macos_arm64:
     xcode_version: "13.0"
     build_targets:
-      - "//src:bazel"
+      - "//src:bazel_abc"
       - "//src:bazel_nojdk"
     build_flags:
       - "-c"
