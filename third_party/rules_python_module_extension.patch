@@ -1,0 +1,14 @@
+diff --git a/python/extensions/pip.bzl b/python/extensions/pip.bzl
+index ca0b765..1426aba 100644
+--- a/python/extensions/pip.bzl
++++ b/python/extensions/pip.bzl
+@@ -475,6 +475,8 @@ extension.
+ """,
+         ),
+     },
++    os_dependent=True,
++    arch_dependent=True,
+ )
+
+ def _whl_mods_repo_impl(rctx):
+
