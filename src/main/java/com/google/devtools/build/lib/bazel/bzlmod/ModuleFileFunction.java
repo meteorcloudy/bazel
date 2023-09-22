@@ -210,11 +210,11 @@ public class ModuleFileFunction implements SkyFunction {
       return null;
     }
 
-    if (!moduleFilePath.asPath().exists()) {
-      return RootModuleFileValue.createEmptyValue();
+    byte[] moduleFileContents = {};
+    if (moduleFilePath.asPath().exists()) {
+      moduleFileContents = readModuleFile(moduleFilePath.asPath());
     }
 
-    byte[] moduleFileContents = readModuleFile(moduleFilePath.asPath());
     String moduleFileHash = new Fingerprint().addBytes(moduleFileContents).hexDigestAndReset();
     ModuleFileGlobals moduleFileGlobals =
         execModuleFile(
