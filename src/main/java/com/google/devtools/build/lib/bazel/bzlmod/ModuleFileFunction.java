@@ -209,6 +209,11 @@ public class ModuleFileFunction implements SkyFunction {
     if (env.getValue(FileValue.key(moduleFilePath)) == null) {
       return null;
     }
+
+    if (!moduleFilePath.asPath().exists()) {
+      return RootModuleFileValue.createEmptyValue();
+    }
+
     byte[] moduleFileContents = readModuleFile(moduleFilePath.asPath());
     String moduleFileHash = new Fingerprint().addBytes(moduleFileContents).hexDigestAndReset();
     ModuleFileGlobals moduleFileGlobals =
