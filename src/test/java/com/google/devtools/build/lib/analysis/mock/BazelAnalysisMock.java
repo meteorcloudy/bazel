@@ -132,6 +132,7 @@ public final class BazelAnalysisMock extends AnalysisMock {
         "licenses(['notice'])",
         "exports_files(['protoc', 'cc_toolchain'])");
     config.create("local_config_xcode_workspace/WORKSPACE");
+    config.create("local_config_xcode_workspace/MODULE.bazel", "module(name='local_config_xcode')");
     config.create("protobuf_workspace/WORKSPACE");
     config.overwrite("WORKSPACE", workspaceContents.toArray(new String[0]));
     /* The rest of platforms is initialized in {@link MockPlatformSupport}. */
@@ -680,25 +681,21 @@ public final class BazelAnalysisMock extends AnalysisMock {
     config.create("embedded_tools/bin/sh", "def sh(**kwargs):", "  pass");
   }
 
+  private LocalPathOverride createLocalPathOverride(BlazeDirectories directories, String relativePath) {
+    String path = directories.getEmbeddedBinariesRoot().getRelative(relativePath).getPathString();
+    return LocalPathOverride.create(path);
+  }
+
   @Override
   protected ImmutableMap<String, NonRegistryOverride> getBuiltinModules(
       BlazeDirectories directories) {
+
     return ImmutableMap.of(
-        "bazel_tools",
-        LocalPathOverride.create(
-            directories.getEmbeddedBinariesRoot().getRelative("embedded_tools").getPathString()),
-        "platforms",
-        LocalPathOverride.create(
-            directories
-                .getEmbeddedBinariesRoot()
-                .getRelative("platforms_workspace")
-                .getPathString()),
-        "rules_java",
-        LocalPathOverride.create(
-            directories
-                .getEmbeddedBinariesRoot()
-                .getRelative("rules_java_workspace")
-                .getPathString()));
+        "bazel_tools", createLocalPathOverride(directories, "embedded_tools"),
+        "platforms", createLocalPathOverride(directories, "platforms_workspace"),
+        "rules_java", createLocalPathOverride(directories, "rules_java_workspace"),
+        "local_config_xcode", createLocalPathOverride(directories, "local_config_xcode_workspace")
+    );
   }
 
   @Override
