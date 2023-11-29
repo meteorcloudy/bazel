@@ -1,26 +1,5 @@
 ---
 platforms:
-  centos7_java11_devtoolset10:
-    build_targets:
-      - "//src:bazel"
-      - "//src:bazel_nojdk"
-    build_flags:
-      - "-c"
-      - "opt"
-  ubuntu2004:
-    build_targets:
-      - "//src:bazel"
-      - "//src:bazel_nojdk"
-    build_flags:
-      - "-c"
-      - "opt"
-  ubuntu2204:
-    build_targets:
-      - "//src:bazel"
-      - "//src:bazel_nojdk"
-    build_flags:
-      - "-c"
-      - "opt"
   macos:
     build_targets:
       - "//src:bazel"
@@ -35,22 +14,3 @@ platforms:
     build_flags:
       - "-c"
       - "opt"
-  windows:
-    build_flags:
-      - "--copt=-w"
-      - "--host_copt=-w"
-      - "-c"
-      - "opt"
-    build_targets:
-      - "//src:bazel.exe"
-      - "//src:bazel_nojdk.exe"
-  windows_arm64:
-    build_flags:
-      - "--copt=-w"
-      - "--host_copt=-w"
-      - "-c"
-      - "opt"
-      - "--config=windows_arm64"
-    build_targets:
-      - "//src:bazel.exe"
-      - "//src:bazel_nojdk.exe"
