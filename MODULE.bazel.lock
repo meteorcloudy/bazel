@@ -2158,7 +2158,7 @@
   "moduleExtensions": {
     "//:extensions.bzl%bazel_android_deps": {
       "general": {
-        "bzlTransitiveDigest": "PjK+f/kxkhda9tRFlKVdGfNszPoXs7CDXZUi+ZGWGYU=",
+        "bzlTransitiveDigest": "rjB9TSLGt3ZwbECWtF/HMgfqMsfEnDLK6fGIe65ZyfE=",
         "accumulatedFileDigests": {},
         "envVariables": {},
         "generatedRepoSpecs": {
@@ -2177,9 +2177,9 @@
     },
     "//:extensions.bzl%bazel_build_deps": {
       "general": {
-        "bzlTransitiveDigest": "PjK+f/kxkhda9tRFlKVdGfNszPoXs7CDXZUi+ZGWGYU=",
+        "bzlTransitiveDigest": "rjB9TSLGt3ZwbECWtF/HMgfqMsfEnDLK6fGIe65ZyfE=",
         "accumulatedFileDigests": {
-          "@@//src/test/tools/bzlmod:MODULE.bazel.lock": "10b96bd3c1eb194b0efe3a13fd06f2051abf36efb33414ad92048883ba471c7f",
+          "@@//src/test/tools/bzlmod:MODULE.bazel.lock": "5218e8c896592023f884990b7a34f9276e3ce488e753eaaa8bc6057a1aca653c",
           "@@//:MODULE.bazel": "63625ac7809ba5bc83e0814e16f223ac28a98df884897ddd5bfbd69fd4e3ddbf"
         },
         "envVariables": {},
@@ -2428,7 +2428,7 @@
     },
     "//:extensions.bzl%bazel_test_deps": {
       "general": {
-        "bzlTransitiveDigest": "PjK+f/kxkhda9tRFlKVdGfNszPoXs7CDXZUi+ZGWGYU=",
+        "bzlTransitiveDigest": "rjB9TSLGt3ZwbECWtF/HMgfqMsfEnDLK6fGIe65ZyfE=",
         "accumulatedFileDigests": {},
         "envVariables": {},
         "generatedRepoSpecs": {
@@ -2478,7 +2478,7 @@
     },
     "//tools/android:android_extensions.bzl%remote_android_tools_extensions": {
       "general": {
-        "bzlTransitiveDigest": "iz3RFYDcsjupaT10sdSPAhA44WL3eDYkTEnYThllj1w=",
+        "bzlTransitiveDigest": "4x/FXzwoadac6uV9ItZ4eGOyCculGHHrKUhLFNWo3lA=",
         "accumulatedFileDigests": {},
         "envVariables": {},
         "generatedRepoSpecs": {
@@ -2505,7 +2505,7 @@
     },
     "//tools/test:extensions.bzl%remote_coverage_tools_extension": {
       "general": {
-        "bzlTransitiveDigest": "cizrA62cv8WUgb0cCmx5B6PRijtr/I4TAWxg/4caNGU=",
+        "bzlTransitiveDigest": "y48q5zUu2oMiYv7yUyi7rFB0wt14eqiF/RQcWT6vP7I=",
         "accumulatedFileDigests": {},
         "envVariables": {},
         "generatedRepoSpecs": {
@@ -8010,7 +8010,7 @@
     },
     "@rules_python~0.26.0//python/extensions:pip.bzl%pip": {
       "os:osx,arch:aarch64": {
-        "bzlTransitiveDigest": "E4QgOqZbBS/oj8Ee3OTJc/aHg+JLL1isQX37e9bF+jc=",
+        "bzlTransitiveDigest": "shSLRxSm2IldZrKYJQFQvQybGd4SIL6XQSPu84HpeJE=",
         "accumulatedFileDigests": {
           "@@//:requirements.txt": "ff12967a755bb8e9b4c92524f6471a99e14c30474a3d428547c55745ec8f23a0"
         },
@@ -8053,7 +8053,7 @@
         }
       },
       "os:osx,arch:x86_64": {
-        "bzlTransitiveDigest": "5EamR6lYbDoZchZjoF0opxKmFTBnPc4IRBqvtfKzQBg=",
+        "bzlTransitiveDigest": "78B4TR2R7hyLdKqsk9J9c+QKXzs6+h9jxPpij/zjmhE=",
         "accumulatedFileDigests": {
           "@@//:requirements.txt": "ff12967a755bb8e9b4c92524f6471a99e14c30474a3d428547c55745ec8f23a0"
         },
@@ -8096,7 +8096,7 @@
         }
       },
       "os:windows,arch:amd64": {
-        "bzlTransitiveDigest": "TXSsRggvq8p1Am/XZURcY+/3pp6aMvMI4CIzUjNNoVc=",
+        "bzlTransitiveDigest": "1n3i6I4QaccRmHfapI0NgKddkJyR6/zBp0gptv/qmV0=",
         "accumulatedFileDigests": {
           "@@//:requirements.txt": "ff12967a755bb8e9b4c92524f6471a99e14c30474a3d428547c55745ec8f23a0"
         },
