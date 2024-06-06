@@ -1,16 +1,19 @@
 ---
 platforms:
-  macos:
-    build_targets:
-      - "//src:bazel"
-      - "//src:bazel_nojdk"
+  windows:
     build_flags:
+      - "--copt=-w"
+      - "--host_copt=-w"
       - "-c"
       - "opt"
-  macos_arm64:
     build_targets:
-      - "//src:bazel"
-      - "//src:bazel_nojdk"
+      - "//src:bazel.exe"
+      - "//src:bazel_nojdk.exe"
+  windows_arm64:
     build_flags:
+      - "--copt=-w"
+      - "--host_copt=-w"
       - "-c"
       - "opt"
+      - "--config=windows_arm64"
+
