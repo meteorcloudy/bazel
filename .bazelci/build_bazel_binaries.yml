@@ -16,4 +16,7 @@ platforms:
       - "-c"
       - "opt"
       - "--config=windows_arm64"
+    build_targets:
+      - "//src:bazel.exe"
+      - "//src:bazel_nojdk.exe"
 
