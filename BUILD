@@ -116,9 +116,9 @@ pkg_tar(
     name = "bootstrap-jars",
     srcs = [
         "@blake3",
-        "@com_google_protobuf//:protobuf_java",
-        "@com_google_protobuf//:protobuf_java_util",
-        "@com_google_protobuf//:protobuf_javalite",
+        "@maven//:com_google_protobuf_protobuf_java",
+        "@maven//:com_google_protobuf_protobuf_java_util",
+        "@maven//:com_google_protobuf_protobuf_javalite",
         "@zstd-jni//:zstd-jni",
     ],
     package_dir = "derived/jars",

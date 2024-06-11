@@ -117,7 +117,7 @@ java_library(
         "//third_party:truth",
         "//third_party/protobuf:protobuf_java",
         "//third_party/protobuf:protobuf_java_util",
-        "@com_google_protobuf//:protobuf_java",
+        "//third_party/protobuf:protobuf_java",
         "@maven//:com_google_testparameterinjector_test_parameter_injector",
         "@remoteapis//:build_bazel_remote_execution_v2_remote_execution_java_proto",
         "@zstd-jni",

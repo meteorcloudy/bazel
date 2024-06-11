@@ -43,7 +43,7 @@ java_library(
         "//third_party:truth",
         "//third_party/grpc-java:grpc-jar",
         "//third_party/protobuf:protobuf_java",
-        "@com_google_protobuf//:protobuf_java",
+        "//third_party/protobuf:protobuf_java",
     ],
 )
 

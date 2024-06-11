@@ -116,7 +116,7 @@ def java_grpc_library(name, srcs, deps, enable_deprecated = None, visibility = N
             Label("//third_party:jsr305"),
             Label("//third_party/grpc-java:grpc-jar"),
             Label("//third_party:guava"),
-            "@com_google_protobuf//:protobuf_java",
+            Label("//third_party/protobuf:protobuf_java"),
         ] + deps,
         **kwargs
     )
