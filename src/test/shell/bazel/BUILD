@@ -86,6 +86,16 @@ genrule(
 )
 
 sh_test(
+    name = "debug_test",
+    size = "medium",
+    srcs = ["debug_test.sh"],
+    data = [
+        ":test-deps",
+        "@bazel_tools//tools/bash/runfiles",
+    ],
+)
+
+sh_test(
     name = "bazel_symlink_test",
     size = "medium",
     srcs = ["bazel_symlink_test.sh"],
