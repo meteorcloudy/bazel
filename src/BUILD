@@ -357,8 +357,8 @@ genrule(
     "_nojdk",
 ]]
 
-filegroup(
-    name = "srcs",
+[filegroup(
+    name = "srcs" + suffix,
     srcs = glob(["**"]) + [
         "//src/conditions:srcs",
         "//src/java_tools/buildjar:srcs",
@@ -382,6 +382,19 @@ filegroup(
         "//src/main/res:srcs",
         "//src/main/starlark/builtins_bzl:srcs",
         "//src/main/tools:srcs",
+        "//src/tools/bzlmod:srcs",
+        "//src/tools/diskcache:srcs",
+        "//src/tools/execlog:srcs",
+        "//src/tools/launcher:srcs",
+        "//src/tools/one_version:srcs",
+        "//src/tools/remote:srcs",
+        "//src/tools/singlejar:srcs",
+        "//src/tools/starlark/java/com/google/devtools/starlark/common:srcs",
+        "//src/tools/workspacelog:srcs",
+        "//tools/osx:srcs",
+    ] + ([
+        # Source files that don't need to be included in the bootstrap dist file.
+        # Put them here to avoid triggering bazel_bootstrap_distfile_test
         "//src/test/cpp:srcs",
         "//src/test/gen:srcs",
         "//src/test/java/com/google/devtools/build/docgen:srcs",
@@ -398,19 +411,10 @@ filegroup(
         "//src/test/testdata/test_tls_certificate",
         "//src/test/tools:srcs",
         "//src/test/tools/bzlmod:srcs",
-        "//src/tools/bzlmod:srcs",
-        "//src/tools/diskcache:srcs",
-        "//src/tools/execlog:srcs",
-        "//src/tools/launcher:srcs",
-        "//src/tools/one_version:srcs",
-        "//src/tools/remote:srcs",
-        "//src/tools/singlejar:srcs",
-        "//src/tools/starlark/java/com/google/devtools/starlark/common:srcs",
-        "//src/tools/workspacelog:srcs",
-        "//tools/osx:srcs",
-    ],
+    ] if not suffix else []),
     visibility = ["//:__pkg__"],
-)
+) for suffix in ["", "_dist"]
+]
 
 genrule(
     name = "derived_java_srcs",

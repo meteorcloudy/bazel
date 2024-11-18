@@ -24,8 +24,8 @@ exports_files([
     "MODULE.bazel.lock",
 ])
 
-filegroup(
-    name = "srcs",
+[filegroup(
+    name = "srcs" + suffix,
     srcs = glob(
         ["*"],
         exclude = [
@@ -37,10 +37,7 @@ filegroup(
         ],
     ) + [
         "//:MODULE.bazel.lock.dist",
-        "//examples:srcs",
         "//scripts:srcs",
-        "//site:srcs",
-        "//src:srcs",
         "//src/main/java/com/google/devtools/build/docgen/release:srcs",
         "//src/main/starlark/tests/builtins_bzl:srcs",
         "//third_party:srcs",
@@ -48,10 +45,20 @@ filegroup(
     ] + glob([".bazelci/*"]) + [
         ".bazelrc",
         ".bazelversion",
-    ],
+    ] + ([
+        # Source files that don't need to be included in the bootstrap dist file.
+        # Put them here to avoid triggering bazel_bootstrap_distfile_test
+        "//src:srcs",
+        "//examples:srcs",
+        "//site:srcs",
+    ] if not suffix else [
+        # Targets should be included in the bootstrap dist file specifically.
+        "//src:srcs_dist",
+    ]),
     applicable_licenses = ["@io_bazel//:license"],
     visibility = ["//src/test/shell/bazel:__pkg__"],
-)
+) for suffix in ["", "_dist"]
+]
 
 filegroup(
     name = "dummy",
@@ -159,7 +166,7 @@ pkg_tar(
     name = "bazel-srcs",
     srcs = [
         ":generated_resources",
-        ":srcs",
+        ":srcs_dist",
     ],
     # TODO(aiuto): Replace with pkg_filegroup when that is available.
     remap_paths = {
