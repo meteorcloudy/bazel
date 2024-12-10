@@ -122,13 +122,15 @@ sh_test(
     srcs = ["deploy_jar_integration_tests.sh"],
     args = [
         "$(location //src/test/shell:unittest.bash)",
-        "$(JAVABASE)",
         "$(location :TestbedBinary_deploy.jar)",
+        "$(JAVABASE)",
     ],
     data = [
         ":TestbedBinary_deploy.jar",
         "//src/test/shell:bashunit",
         "//src/test/shell:unittest.bash",
+        "@local_jdk//:bin/java",
+        "@bazel_tools//tools/bash/runfiles",
         "@bazel_tools//tools/jdk:current_java_runtime",
     ],
     toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
@@ -148,14 +150,15 @@ sh_test(
     args = [
         "$(location //src/test/shell:unittest.bash)",
         "$(location :ProgramThatCallsSystemExit_deploy.jar)",
-        "$(JAVABASE)",
         "$(location :testdata/system_exit_detecting_test_stack.txt)",
+        "$(JAVABASE)",
     ],
     data = [
         ":ProgramThatCallsSystemExit_deploy.jar",
         ":testdata/system_exit_detecting_test_stack.txt",
         "//src/test/shell:bashunit",
         "//src/test/shell:unittest.bash",
+        "@bazel_tools//tools/bash/runfiles",
         "@bazel_tools//tools/jdk:current_java_runtime",
     ],
     toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],

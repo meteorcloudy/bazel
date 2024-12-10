@@ -287,8 +287,8 @@ cc_test(
         "output_jar_simple_test.cc",
     ],
     copts = select({
-        "//src/conditions:windows": ["-DJAR_TOOL_PATH=\\\"io_bazel/$(JAVABASE)/bin/jar.exe\\\""],
-        "//conditions:default": ["-DJAR_TOOL_PATH=\\\"io_bazel/$(JAVABASE)/bin/jar\\\""],
+        "//src/conditions:windows": ["-DJAR_TOOL_PATH=\\\"local_jdk/bin/jar.exe\\\""],
+        "//conditions:default": ["-DJAR_TOOL_PATH=\\\"local_jdk/bin/jar\\\""],
     }),
     data = [
         ":data1",
@@ -296,6 +296,8 @@ cc_test(
         ":stored_jar",
         ":test1",
         ":test2",
+        # TODO: Use the current java runtime instead of local_jdk
+        "@local_jdk//:bin/jar",
         "@rules_java//toolchains:current_java_runtime",
     ],
     toolchains = ["@rules_java//toolchains:current_java_runtime"],

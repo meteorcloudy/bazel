@@ -15,6 +15,19 @@
 # limitations under the License.
 #
 # These are end to end tests for building Java.
+
+# --- begin runfiles.bash initialization v3 ---
+# Copy-pasted from the Bazel Bash runfiles library v3.
+set -uo pipefail; set +e; f=bazel_tools/tools/bash/runfiles/runfiles.bash
+# shellcheck disable=SC1090
+source "${RUNFILES_DIR:-/dev/null}/$f" 2>/dev/null || \
+  source "$(grep -sm1 "^$f " "${RUNFILES_MANIFEST_FILE:-/dev/null}" | cut -f2- -d' ')" 2>/dev/null || \
+  source "$0.runfiles/$f" 2>/dev/null || \
+  source "$(grep -sm1 "^$f " "$0.runfiles_manifest" | cut -f2- -d' ')" 2>/dev/null || \
+  source "$(grep -sm1 "^$f " "$0.exe.runfiles_manifest" | cut -f2- -d' ')" 2>/dev/null || \
+  { echo>&2 "ERROR: cannot find $f"; exit 1; }; f=; set -e
+# --- end runfiles.bash initialization v3 ---
+
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${CURRENT_DIR}/../shell_utils.sh" \
   || { echo "shell_utils.sh not found!" >&2; exit 1; }
@@ -28,7 +41,10 @@ source "${CURRENT_DIR}/java_integration_test_utils.sh" \
   || { echo "java_integration_test_utils.sh not found!" >&2; exit 1; }
 set -eu
 
-declare -r runfiles_relative_javabase="$1"
+JAVABASE="$1"
+JAVABASE_REPO=${JAVABASE#external/}
+
+declare -r runfiles_javabase="$(realpath $(rlocation $JAVABASE_REPO/bin/java)/../..)"
 add_to_bazelrc "build --package_path=%workspace%"
 
 function set_up() {
@@ -39,7 +55,7 @@ function set_up() {
 
 function setup_local_jdk() {
   local -r dest="$1"
-  local -r src="${BAZEL_RUNFILES}/${runfiles_relative_javabase}"
+  local -r src="${runfiles_javabase}"
 
   mkdir -p "$dest" || fail "mkdir -p $dest"
   cp -LR "${src}"/* "$dest" || fail "cp -LR \"${src}\"/* \"$dest\""
@@ -260,7 +276,7 @@ function assert_singlejar_works() {
     ln -s "my_jdk" "$pkg/my_jdk.symlink"
     local -r javabase="$(get_real_path "$pkg/my_jdk.symlink")"
   else
-    local -r javabase="${BAZEL_RUNFILES}/${runfiles_relative_javabase}"
+    local -r javabase="${runfiles_javabase}"
   fi
 
   mkdir -p "$pkg/jvm"

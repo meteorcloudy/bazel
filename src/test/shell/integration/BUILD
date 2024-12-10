@@ -189,6 +189,7 @@ sh_test(
         "java_integration_test_utils.sh",
         ":test-deps",
         "//src/test/shell:shell_utils",
+        "@bazel_tools//tools/bash/runfiles",
     ],
     shard_count = 5,
     tags = [
