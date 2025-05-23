@@ -181,3 +181,22 @@ java_library(
         "//third_party:guava",
     ],
 )
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "AnalysisCacheInvalidatorTest.java",
+        "BUILD",
+        "BazelSkycacheIntegrationTest.java",
+        "ControllableFileDependencies.java",
+        "FileOpMatchMemoizingLookupTest.java",
+        "FileOpNodeMemoizingLookupTest.java",
+        "FileSystemDependenciesTest.java",
+        "NestedMatchMemoizingLookupTest.java",
+        "SkycacheIntegrationTestBase.java",
+        "ValueOrFutureMapTest.java",
+        "VersionedChangesTest.java",
+        "VersionedChangesValidatorTest.java",
+    ],
+    visibility = ["//:__subpackages__"],
+)

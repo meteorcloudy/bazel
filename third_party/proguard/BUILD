@@ -1,6 +1,14 @@
 load("@rules_java//java:java_binary.bzl", "java_binary")
 load("@rules_java//java:java_import.bzl", "java_import")
 
+filegroup(
+    name = "srcs",
+    srcs = [
+        "BUILD",
+    ] + glob(["**"], allow_empty = True),
+    visibility = ["//:__subpackages__"],
+)
+
 java_binary(
     name = "proguard",
     main_class = "proguard.ProGuard",

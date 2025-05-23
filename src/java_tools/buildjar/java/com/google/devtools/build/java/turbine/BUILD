@@ -163,5 +163,9 @@ filegroup(
         allow_empty = True,
     ) + [
         "BUILD",
+        "profile.iprof",
+        "turbine_benchmark.sh",
+        "turbine_direct_graal.manifest",
+        "update_turbine_pgo.sh",
     ],
 )

@@ -44,6 +44,11 @@ filegroup(
         "//src:srcs",
         "//src/main/java/com/google/devtools/build/docgen/release:srcs",
         "//src/main/starlark/tests/builtins_bzl:srcs",
+        "//src/test/java/com/google/devtools/build/lib/rules/android:srcs",
+        "//src/test/java/com/google/devtools/build/lib/skyframe/serialization/strings:srcs",
+        "//src/test/java/com/google/devtools/build/lib/skyframe/serialization/testutils:srcs",
+        "//src/test/java/com/google/devtools/build/lib/starlarkdocextract:srcs",
+        "//src/test/java/com/google/devtools/build/lib/util/regex:srcs",
         "//third_party:srcs",
         "//tools:srcs",
     ] + glob([".bazelci/*"]) + [

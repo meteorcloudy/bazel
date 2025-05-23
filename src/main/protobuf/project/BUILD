@@ -1,13 +1,9 @@
-# Build definitions for Protolark-based Bazel configuration files (PROJECT.scl).
-#
-# See https://github.com/bazelbuild/bazel/issues/24839.
+load("@rules_license//rules:license.bzl", "license")
 
-package(
-    default_visibility = ["//visibility:private"],
-)
+package(default_visibility = ["//visibility:public"])
 
 filegroup(
-    name = "project_proto_scl",
-    srcs = ["project_proto.scl"],
-    visibility = ["//src/test/java/com/google/devtools/build/lib/analysis/util:__pkg__"],
+    name = "srcs",
+    srcs = glob(["**"]),
+    visibility = ["//visibility:public"],
 )
